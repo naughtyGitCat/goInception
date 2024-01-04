@@ -282,6 +282,7 @@ import (
 	boolType               "BOOL"
 	btree                  "BTREE"
 	byteType               "BYTE"
+	broadcast              "BROADCAST"
 	cascaded               "CASCADED"
 	charsetKwd             "CHARSET"
 	checksum               "CHECKSUM"
@@ -429,6 +430,7 @@ import (
 	subpartitions          "SUBPARTITIONS"
 	super                  "SUPER"
 	some                   "SOME"
+	single                 "SINGLE"
 	global                 "GLOBAL"
 	tablegroupId           "TABLEGROUP_ID"
 	tablegroups            "TABLEGROUPS"
@@ -762,6 +764,7 @@ import (
 	OnDuplicateKeyUpdate          "ON DUPLICATE KEY UPDATE value list"
 	DuplicateOpt                  "[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement"
 	OptFull                       "Full or empty"
+	OptTabPartition               "PARTITION or empty"
 	Order                         "ORDER BY clause optional collation specification"
 	OrderBy                       "ORDER BY clause"
 	OrReplace                     "or replace"
@@ -2438,6 +2441,10 @@ IndexKeyTypeOpt:
 	{
 		$$ = ast.IndexKeyTypeFullText
 	}
+|	"GLOBAL"
+	{
+		$$ = ast.IndexKeyTypeGlobalKey
+	}
 
 /**************************************AlterDatabaseStmt***************************************
  * See https://dev.mysql.com/doc/refman/5.7/en/alter-database.html
@@ -3059,25 +3066,27 @@ DropTableGroupStmt:
  *
  *******************************************************************/
 CreateTableStmt:
-	"CREATE" "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt AsOpt CreateTableSelectOpt
+	"CREATE" OptTabPartition "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt AsOpt CreateTableSelectOpt
 	{
-		stmt := $5.(*ast.CreateTableStmt)
-		stmt.Table = $4.(*ast.TableName)
-		stmt.IfNotExists = $3.(bool)
-		stmt.Options = $6.([]*ast.TableOption)
-		if $7 != nil {
-			stmt.Partition = $7.(*ast.PartitionOptions)
+		stmt := $6.(*ast.CreateTableStmt)
+		stmt.Table = $5.(*ast.TableName)
+		stmt.IfNotExists = $4.(bool)
+		stmt.TabPartitionKeyword = $2.(ast.TabPartitionKeyword)
+		stmt.Options = $7.([]*ast.TableOption)
+		if $8 != nil {
+			stmt.Partition = $8.(*ast.PartitionOptions)
 		}
-		stmt.OnDuplicate = $8.(ast.OnDuplicateKeyHandlingType)
-		stmt.Select = $10.(*ast.CreateTableStmt).Select
+		stmt.OnDuplicate = $9.(ast.OnDuplicateKeyHandlingType)
+		stmt.Select = $11.(*ast.CreateTableStmt).Select
 		$$ = stmt
 	}
-|	"CREATE" "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen
+|	"CREATE" OptTabPartition "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen
 	{
 		$$ = &ast.CreateTableStmt{
-			Table:       $4.(*ast.TableName),
-			ReferTable:  $5.(*ast.TableName),
-			IfNotExists: $3.(bool),
+			Table:       $5.(*ast.TableName),
+			ReferTable:  $6.(*ast.TableName),
+			IfNotExists: $4.(bool),
+			TabPartitionKeyword: $2.(ast.TabPartitionKeyword),
 		}
 	}
 
@@ -3681,13 +3690,23 @@ DropIndexStmt:
 	}
 
 DropTableStmt:
-	"DROP" TableOrTables TableNameList RestrictOrCascadeOpt
+	"DROP" OptTabPartition TableOrTables TableNameList RestrictOrCascadeOpt
 	{
-		$$ = &ast.DropTableStmt{Tables: $3.([]*ast.TableName)}
+		$$ = &ast.DropTableStmt{Tables: $4.([]*ast.TableName),TabPartitionKeyword: $2.(ast.TabPartitionKeyword)}
 	}
-|	"DROP" TableOrTables "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
+|	"DROP" OptTabPartition TableOrTables "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
 	{
-		$$ = &ast.DropTableStmt{IfExists: true, Tables: $5.([]*ast.TableName)}
+		$$ = &ast.DropTableStmt{IfExists: true, Tables: $6.([]*ast.TableName),TabPartitionKeyword: $2.(ast.TabPartitionKeyword)}
+	}
+
+OptTabPartition:
+	/* empty */
+	{
+		$$ = ast.TabPartitionNone
+	}
+|	"PARTITION"
+	{
+		$$ = ast.TabPartitionLocal
 	}
 
 DropViewStmt:
@@ -3715,6 +3734,7 @@ DropStatsStmt:
 	{
 		$$ = &ast.DropStatsStmt{Table: $3.(*ast.TableName)}
 	}
+
 
 RestrictOrCascadeOpt:
 	{}
@@ -4418,6 +4438,7 @@ UnReservedKeyword:
 |	"BOOLEAN"
 |	"BTREE"
 |	"BYTE"
+|	"BROADCAST"
 |	"CLEANUP"
 |	"CHARSET"
 |	"COLUMNS"
@@ -4480,6 +4501,7 @@ UnReservedKeyword:
 |	"SUBPARTITIONS"
 |	"SUBPARTITION"
 |	"SYSTEM_TIME"
+|	"SINGLE"
 |	"TABLEGROUP_ID"
 |	"TABLEGROUPS"
 |	"TABLES"
@@ -7733,6 +7755,14 @@ TableOption:
 |	SetOpt "TABLEGROUP" EqOpt StringName
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionTableGroup, StrValue: $4.(string)}
+	}
+|	"SINGLE"
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionSingle}
+	}
+|	"BROADCAST"
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionBroadcast}
 	}
 
 StatsPersistentVal:

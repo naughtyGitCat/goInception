@@ -1608,6 +1608,15 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE foo (a.b, b);", false, ""},
 		{"CREATE TABLE foo (a, b.c);", false, ""},
 		{"CREATE TABLE (name CHAR(50) BINARY)", false, ""},
+
+		{"CREATE TABLE foo (a varchar(50), b int) SINGLE;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) SINGLE"},
+		{"CREATE TABLE foo (a varchar(50), b int) BROADCAST;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) BROADCAST"},
+		// for create partition table
+		{"CREATE PARTITION TABLE t (a varchar(50), b int);", true, "CREATE PARTITION TABLE `t` (`a` VARCHAR(50),`b` INT)"},
+		// for create table GLOBAL/LOCAL INDEX
+		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) GLOBAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) GLOBAL)"},
+		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) LOCAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) LOCAL)"},
+		//{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(b))"},
 		// test use key word as column name
 		{"CREATE TABLE foo (pump varchar(50), b int);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT)"},
 		{"CREATE TABLE foo (drainer varchar(50), b int);", true, "CREATE TABLE `foo` (`drainer` VARCHAR(50),`b` INT)"},
@@ -1699,11 +1708,13 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"drop table xxx restrict", true, "DROP TABLE `xxx`"},
 		{"drop table xxx, yyy cascade", true, "DROP TABLE `xxx`, `yyy`"},
 		{"drop table if exists xxx restrict", true, "DROP TABLE IF EXISTS `xxx`"},
-		// {"drop view", false, "DROP VIEW"},
-		// {"drop view xxx", true, "DROP VIEW `xxx`"},
-		// {"drop view xxx, yyy", true, "DROP VIEW `xxx`, `yyy`"},
-		// {"drop view if exists xxx", true, "DROP VIEW IF EXISTS `xxx`"},
-		// {"drop view if exists xxx, yyy", true, "DROP VIEW IF EXISTS `xxx`, `yyy`"},
+		// for drop partition table
+		{"drop PARTITION  table xxx", true, "DROP PARTITION TABLE `xxx`"},
+		{"drop view", false, "DROP VIEW"},
+		{"drop view xxx", true, "DROP VIEW `xxx`"},
+		{"drop view xxx, yyy", true, "DROP VIEW `xxx`, `yyy`"},
+		{"drop view if exists xxx", true, "DROP VIEW IF EXISTS `xxx`"},
+		{"drop view if exists xxx, yyy", true, "DROP VIEW IF EXISTS `xxx`, `yyy`"},
 		{"drop stats t", true, "DROP STATS `t`"},
 		// for issue 974
 		{`CREATE TABLE address (
@@ -1968,6 +1979,10 @@ func (s *testParserSuite) TestDDL(c *C) {
 		// For create index statement
 		{"CREATE INDEX idx ON t (a)", true, "CREATE INDEX `idx` ON `t` (`a`)"},
 		{"CREATE UNIQUE INDEX idx ON t (a)", true, "CREATE UNIQUE INDEX `idx` ON `t` (`a`)"},
+		{"CREATE SPATIAL INDEX idx ON t (a)", true, "CREATE SPATIAL INDEX `idx` ON `t` (`a`)"},
+		{"CREATE FULLTEXT INDEX idx ON t (a)", true, "CREATE FULLTEXT INDEX `idx` ON `t` (`a`)"},
+		{"CREATE GLOBAL INDEX idx ON t (a)", true, "CREATE GLOBAL INDEX `idx` ON `t` (`a`)"},
+		{"CREATE INDEX idx ON t (a) GLOBAL", true, "CREATE INDEX `idx` ON `t` (`a`) GLOBAL"},
 		{"CREATE INDEX idx ON t (a) USING HASH", true, "CREATE INDEX `idx` ON `t` (`a`) USING HASH"},
 		{"CREATE INDEX idx ON t (a) COMMENT 'foo'", true, "CREATE INDEX `idx` ON `t` (`a`) COMMENT 'foo'"},
 		{"CREATE INDEX idx ON t (a) USING HASH COMMENT 'foo'", true, "CREATE INDEX `idx` ON `t` (`a`) USING HASH COMMENT 'foo'"},

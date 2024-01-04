@@ -815,6 +815,13 @@ func (n *ColumnDef) Validate() bool {
 	return !(generatedCol && illegalOpt4gc)
 }
 
+type TabPartitionKeyword int
+
+const (
+	TabPartitionNone TabPartitionKeyword = iota
+	TabPartitionLocal
+)
+
 // CreateTableStmt is a statement to create a table.
 // See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
 type CreateTableStmt struct {
@@ -822,6 +829,7 @@ type CreateTableStmt struct {
 
 	IfNotExists bool
 	IsTemporary bool
+	TabPartitionKeyword
 	Table       *TableName
 	ReferTable  *TableName
 	Cols        []*ColumnDef
@@ -834,7 +842,12 @@ type CreateTableStmt struct {
 
 // Restore implements Node interface.
 func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE TABLE ")
+	switch n.TabPartitionKeyword {
+	case TabPartitionNone:
+		ctx.WriteKeyWord("CREATE TABLE ")
+	case TabPartitionLocal:
+		ctx.WriteKeyWord("CREATE PARTITION TABLE ")
+	}
 	if n.IfNotExists {
 		ctx.WriteKeyWord("IF NOT EXISTS ")
 	}
@@ -1174,7 +1187,8 @@ func (n *TableGroupPartitionOption) Accept(v Visitor) (Node, bool) {
 type DropTableStmt struct {
 	ddlNode
 
-	IfExists    bool
+	IfExists bool
+	TabPartitionKeyword
 	Tables      []*TableName
 	IsView      bool
 	IsTemporary bool // make sense ONLY if/when IsView == false
@@ -1184,8 +1198,12 @@ type DropTableStmt struct {
 func (n *DropTableStmt) Restore(ctx *RestoreCtx) error {
 	if n.IsView {
 		ctx.WriteKeyWord("DROP VIEW ")
-	} else {
+	}
+	switch n.TabPartitionKeyword {
+	case TabPartitionNone:
 		ctx.WriteKeyWord("DROP TABLE ")
+	case TabPartitionLocal:
+		ctx.WriteKeyWord("DROP PARTITION TABLE ")
 	}
 	if n.IfExists {
 		ctx.WriteKeyWord("IF EXISTS ")
@@ -1476,6 +1494,7 @@ const (
 	IndexKeyTypeUnique
 	IndexKeyTypeSpatial
 	IndexKeyTypeFullText
+	IndexKeyTypeGlobalKey
 )
 
 // CreateIndexStmt is a statement to create an index.
@@ -1503,7 +1522,18 @@ func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 	if n.Unique {
 		ctx.WriteKeyWord("UNIQUE ")
 	}
-	ctx.WriteKeyWord("INDEX ")
+	switch n.KeyType {
+	case IndexKeyTypeNone:
+		ctx.WriteKeyWord("CREATE INDEX ")
+	case IndexKeyTypeSpatial:
+		ctx.WriteKeyWord("CREATE SPATIAL INDEX ")
+	case IndexKeyTypeFullText:
+		ctx.WriteKeyWord("CREATE FULLTEXT INDEX ")
+	case IndexKeyTypeUnique:
+		ctx.WriteKeyWord("CREATE UNIQUE INDEX ")
+	case IndexKeyTypeGlobalKey:
+		ctx.WriteKeyWord("CREATE GLOBAL INDEX ")
+	}
 	ctx.WriteName(n.IndexName)
 	ctx.WriteKeyWord(" ON ")
 	if err := n.Table.Restore(ctx); err != nil {
@@ -1879,6 +1909,8 @@ const (
 	TableOptionUnion
 	TableOptionEncryption
 	TableOptionTableGroup
+	TableOptionSingle
+	TableOptionBroadcast
 	TableOptionPlacementPrimaryRegion       = TableOptionType(PlacementOptionPrimaryRegion)
 	TableOptionPlacementRegions             = TableOptionType(PlacementOptionRegions)
 	TableOptionPlacementFollowerCount       = TableOptionType(PlacementOptionFollowerCount)
@@ -2143,6 +2175,10 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 			StrValue:  n.StrValue,
 		}
 		return placementOpt.Restore(ctx)
+	case TableOptionSingle:
+		ctx.WriteKeyWord("SINGLE")
+	case TableOptionBroadcast:
+		ctx.WriteKeyWord("BROADCAST")
 	default:
 		return errors.Errorf("invalid TableOption: %d", n.Tp)
 	}
