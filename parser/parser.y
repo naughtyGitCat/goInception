@@ -321,6 +321,19 @@ import (
 	do                     "DO"
 	duplicate              "DUPLICATE"
 	dynamic                "DYNAMIC"
+	dbpartition            "DBPARTITION"
+	tbpartition            "TBPARTITION"
+	tbpartitions           "TBPARTITIONS"
+	mm   				   "MM"
+	dd   				   "DD"
+	mmdd   			   	   "MMDD"
+	yyyymm   			   "YYYYMM"
+	yyyyweek   			   "YYYYWEEK"
+	yyyydd   			   "YYYYDD"
+	yyyymm_opt   		   "YYYYMM_OPT"
+	yyyyweek_opt   		   "YYYYWEEK_OPT"
+	yyyydd_opt   		   "YYYYDD_OPT"
+	uni_hash   		   	   "UNI_HASH"
 	enable                 "ENABLE"
 	end                    "END"
 	engine                 "ENGINE"
@@ -779,6 +792,7 @@ import (
 	PartitionIndexOptionList      "Partition Index option list or empty"
 	PartitionKeyAlgorithmOpt      "ALGORITHM = n option for KEY partition"
 	PartitionMethod               "Partition method"
+	TabPartitionMethod            "Table Partition method"
 	PartitionNameList             "Partition name list"
 	PartitionNameListOpt          "table partition names list optional"
 	PartitionNumOpt               "PARTITION NUM option"
@@ -827,8 +841,10 @@ import (
 	SubPartDefinitionList         "SubPartition definition list"
 	SubPartDefinitionListOpt      "SubPartition definition list optional"
 	SubPartitionMethod            "SubPartition method"
+	TabSubPartitionMethod         "Table SubPartition method"
 	SubPartitionOpt               "SubPartition option"
 	SubPartitionNumOpt            "SubPartition NUM option"
+	TableSubPartitionNumOpt       "Table SubPartition NUM option"
 	Symbol                        "Constraint Symbol"
 	TableAsName                   "table alias name"
 	TableAsNameOpt                "table alias name optional"
@@ -842,6 +858,7 @@ import (
 	TableGroupOptionWithSpaceList "table group option with space list"
 	TableGroupPartition           "table group partition"
 	TableGroupPartitionOpt        "table group partition option"
+	TableSubPartitionOpt          "table sub partition option"
 	TableGroupSubPartitionOpt     "table group sub partition option"
 	TableLock                     "Table name and lock type"
 	TableLockList                 "Table lock list"
@@ -1736,6 +1753,7 @@ ColumnNameListOpt:
 		$$ = $1.([]*ast.ColumnName)
 	}
 
+
 ColumnNameListOptWithBrackets:
 	/* EMPTY */
 	{
@@ -2173,6 +2191,7 @@ ConstraintElem:
 		}
 		$$ = c
 	}
+	
 |	"FOREIGN" "KEY" IfNotExists IndexName '(' IndexColNameList ')' ReferDef
 	{
 		$$ = &ast.Constraint{
@@ -2443,9 +2462,12 @@ IndexKeyTypeOpt:
 	}
 |	"GLOBAL"
 	{
-		$$ = ast.IndexKeyTypeGlobalKey
+		$$ = ast.IndexKeyTypeGlobal
 	}
-
+|	"UNIQUE" "GLOBAL"
+	{
+		$$ = ast.IndexKeyTypeGlobal
+	}
 /**************************************AlterDatabaseStmt***************************************
  * See https://dev.mysql.com/doc/refman/5.7/en/alter-database.html
  * 'ALTER DATABASE ... UPGRADE DATA DIRECTORY NAME' is not supported yet.
@@ -3099,7 +3121,24 @@ PartitionOpt:
 		$$ = nil
 	}
 |	"PARTITION" "BY" PartitionMethod PartitionNumOpt SubPartitionOpt PartitionDefinitionListOpt
-	{
+	{	
+		method := $3.(*ast.PartitionMethod)
+		method.Num = $4.(uint64)
+		sub, _ := $5.(*ast.PartitionMethod)
+		defs, _ := $6.([]*ast.PartitionDefinition)
+		opt := &ast.PartitionOptions{
+			PartitionMethod: *method,
+			Sub:             sub,
+			Definitions:     defs,
+		}
+		if err := opt.Validate(); err != nil {
+			yylex.AppendError(err)
+			return 1
+		}
+		$$ = opt
+	}
+|	"DBPARTITION" "BY" TabPartitionMethod PartitionNumOpt TableSubPartitionOpt PartitionDefinitionListOpt
+	{	
 		method := $3.(*ast.PartitionMethod)
 		method.Num = $4.(uint64)
 		sub, _ := $5.(*ast.PartitionMethod)
@@ -3118,11 +3157,13 @@ PartitionOpt:
 
 SubPartitionMethod:
 	LinearOpt "KEY" PartitionKeyAlgorithmOpt '(' ColumnNameListOpt ')'
-	{
+	{	
+		keyAlgorithm, _ := $3.(*ast.PartitionKeyAlgorithm)
 		$$ = &ast.PartitionMethod{
 			Tp:          model.PartitionTypeKey,
 			Linear:      len($1) != 0,
 			ColumnNames: $5.([]*ast.ColumnName),
+			KeyAlgorithm: keyAlgorithm,
 		}
 	}
 |	LinearOpt "HASH" '(' Expression ')'
@@ -3134,11 +3175,113 @@ SubPartitionMethod:
 		}
 	}
 
+TabSubPartitionMethod:
+	{
+		$$ = nil
+	}
+|	LinearOpt "HASH" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeHash,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "MM" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeMM,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "DD" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeDD,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "WEEK" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeWEEK,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "MMDD" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeMMDD,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "YYYYMM" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeYYYYMM,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "YYYYWEEK" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeYYYYWEEK,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "YYYYDD" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeYYYYDD,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "YYYYMM_OPT" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeYYYYMMOPT,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "YYYYWEEK_OPT" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeYYYYWEEKOPT,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "YYYYDD_OPT" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeYYYYDDOPT,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+|	LinearOpt "UNI_HASH" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:     model.PartitionTypeUNIHASH,
+			Linear: len($1) != 0,
+			Expr:   $4.(ast.ExprNode),
+		}
+	}
+
 PartitionKeyAlgorithmOpt:
 	/* empty */
 	{}
 |	"ALGORITHM" '=' NUM
 	{}
+
 
 PartitionMethod:
 	SubPartitionMethod
@@ -3195,6 +3338,13 @@ PartitionMethod:
 		}
 	}
 
+TabPartitionMethod:
+	TabSubPartitionMethod
+	{
+		$$ = $1
+	}
+
+
 LinearOpt:
 	{
 		$$ = ""
@@ -3215,6 +3365,17 @@ SubPartitionOpt:
 		$$ = method
 	}
 
+TableSubPartitionOpt:
+	{
+		$$ = nil
+	}
+|	"TBPARTITION" "BY" TabSubPartitionMethod TableSubPartitionNumOpt
+	{
+		method := $3.(*ast.PartitionMethod)
+		method.Num = $4.(uint64)
+		$$ = method
+	}
+
 SubPartitionNumOpt:
 	{
 		$$ = uint64(0)
@@ -3224,6 +3385,20 @@ SubPartitionNumOpt:
 		res := $2.(uint64)
 		if res == 0 {
 			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("subpartitions"))
+			return 1
+		}
+		$$ = res
+	}
+
+TableSubPartitionNumOpt:
+	{
+		$$ = uint64(0)
+	}
+|	"TBPARTITIONS" LengthNum
+	{
+		res := $2.(uint64)
+		if res == 0 {
+			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("tabpartitions"))
 			return 1
 		}
 		$$ = res
@@ -3708,6 +3883,7 @@ OptTabPartition:
 	{
 		$$ = ast.TabPartitionLocal
 	}
+
 
 DropViewStmt:
 	"DROP" "VIEW" TableNameList RestrictOrCascadeOpt
@@ -4500,6 +4676,19 @@ UnReservedKeyword:
 |	"STATUS"
 |	"SUBPARTITIONS"
 |	"SUBPARTITION"
+|	"TBPARTITION"
+|	"TBPARTITIONS"
+|	"DBPARTITION"
+|	"MM"
+|	"DD"
+|	"MMDD"
+|	"YYYYMM"
+|	"YYYYWEEK"
+|	"YYYYDD"
+|	"YYYYMM_OPT"
+|	"YYYYWEEK_OPT"
+|	"YYYYDD_OPT"
+|	"UNI_HASH"
 |	"SYSTEM_TIME"
 |	"SINGLE"
 |	"TABLEGROUP_ID"
@@ -7764,7 +7953,6 @@ TableOption:
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionBroadcast}
 	}
-
 StatsPersistentVal:
 	"DEFAULT"
 	{}

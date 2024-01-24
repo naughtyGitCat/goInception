@@ -1494,7 +1494,8 @@ const (
 	IndexKeyTypeUnique
 	IndexKeyTypeSpatial
 	IndexKeyTypeFullText
-	IndexKeyTypeGlobalKey
+	IndexKeyTypeGlobal
+	IndexKeyTypeUniqueGlobal
 )
 
 // CreateIndexStmt is a statement to create an index.
@@ -1531,8 +1532,10 @@ func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 		ctx.WriteKeyWord("CREATE FULLTEXT INDEX ")
 	case IndexKeyTypeUnique:
 		ctx.WriteKeyWord("CREATE UNIQUE INDEX ")
-	case IndexKeyTypeGlobalKey:
+	case IndexKeyTypeGlobal:
 		ctx.WriteKeyWord("CREATE GLOBAL INDEX ")
+	case IndexKeyTypeUniqueGlobal:
+		ctx.WriteKeyWord("CREATE UNIQUE GLOBAL INDEX ")
 	}
 	ctx.WriteName(n.IndexName)
 	ctx.WriteKeyWord(" ON ")
@@ -3613,6 +3616,13 @@ type PartitionMethod struct {
 
 	// Num is the number of (sub)partitions required by the method.
 	Num uint64
+
+	// KeyAlgorithm is the optional hash algorithm type for `PARTITION BY [LINEAR] KEY` syntax.
+	KeyAlgorithm *PartitionKeyAlgorithm
+}
+
+type PartitionKeyAlgorithm struct {
+	Type uint64
 }
 
 // Restore implements the Node interface
@@ -3621,6 +3631,10 @@ func (n *PartitionMethod) Restore(ctx *RestoreCtx) error {
 		ctx.WriteKeyWord("LINEAR ")
 	}
 	ctx.WriteKeyWord(n.Tp.String())
+	if n.KeyAlgorithm != nil {
+		ctx.WriteKeyWord(" ALGORITHM")
+		ctx.WritePlainf(" = %d", n.KeyAlgorithm.Type)
+	}
 
 	switch {
 	case n.Tp == model.PartitionTypeSystemTime:
@@ -3697,10 +3711,18 @@ func (n *PartitionMethod) acceptInPlace(v Visitor) bool {
 	return true
 }
 
+type DbPartitionKeyword int
+
+const (
+	DbPartitionNone DbPartitionKeyword = iota
+	DbPartitionShard
+)
+
 // PartitionOptions specifies the partition options.
 type PartitionOptions struct {
 	node
 	PartitionMethod
+	DbPartitionKeyword
 	Sub         *PartitionMethod
 	Definitions []*PartitionDefinition
 }
@@ -3762,7 +3784,13 @@ func (n *PartitionOptions) Validate() error {
 }
 
 func (n *PartitionOptions) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("PARTITION BY ")
+	switch n.DbPartitionKeyword {
+	case DbPartitionNone:
+		ctx.WriteKeyWord("PARTITION BY ")
+	case DbPartitionShard:
+		ctx.WriteKeyWord("DBPARTITION BY ")
+	}
+
 	if err := n.PartitionMethod.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore PartitionOptions.PartitionMethod")
 	}

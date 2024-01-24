@@ -413,11 +413,23 @@ type PartitionType int
 
 // Partition types.
 const (
-	PartitionTypeRange      PartitionType = 1
-	PartitionTypeHash                     = 2
-	PartitionTypeList                     = 3
-	PartitionTypeKey                      = 4
-	PartitionTypeSystemTime               = 5
+	PartitionTypeRange       PartitionType = 1
+	PartitionTypeHash                      = 2
+	PartitionTypeList                      = 3
+	PartitionTypeKey                       = 4
+	PartitionTypeSystemTime                = 5
+	PartitionTypeMM                        = 6
+	PartitionTypeDD                        = 7
+	PartitionTypeWEEK                      = 8
+	PartitionTypeMMDD                      = 9
+	PartitionTypeYYYYMM                    = 10
+	PartitionTypeYYYYWEEK                  = 11
+	PartitionTypeYYYYDD                    = 12
+	PartitionTypeYYYYMMOPT                 = 13
+	PartitionTypeYYYYWEEKOPT               = 14
+	PartitionTypeYYYYDDOPT                 = 15
+	PartitionTypeUNIHASH                   = 16
+	PartitionTypeRIGHTSHIFT                = 17
 )
 
 func (p PartitionType) String() string {
@@ -432,6 +444,30 @@ func (p PartitionType) String() string {
 		return "KEY"
 	case PartitionTypeSystemTime:
 		return "SYSTEM_TIME"
+	case PartitionTypeMM:
+		return "MM"
+	case PartitionTypeDD:
+		return "DD"
+	case PartitionTypeWEEK:
+		return "WEEK"
+	case PartitionTypeMMDD:
+		return "MMDD"
+	case PartitionTypeYYYYMM:
+		return "YYYYMM"
+	case PartitionTypeYYYYWEEK:
+		return "YYYYWEEK"
+	case PartitionTypeYYYYDD:
+		return "YYYYDD"
+	case PartitionTypeYYYYMMOPT:
+		return "YYYYMM_OPT"
+	case PartitionTypeYYYYWEEKOPT:
+		return "YYYYWEEK_OPT"
+	case PartitionTypeYYYYDDOPT:
+		return "YYYYDD_OPT"
+	case PartitionTypeUNIHASH:
+		return "UNI_HASH"
+	case PartitionTypeRIGHTSHIFT:
+		return "RIGHT_SHIFT"
 	default:
 		return ""
 	}

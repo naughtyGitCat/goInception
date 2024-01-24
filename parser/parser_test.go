@@ -1614,8 +1614,32 @@ func (s *testParserSuite) TestDDL(c *C) {
 		// for create partition table
 		{"CREATE PARTITION TABLE t (a varchar(50), b int);", true, "CREATE PARTITION TABLE `t` (`a` VARCHAR(50),`b` INT)"},
 		// for create table GLOBAL/LOCAL INDEX
-		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) GLOBAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) GLOBAL)"},
+		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) );", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) GLOBAL)"},
 		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) LOCAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) LOCAL)"},
+		//{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(b))"},
+		// drds partition table
+		{"CREATE TABLE foo (a int(50), b int) dbpartition by hash(b);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) dbpartition by hash(b)"},
+		{"CREATE TABLE foo (a int(50), b int, c int) dbpartition by hash(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by hash(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c int) dbpartition by hash(b) tbpartition by hash(c) tbpartitions 3;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by hash(b) tbpartition by hash(c) tbpartitions 3"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by MM(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by MM(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by DD(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by DD(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by WEEK(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by WEEK(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by MMDD(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by MMDD(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYMM(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYMM(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYWEEK(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYWEEK(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYDD(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYDD(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYMM_OPT(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYMM_OPT(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYWEEK_OPT(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYWEEK_OPT(c)"},
+		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYDD_OPT(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYDD_OPT(c)"},
+
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYMM(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYMM(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYWEEK(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYWEEK(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYDD(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYMM_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYMM_OPT(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYWEEK_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYWEEK_OPT(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYDD_OPT(b) tbpartition by hash(c)"},
+		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD_OPT(b) tbpartition by UNI_HASH(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by UNI_HASH(b) tbpartition by hash(c)"},
+
 		//{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(b))"},
 		// test use key word as column name
 		{"CREATE TABLE foo (pump varchar(50), b int);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT)"},
@@ -1982,6 +2006,7 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE SPATIAL INDEX idx ON t (a)", true, "CREATE SPATIAL INDEX `idx` ON `t` (`a`)"},
 		{"CREATE FULLTEXT INDEX idx ON t (a)", true, "CREATE FULLTEXT INDEX `idx` ON `t` (`a`)"},
 		{"CREATE GLOBAL INDEX idx ON t (a)", true, "CREATE GLOBAL INDEX `idx` ON `t` (`a`)"},
+		{"CREATE UNIQUE GLOBAL INDEX idx ON t (a)", true, "CREATE UNIQUE GLOBAL INDEX `idx` ON `t` (`a`)"},
 		{"CREATE INDEX idx ON t (a) GLOBAL", true, "CREATE INDEX `idx` ON `t` (`a`) GLOBAL"},
 		{"CREATE INDEX idx ON t (a) USING HASH", true, "CREATE INDEX `idx` ON `t` (`a`) USING HASH"},
 		{"CREATE INDEX idx ON t (a) COMMENT 'foo'", true, "CREATE INDEX `idx` ON `t` (`a`) COMMENT 'foo'"},
