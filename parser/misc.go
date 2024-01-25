@@ -203,6 +203,7 @@ var tokenMap = map[string]int{
 	"CONSISTENT":               consistent,
 	"CONSTRAINT":               constraint,
 	"CONVERT":                  convert,
+	"COVERING":                 covering,
 	"COPY":                     copyKwd,
 	"COUNT":                    count,
 	"CREATE":                   create,

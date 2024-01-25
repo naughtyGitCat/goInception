@@ -96,6 +96,7 @@ import (
 	column            "COLUMN"
 	constraint        "CONSTRAINT"
 	convert           "CONVERT"
+	covering          "COVERING"
 	create            "CREATE"
 	cross             "CROSS"
 	currentDate       "CURRENT_DATE"
@@ -260,7 +261,7 @@ import (
 	yearMonth         "YEAR_MONTH"
 	zerofill          "ZEROFILL"
 	natural           "NATURAL"
-
+	global            "GLOBAL"
 	/* The following tokens belong to UnReservedKeyword. */
 	action                 "ACTION"
 	after                  "AFTER"
@@ -444,7 +445,6 @@ import (
 	super                  "SUPER"
 	some                   "SOME"
 	single                 "SINGLE"
-	global                 "GLOBAL"
 	tablegroupId           "TABLEGROUP_ID"
 	tablegroups            "TABLEGROUPS"
 	tables                 "TABLES"
@@ -954,6 +954,7 @@ import (
 %type	<ident>
 	AsOpt             "AS or EmptyString"
 	KeyOrIndex        "{KEY|INDEX}"
+	CoveringKeywordOpt "Covering keyword or empty"
 	ColumnKeywordOpt  "Column keyword or empty"
 	PrimaryOpt        "Optional primary keyword"
 	NowSym            "CURRENT_TIMESTAMP/LOCALTIME/LOCALTIMESTAMP"
@@ -1516,6 +1517,10 @@ LockClause:
 			return 1
 		}
 	}
+
+
+CoveringKeywordOpt:
+	"COVERING"
 
 KeyOrIndex:
 	"KEY"
@@ -2151,6 +2156,32 @@ ConstraintElem:
 		}
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
+		}
+		$$ = c
+	}
+|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')'  PartitionIndexOptionList
+	{
+		c := &ast.Constraint{
+			Tp:   ast.ConstraintGlobal,
+			Keys: $5.([]*ast.IndexColName),
+			ColumnNames: $9.([]*ast.ColumnName),
+			Name: $3.(string),
+		}
+		if $11 != nil {
+			c.Option = $11.(*ast.IndexOption)
+		}
+		$$ = c
+	}
+|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')' PartitionIndexOptionList
+	{
+		c := &ast.Constraint{
+			Tp:   ast.ConstraintUniqueGlobal,
+			Keys: $6.([]*ast.IndexColName),
+			ColumnNames: $10.([]*ast.ColumnName),
+			Name: $4.(string),
+		}
+		if $12 != nil {
+			c.Option = $12.(*ast.IndexOption)
 		}
 		$$ = c
 	}
@@ -4652,7 +4683,6 @@ UnReservedKeyword:
 |	"FLUSH"
 |	"FORMAT"
 |	"FULL"
-|	"GLOBAL"
 |	"HASH"
 |	"HOUR"
 |	"LESS"
@@ -7835,7 +7865,7 @@ TableElementListOpt:
 			Constraints: constraints,
 		}
 	}
-|	'(' TableElementList ')'
+|	'(' TableElementList ')' 
 	{
 		tes := $2.([]interface{})
 		var columnDefs []*ast.ColumnDef

@@ -632,6 +632,8 @@ const (
 	ConstraintFulltext
 	ConstraintCheck
 	ConstraintSpatial
+	ConstraintGlobal
+	ConstraintUniqueGlobal
 )
 
 // Constraint is constraint for table definition.
@@ -646,6 +648,8 @@ type Constraint struct {
 	Name string
 
 	Keys []*IndexColName // Used for PRIMARY KEY, UNIQUE, ......
+
+	ColumnNames []*ColumnName
 
 	Refer *ReferenceDef // Used for foreign key.
 
@@ -674,6 +678,10 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 		ctx.WriteKeyWord("UNIQUE INDEX")
 	case ConstraintFulltext:
 		ctx.WriteKeyWord("FULLTEXT")
+	case ConstraintGlobal:
+		ctx.WriteKeyWord("GLOBAL")
+	case ConstraintUniqueGlobal:
+		ctx.WriteKeyWord("UNIQUE GLOBAL")
 	}
 
 	if n.Tp == ConstraintForeignKey {
@@ -695,6 +703,17 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 		}
 		if err := keys.Restore(ctx); err != nil {
 			return errors.Annotatef(err, "An error occurred while splicing Constraint Keys: [%v]", i)
+		}
+	}
+	ctx.WritePlain(")")
+
+	ctx.WritePlain(" (")
+	for i, col := range n.ColumnNames {
+		if i > 0 {
+			ctx.WritePlain(",")
+		}
+		if err := col.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while splicing PartitionMethod.ColumnName[%d]", i)
 		}
 	}
 	ctx.WritePlain(")")
@@ -729,6 +748,13 @@ func (n *Constraint) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Keys[i] = node.(*IndexColName)
+	}
+	for i, colName := range n.ColumnNames {
+		newColName, ok := colName.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.ColumnNames[i] = newColName.(*ColumnName)
 	}
 	if n.Refer != nil {
 		node, ok := n.Refer.Accept(v)
