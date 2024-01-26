@@ -699,6 +699,7 @@ import (
 	ColumnOptionListOpt           "optional column definition option list"
 	Constraint                    "table constraint"
 	ConstraintElem                "table constraint element"
+	ConstraintElemInner           "table constraint element inner"
 	ConstraintKeywordOpt          "Constraint Keyword or empty"
 	CreateTableOptionListOpt      "create table option list opt"
 	CreateTableSelectOpt          "Select/Union statement in CREATE TABLE ... SELECT"
@@ -792,7 +793,6 @@ import (
 	PartitionIndexOptionList      "Partition Index option list or empty"
 	PartitionKeyAlgorithmOpt      "ALGORITHM = n option for KEY partition"
 	PartitionMethod               "Partition method"
-	TabPartitionMethod            "Table Partition method"
 	PartitionNameList             "Partition name list"
 	PartitionNameListOpt          "table partition names list optional"
 	PartitionNumOpt               "PARTITION NUM option"
@@ -841,10 +841,8 @@ import (
 	SubPartDefinitionList         "SubPartition definition list"
 	SubPartDefinitionListOpt      "SubPartition definition list optional"
 	SubPartitionMethod            "SubPartition method"
-	TabSubPartitionMethod         "Table SubPartition method"
 	SubPartitionOpt               "SubPartition option"
 	SubPartitionNumOpt            "SubPartition NUM option"
-	TableSubPartitionNumOpt       "Table SubPartition NUM option"
 	Symbol                        "Constraint Symbol"
 	TableAsName                   "table alias name"
 	TableAsNameOpt                "table alias name optional"
@@ -858,7 +856,6 @@ import (
 	TableGroupOptionWithSpaceList "table group option with space list"
 	TableGroupPartition           "table group partition"
 	TableGroupPartitionOpt        "table group partition option"
-	TableSubPartitionOpt          "table sub partition option"
 	TableGroupSubPartitionOpt     "table group sub partition option"
 	TableLock                     "Table name and lock type"
 	TableLockList                 "Table lock list"
@@ -1519,6 +1516,7 @@ LockClause:
 	}
 
 
+
 CoveringKeywordOpt:
 	"COVERING"
 
@@ -2118,7 +2116,38 @@ ColumnOptionListOpt:
 	}
 
 ConstraintElem:
-	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexColNameList ')' PartitionIndexOptionList
+	ConstraintElemInner
+|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')'  IndexOptionList
+	{
+		c := &ast.Constraint{
+			Tp:   ast.ConstraintGlobal,
+			Keys: $5.([]*ast.IndexColName),
+			ColumnNames: $9.([]*ast.ColumnName),
+			Name: $3.(string),
+		}
+		if $11 != nil {
+			c.Option = $11.(*ast.IndexOption)
+		}
+		$$ = c
+	}
+
+|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')' IndexOptionList
+	{
+		c := &ast.Constraint{
+			Tp:   ast.ConstraintUniqueGlobal,
+			Keys: $6.([]*ast.IndexColName),
+			ColumnNames: $10.([]*ast.ColumnName),
+			Name: $4.(string),
+		}
+		if $12 != nil {
+			c.Option = $12.(*ast.IndexOption)
+		}
+		$$ = c
+	}
+
+
+ConstraintElemInner:
+	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexColNameList ')'  PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintPrimaryKey,
@@ -2159,32 +2188,34 @@ ConstraintElem:
 		}
 		$$ = c
 	}
-|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')'  PartitionIndexOptionList
+
+|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintGlobal,
 			Keys: $5.([]*ast.IndexColName),
-			ColumnNames: $9.([]*ast.ColumnName),
 			Name: $3.(string),
-		}
-		if $11 != nil {
-			c.Option = $11.(*ast.IndexOption)
-		}
+		}	
+		if $7 != nil {
+			c.Option = $7.(*ast.IndexOption)
+		} 
+		
 		$$ = c
 	}
-|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')' PartitionIndexOptionList
+
+|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintUniqueGlobal,
 			Keys: $6.([]*ast.IndexColName),
-			ColumnNames: $10.([]*ast.ColumnName),
 			Name: $4.(string),
 		}
-		if $12 != nil {
-			c.Option = $12.(*ast.IndexOption)
+		if $8 != nil {
+			c.Option = $8.(*ast.IndexOption)
 		}
 		$$ = c
 	}
+
 |	KeyOrIndex IfNotExists IndexNameAndTypeOpt '(' IndexColNameList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
@@ -2497,7 +2528,7 @@ IndexKeyTypeOpt:
 	}
 |	"UNIQUE" "GLOBAL"
 	{
-		$$ = ast.IndexKeyTypeGlobal
+		$$ = ast.IndexKeyTypeUniqueGlobal
 	}
 /**************************************AlterDatabaseStmt***************************************
  * See https://dev.mysql.com/doc/refman/5.7/en/alter-database.html
@@ -3168,7 +3199,7 @@ PartitionOpt:
 		}
 		$$ = opt
 	}
-|	"DBPARTITION" "BY" TabPartitionMethod PartitionNumOpt TableSubPartitionOpt PartitionDefinitionListOpt
+|	"DBPARTITION" "BY" PartitionMethod PartitionNumOpt SubPartitionOpt PartitionDefinitionListOpt
 	{	
 		method := $3.(*ast.PartitionMethod)
 		method.Num = $4.(uint64)
@@ -3206,18 +3237,6 @@ SubPartitionMethod:
 		}
 	}
 
-TabSubPartitionMethod:
-	{
-		$$ = nil
-	}
-|	LinearOpt "HASH" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeHash,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
 |	LinearOpt "MM" '(' Expression ')'
 	{
 		$$ = &ast.PartitionMethod{
@@ -3307,6 +3326,7 @@ TabSubPartitionMethod:
 		}
 	}
 
+
 PartitionKeyAlgorithmOpt:
 	/* empty */
 	{}
@@ -3369,12 +3389,6 @@ PartitionMethod:
 		}
 	}
 
-TabPartitionMethod:
-	TabSubPartitionMethod
-	{
-		$$ = $1
-	}
-
 
 LinearOpt:
 	{
@@ -3395,17 +3409,13 @@ SubPartitionOpt:
 		method.Num = $4.(uint64)
 		$$ = method
 	}
-
-TableSubPartitionOpt:
-	{
-		$$ = nil
-	}
-|	"TBPARTITION" "BY" TabSubPartitionMethod TableSubPartitionNumOpt
+|	"TBPARTITION" "BY" SubPartitionMethod SubPartitionNumOpt
 	{
 		method := $3.(*ast.PartitionMethod)
 		method.Num = $4.(uint64)
 		$$ = method
 	}
+
 
 SubPartitionNumOpt:
 	{
@@ -3420,11 +3430,6 @@ SubPartitionNumOpt:
 		}
 		$$ = res
 	}
-
-TableSubPartitionNumOpt:
-	{
-		$$ = uint64(0)
-	}
 |	"TBPARTITIONS" LengthNum
 	{
 		res := $2.(uint64)
@@ -3434,6 +3439,7 @@ TableSubPartitionNumOpt:
 		}
 		$$ = res
 	}
+
 
 PartitionNumOpt:
 	{
@@ -7827,7 +7833,7 @@ TableElement:
 	{
 		$$ = $1.(*ast.ColumnDef)
 	}
-|	Constraint
+|	Constraint PartitionOpt
 	{
 		$$ = $1.(*ast.Constraint)
 	}

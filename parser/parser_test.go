@@ -1616,7 +1616,8 @@ func (s *testParserSuite) TestDDL(c *C) {
 		// for create table GLOBAL/LOCAL INDEX
 		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) );", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) GLOBAL)"},
 		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) LOCAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) LOCAL)"},
-		//{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(b))"},
+		{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b) PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(`b`) PARTITION BY HASH(`b`))"},
+		{"CREATE TABLE t (a varchar(50), b int, unique global index idx_b(b)  PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, UNIQUE GLOBAL index idx_b(b) PARTITION BY HASH(`b`))"},
 		// drds partition table
 		{"CREATE TABLE foo (a int(50), b int) dbpartition by hash(b);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) dbpartition by hash(b)"},
 		{"CREATE TABLE foo (a int(50), b int, c int) dbpartition by hash(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by hash(b) tbpartition by hash(c)"},
