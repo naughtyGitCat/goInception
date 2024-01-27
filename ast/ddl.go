@@ -654,9 +654,11 @@ type Constraint struct {
 	Refer *ReferenceDef // Used for foreign key.
 
 	Option *IndexOption // Index Options
-	Expr   ExprNode     // Used for Check
+
+	Expr ExprNode // Used for Check
 
 	Enforced bool // Used for Check
+
 }
 
 // Restore implements Node interface.
@@ -731,7 +733,6 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing Constraint Option")
 		}
 	}
-
 	return nil
 }
 

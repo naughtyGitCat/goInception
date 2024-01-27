@@ -2660,7 +2660,6 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 	if s.myRecord.ErrLevel == 2 {
 		return
 	}
-
 	table := s.getTableFromCache(node.Table.Schema.O, node.Table.Name.O, false)
 
 	if table != nil {
@@ -2675,7 +2674,8 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 		s.myRecord.TableName = node.Table.Name.O
 
 		s.checkCreateTableGrammar(node)
-
+		s.checkPartitionFuncType(node)
+		s.checkRangePartitioningKeysConstraints(node)
 		s.checkAutoIncrement(node)
 		s.checkContainDotColumn(node)
 
@@ -3551,7 +3551,6 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 	}
 
 	s.checkMultiPartitionParts(node.Specs)
-
 	if !s.hasError() && s.inc.ColumnsMustHaveIndex != "" {
 		tableCopy := s.getTableFromCache(node.Table.Schema.O, node.Table.Name.O, true)
 		s.checkColumnsMustHaveindex(tableCopy)
