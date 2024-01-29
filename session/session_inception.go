@@ -2674,8 +2674,6 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 		s.myRecord.TableName = node.Table.Name.O
 
 		s.checkCreateTableGrammar(node)
-		s.checkPartitionFuncType(node)
-		s.checkRangePartitioningKeysConstraints(node)
 		s.checkAutoIncrement(node)
 		s.checkContainDotColumn(node)
 
@@ -3035,6 +3033,8 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 			s.appendErrorNo(ER_PARTITION_NOT_ALLOWED)
 		} else {
 			s.checkPartitionNameUnique(node.Partition.Definitions)
+			s.checkPartitionFuncType(node)
+			s.checkRangePartitioningKeysConstraints(node)
 			if !s.hasError() {
 				s.buildPartitionInfo(node.Partition, table)
 			}
