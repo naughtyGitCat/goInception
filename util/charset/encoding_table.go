@@ -31,6 +31,10 @@ import (
 // leading and trailing whitespace.
 func Lookup(label string) (e encoding.Encoding, name string) {
 	label = strings.ToLower(strings.Trim(label, "\t\n\r\f "))
+	return lookup(label)
+}
+
+func lookup(label string) (e encoding.Encoding, name string) {
 	enc := encodings[label]
 	return enc.e, enc.name
 }
@@ -42,7 +46,6 @@ var encodings = map[string]struct {
 	"unicode-1-1-utf-8":   {encoding.Nop, "utf-8"},
 	"utf-8":               {encoding.Nop, "utf-8"},
 	"utf8":                {encoding.Nop, "utf-8"},
-	"utf8mb3":             {encoding.Nop, "utf-8"},
 	"utf8mb4":             {encoding.Nop, "utf-8"},
 	"binary":              {encoding.Nop, "binary"},
 	"866":                 {charmap.CodePage866, "ibm866"},

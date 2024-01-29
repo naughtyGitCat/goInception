@@ -325,6 +325,7 @@ import (
 	dbpartition            "DBPARTITION"
 	tbpartition            "TBPARTITION"
 	tbpartitions           "TBPARTITIONS"
+	last				   "LAST"
 	mm   				   "MM"
 	dd   				   "DD"
 	mmdd   			   	   "MMDD"
@@ -947,6 +948,11 @@ import (
 	ListSubPartitionDefList       "List sub partition list"
 	RangeSubPartitionDef          "Range sub partition"
 	RangeSubPartitionDefList      "Range sub partition list"
+	PartitionIntervalOpt                   "Partition interval option"
+	FirstAndLastPartOpt                    "First and Last partition option"
+	MaxValPartOpt                          "MAXVALUE partition option"
+	NullPartOpt                            "NULL Partition option"
+	IntervalExpr                           "Interval expression"
 
 %type	<ident>
 	AsOpt             "AS or EmptyString"
@@ -1215,6 +1221,29 @@ AlterTableSpec:
 //			Name: $3,
 //		}
 //	}
+|	"LAST" "PARTITION" "LESS" "THAN" '(' Expression ')' NoWriteToBinLogAliasOpt
+	{
+		noWriteToBinlog := $8.(bool)
+		if noWriteToBinlog {
+			yylex.AppendError(yylex.Errorf("The NO_WRITE_TO_BINLOG option is parsed but ignored for now."))
+			parser.lastErrorAsWarn()
+		}
+		partitionMethod := ast.PartitionMethod{Expr: $6}
+		$$ = &ast.AlterTableSpec{
+			NoWriteToBinlog: noWriteToBinlog,
+			Tp:              ast.AlterTableAddLastPartition,
+			Partition:       &ast.PartitionOptions{PartitionMethod: partitionMethod},
+		}
+	}
+|	"FIRST" "PARTITION" "LESS" "THAN" '(' Expression ')' IfExists
+	{
+		partitionMethod := ast.PartitionMethod{Expr: $6}
+		$$ = &ast.AlterTableSpec{
+			IfExists:  $8.(bool),
+			Tp:        ast.AlterTableDropFirstPartition,
+			Partition: &ast.PartitionOptions{PartitionMethod: partitionMethod},
+		}
+	}
 |	"EXCHANGE" "PARTITION" Identifier "WITH" "TABLE" TableName WithValidationOpt
 	{
 		$$ = &ast.AlterTableSpec{
@@ -3331,7 +3360,16 @@ PartitionKeyAlgorithmOpt:
 	/* empty */
 	{}
 |	"ALGORITHM" '=' NUM
-	{}
+	{
+		tp := getUint64FromNUM($3)
+		if tp != 1 && tp != 2 {
+			yylex.AppendError(ErrSyntax)
+			return 1
+		}
+		$$ = &ast.PartitionKeyAlgorithm{
+			Type: tp,
+		}
+	}
 
 
 PartitionMethod:
@@ -3339,18 +3377,22 @@ PartitionMethod:
 	{
 		$$ = $1
 	}
-|	"RANGE" '(' Expression ')'
+|	"RANGE" '(' Expression ')' PartitionIntervalOpt
 	{
+		partitionInterval, _ := $5.(*ast.PartitionInterval)
 		$$ = &ast.PartitionMethod{
 			Tp:   model.PartitionTypeRange,
 			Expr: $3.(ast.ExprNode),
+			Interval: partitionInterval,
 		}
 	}
-|	"RANGE" "COLUMNS" '(' ColumnNameList ')'
-	{
+|	"RANGE" "COLUMNS" '(' ColumnNameList ')' PartitionIntervalOpt
+	{	
+		partitionInterval, _ := $6.(*ast.PartitionInterval)
 		$$ = &ast.PartitionMethod{
 			Tp:          model.PartitionTypeRange,
 			ColumnNames: $4.([]*ast.ColumnName),
+			Interval:    partitionInterval,
 		}
 	}
 |	"LIST" '(' Expression ')'
@@ -3389,6 +3431,63 @@ PartitionMethod:
 		}
 	}
 
+
+PartitionIntervalOpt:
+	{
+		$$ = nil
+	}
+|	"INTERVAL" '(' IntervalExpr ')' FirstAndLastPartOpt NullPartOpt MaxValPartOpt
+	{
+		partitionInterval := &ast.PartitionInterval{
+			IntervalExpr:  $3.(ast.PartitionIntervalExpr),
+			FirstRangeEnd: $5.(ast.PartitionInterval).FirstRangeEnd,
+			LastRangeEnd:  $5.(ast.PartitionInterval).LastRangeEnd,
+			NullPart:      $6.(bool),
+			MaxValPart:    $7.(bool),
+		}
+		$$ = partitionInterval
+	}
+
+IntervalExpr:
+	BitExpr
+	{
+		$$ = ast.PartitionIntervalExpr{Expr: $1}
+	}
+|	BitExpr TimeUnit
+	{
+		$$ = ast.PartitionIntervalExpr{Expr: $1, TimeUnit: $2}
+	}
+NullPartOpt:
+	{
+		$$ = false
+	}
+|	"NULL" "PARTITION"
+	{
+		$$ = true
+	}
+
+MaxValPartOpt:
+	{
+		$$ = false
+	}
+|	"MAXVALUE" "PARTITION"
+	{
+		$$ = true
+	}
+
+FirstAndLastPartOpt:
+	{
+		$$ = ast.PartitionInterval{} // First/LastRangeEnd defaults to nil
+	}
+|	"FIRST" "PARTITION" "LESS" "THAN" '(' Expression ')' "LAST" "PARTITION" "LESS" "THAN" '(' Expression ')'
+	{
+		first := $6.(ast.ExprNode)
+		last := $13.(ast.ExprNode)
+		$$ = ast.PartitionInterval{
+			FirstRangeEnd: &first,
+			LastRangeEnd:  &last,
+		}
+	}
 
 LinearOpt:
 	{
@@ -4715,6 +4814,7 @@ UnReservedKeyword:
 |	"TBPARTITION"
 |	"TBPARTITIONS"
 |	"DBPARTITION"
+|	"LAST"
 |	"MM"
 |	"DD"
 |	"MMDD"
