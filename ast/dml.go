@@ -48,6 +48,9 @@ var (
 	_ Node = &TableSource{}
 	_ Node = &UnionSelectList{}
 	_ Node = &WildCardField{}
+	_ Node = &WindowSpec{}
+	_ Node = &FrameClause{}
+	_ Node = &FrameBound{}
 )
 
 // JoinType is join type, including cross/left/right/full.

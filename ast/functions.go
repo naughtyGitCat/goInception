@@ -639,6 +639,8 @@ type AggregateFuncExpr struct {
 	// For example, column c1 values are "1", "2", "2",  "sum(c1)" is "5",
 	// but "sum(distinct c1)" is "3".
 	Distinct bool
+
+	Order *OrderByClause
 }
 
 // Restore implements Node interface.
@@ -728,7 +730,7 @@ type WindowFuncExpr struct {
 	funcNode
 
 	// F is the function name.
-	F string
+	Name string
 	// Args is the function args.
 	Args []ExprNode
 	// Distinct cannot be true for most window functions, except `max` and `min`.
@@ -746,7 +748,7 @@ type WindowFuncExpr struct {
 
 // Restore implements Node interface.
 func (n *WindowFuncExpr) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord(n.F)
+	ctx.WriteKeyWord(n.Name)
 	ctx.WritePlain("(")
 	for i, v := range n.Args {
 		if i != 0 {

@@ -30,6 +30,7 @@ func (ts *testFunctionsSuite) TestFunctionsVisitorCover(c *C) {
 		&AggregateFuncExpr{Args: []ExprNode{&ValueExpr{}}},
 		&FuncCallExpr{Args: []ExprNode{&ValueExpr{}}},
 		&FuncCastExpr{Expr: &ValueExpr{}},
+		&WindowFuncExpr{Spec: WindowSpec{}},
 	}
 
 	for _, stmt := range stmts {
@@ -101,6 +102,25 @@ func (ts *testFunctionsSuite) TestAggregateFuncExprRestore(c *C) {
 		// {"VAR_POP(test_score)", "VAR_POP(`test_score`)"},
 		// {"VAR_SAMP(test_score)", "VAR_SAMP(`test_score`)"},
 		// {"VARIANCE(test_score)", "VAR_POP(`test_score`)"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node.(*SelectStmt).Fields.Fields[0].Expr
+	}
+	RunNodeRestoreTest(c, testCases, "select %s", extractNodeFunc)
+}
+
+func (ts *testFunctionsSuite) TestWindowFuncExprRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"RANK() OVER w", "RANK() OVER `w`"},
+		{"RANK() OVER (PARTITION BY a)", "RANK() OVER (PARTITION BY `a`)"},
+		{"MAX(DISTINCT a) OVER (PARTITION BY a)", "MAX(DISTINCT `a`) OVER (PARTITION BY `a`)"},
+		{"MAX(DISTINCTROW a) OVER (PARTITION BY a)", "MAX(DISTINCT `a`) OVER (PARTITION BY `a`)"},
+		{"MAX(DISTINCT ALL a) OVER (PARTITION BY a)", "MAX(DISTINCT `a`) OVER (PARTITION BY `a`)"},
+		{"MAX(ALL a) OVER (PARTITION BY a)", "MAX(`a`) OVER (PARTITION BY `a`)"},
+		{"FIRST_VALUE(val) IGNORE NULLS OVER (w)", "FIRST_VALUE(`val`) IGNORE NULLS OVER (`w`)"},
+		{"FIRST_VALUE(val) RESPECT NULLS OVER w", "FIRST_VALUE(`val`) OVER `w`"},
+		{"NTH_VALUE(val, 233) FROM LAST IGNORE NULLS OVER w", "NTH_VALUE(`val`, 233) FROM LAST IGNORE NULLS OVER `w`"},
+		{"NTH_VALUE(val, 233) FROM FIRST IGNORE NULLS OVER (w)", "NTH_VALUE(`val`, 233) IGNORE NULLS OVER (`w`)"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node.(*SelectStmt).Fields.Fields[0].Expr
