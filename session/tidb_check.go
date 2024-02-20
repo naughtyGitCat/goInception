@@ -768,17 +768,27 @@ func validRangePartitionType(col *ast.ColumnDef) bool {
 // checkRangePartitioningKeysConstraints checks that the range partitioning key is included in the table constraint.
 func (s *session) checkRangePartitioningKeysConstraints(table *ast.CreateTableStmt) {
 	// Returns directly if there is no constraint in the partition table.
-	// TODO: Remove the test 's.Partition.Expr == nil' when we support 'PARTITION BY RANGE COLUMNS'
-	if len(table.Constraints) == 0 || table.Partition.Expr == nil {
+	if len(table.Constraints) == 0 {
 		return
 	}
+	var partkeys []string
+	//var consColNames []map[string]struct{}
 	// Extract the column names in table constraints to []map[string]struct{}.
 	consColNames := extractConstraintsColumnNames(table.Constraints)
-	// Parse partitioning key, extract the column names in the partitioning key to slice.
-	buf := new(bytes.Buffer)
-	table.Partition.Expr.Format(buf)
-	var partkeys []string
-	partkeys = append(partkeys, buf.String())
+
+	if table.Partition.Expr != nil {
+		// Parse partitioning key, extract the column names in the partitioning key to slice.
+		buf := new(bytes.Buffer)
+		table.Partition.Expr.Format(buf)
+		partkeys = append(partkeys, buf.String())
+	} else if len(table.Partition.ColumnNames) > 0 {
+		for _, key := range table.Partition.ColumnNames {
+			partkeys = append(partkeys, key.Name.L)
+		}
+	} else {
+		// TODO: Check keys constraints for list, key partition type and so on.
+		return
+	}
 	// Checks that the partitioning key is included in the constraint.
 	for _, con := range consColNames {
 		// Every unique key on the table must use every column in the table's partitioning expression.
