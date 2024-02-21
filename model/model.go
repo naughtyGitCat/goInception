@@ -583,6 +583,28 @@ func (index *IndexInfo) HasPrefixIndex() bool {
 	return false
 }
 
+// PrimaryKeyType is the type of primary key.
+// Available values are "clustered", "nonclustered", and ""(default).
+type PrimaryKeyType int8
+
+func (p PrimaryKeyType) String() string {
+	switch p {
+	case PrimaryKeyTypeClustered:
+		return "CLUSTERED"
+	case PrimaryKeyTypeNonClustered:
+		return "NONCLUSTERED"
+	default:
+		return ""
+	}
+}
+
+//revive:disable:exported
+const (
+	PrimaryKeyTypeDefault PrimaryKeyType = iota
+	PrimaryKeyTypeClustered
+	PrimaryKeyTypeNonClustered
+)
+
 // FKInfo provides meta data describing a foreign key constraint.
 type FKInfo struct {
 	ID       int64       `json:"id"`
