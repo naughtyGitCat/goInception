@@ -430,8 +430,6 @@ type ColumnOption struct {
 	Refer               *ReferenceDef
 	StrValue            string
 	AutoRandomBitLength int
-
-	PrimaryKeyTp model.PrimaryKeyType
 }
 
 // Restore implements Node interface.
@@ -441,11 +439,6 @@ func (n *ColumnOption) Restore(ctx *RestoreCtx) error {
 		return nil
 	case ColumnOptionPrimaryKey:
 		ctx.WriteKeyWord("PRIMARY KEY")
-		pkTp := n.PrimaryKeyTp.String()
-		if len(pkTp) != 0 {
-			ctx.WritePlain(" ")
-			ctx.WriteKeyWord(pkTp)
-		}
 	case ColumnOptionNotNull:
 		ctx.WriteKeyWord("NOT NULL")
 	case ColumnOptionAutoIncrement:
@@ -553,18 +546,11 @@ type IndexOption struct {
 	Comment      string
 	ParserName   model.CIStr
 	Visibility   IndexVisibility
-	PrimaryKeyTp model.PrimaryKeyType
 }
 
 // Restore implements Node interface.
 func (n *IndexOption) Restore(ctx *RestoreCtx) error {
 	hasPrevOption := false
-
-	if n.PrimaryKeyTp != model.PrimaryKeyTypeDefault {
-		ctx.WriteKeyWord(n.PrimaryKeyTp.String())
-		hasPrevOption = true
-	}
-
 	if n.PartitionIndexType != model.PartitionIndexTypeInvalid {
 		ctx.WritePlain(n.PartitionIndexType.String())
 		hasPrevOption = true
