@@ -722,17 +722,18 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 	}
 	ctx.WritePlain(")")
 
-	ctx.WritePlain(" (")
-	for i, col := range n.ColumnNames {
-		if i > 0 {
-			ctx.WritePlain(",")
+	if len(n.ColumnNames) > 0 {
+		ctx.WritePlain(" (")
+		for i, col := range n.ColumnNames {
+			if i > 0 {
+				ctx.WritePlain(",")
+			}
+			if err := col.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while splicing PartitionMethod.ColumnName[%d]", i)
+			}
 		}
-		if err := col.Restore(ctx); err != nil {
-			return errors.Annotatef(err, "An error occurred while splicing PartitionMethod.ColumnName[%d]", i)
-		}
+		ctx.WritePlain(")")
 	}
-	ctx.WritePlain(")")
-
 	if n.Refer != nil {
 		ctx.WritePlain(" ")
 		if err := n.Refer.Restore(ctx); err != nil {
