@@ -688,7 +688,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 
 	case *ast.SetStmt:
 		s.checkSetStmt(node)
-
+	case *ast.DropProcedureStmt, *ast.ProcedureInfo:
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
