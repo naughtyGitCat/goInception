@@ -13134,11 +13134,13 @@ yynewstate:
 		parser.yyVAL.item = []ast.Node{yyS[yypt-0].statement.(*ast.SelectStmt)}
 	}
 	case 1279: {
-		setList := []ast.Node{&ast.SetOprSelectList{Selects: yyS[yypt-1].item.([]ast.Node)}}
+		setList := yyS[yypt-1].item.([]ast.Node)
 		if sel, isSelect := setList[0].(*ast.SelectStmt); isSelect && len(setList) == 1 {
 			endOffset := parser.endOffset(&yyS[yypt])
 			parser.setLastSelectFieldText(sel, endOffset)
 			sel.IsInBraces = true
+		} else {
+			setList = []ast.Node{&ast.SetOprSelectList{Selects: yyS[yypt-1].item.([]ast.Node)}}
 		}
 		parser.yyVAL.item = setList
 	}
