@@ -490,7 +490,7 @@ func (s *session) isRunToTiDB(stmtNode ast.StmtNode) (is bool, isFlush bool) {
 	case *ast.ExplainStmt:
 		return true, false
 
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		return true, false
 
 	case *ast.SelectStmt:
@@ -565,12 +565,15 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.UpdateStmt:
 		s.checkUpdate(node, currentSql)
 
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		for _, sel := range node.SelectList.Selects {
-			if sel.Fields != nil {
-				for _, field := range sel.Fields.Fields {
-					if field.WildCard != nil {
-						s.appendErrorNo(ER_SELECT_ONLY_STAR)
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				if selectStmt.Fields != nil {
+					for _, field := range selectStmt.Fields.Fields {
+						if field.WildCard != nil {
+							s.appendErrorNo(ER_SELECT_ONLY_STAR)
+						}
 					}
 				}
 			}
@@ -5395,29 +5398,33 @@ func (s *session) checkCreateView(node *ast.CreateViewStmt, sql string) {
 	}
 
 	switch selectNode := node.Select.(type) {
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		for _, sel := range selectNode.SelectList.Selects {
 			// 是否有星号列
-			hasWildCard := false
-			if sel.Fields != nil {
-				for _, field := range sel.Fields.Fields {
-					if field.WildCard != nil {
-						hasWildCard = true
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				hasWildCard := false
+				if selectStmt.Fields != nil {
+					for _, field := range selectStmt.Fields.Fields {
+						if field.WildCard != nil {
+							hasWildCard = true
+						}
 					}
-				}
 
-				if hasWildCard {
-					s.appendErrorNo(ER_SELECT_ONLY_STAR)
+					if hasWildCard {
+						s.appendErrorNo(ER_SELECT_ONLY_STAR)
 
-					selectColumnCount, err := s.subSelectColumns(sel)
-					if err == nil && fieldCount > 0 && fieldCount != selectColumnCount {
+						selectColumnCount, err := s.subSelectColumns(sel)
+						if err == nil && fieldCount > 0 && fieldCount != selectColumnCount {
+							s.appendErrorNo(ErrViewColumnCount)
+						}
+					} else if fieldCount > 0 && fieldCount != len(selectStmt.Fields.Fields) {
+						// 判断字段数是否匹配
 						s.appendErrorNo(ErrViewColumnCount)
 					}
-				} else if fieldCount > 0 && fieldCount != len(sel.Fields.Fields) {
-					// 判断字段数是否匹配
-					s.appendErrorNo(ErrViewColumnCount)
 				}
 			}
+
 		}
 		s.checkSelectItem(selectNode, nil, false)
 
@@ -5722,11 +5729,15 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 	if node.Select != nil {
 		sel, ok := node.Select.(*ast.SelectStmt)
 		if !ok {
-			if u, ok := node.Select.(*ast.UnionStmt); ok {
-				sel = u.SelectList.Selects[0]
+			if u, ok := node.Select.(*ast.SetOprStmt); ok {
+				for _, sel := range u.SelectList.Selects {
+					switch selectStmt := sel.(type) {
+					case *ast.SelectStmt:
+						sel = selectStmt
+					}
+				}
 			}
 		}
-
 		if sel != nil {
 			// 是否有星号列
 			hasWildCard := false
@@ -5883,7 +5894,7 @@ func (s *session) getTableList(tableList []*ast.TableSource) ([]*TableInfo, bool
 // subSelectColumns 计算子查询的列数(包含有星号列)
 func (s *session) subSelectColumns(node ast.ResultSetNode) (int, error) {
 	switch sel := node.(type) {
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		// 取第一个select的列数
 		return s.subSelectColumns(sel.SelectList.Selects[0])
 
@@ -5985,7 +5996,7 @@ func (s *session) getSubSelectColumns(node ast.ResultSetNode) []string {
 	columns := []string{}
 
 	switch sel := node.(type) {
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		// 取第一个select的列数
 		return s.getSubSelectColumns(sel.SelectList.Selects[0])
 
@@ -8173,7 +8184,7 @@ func extractTableList(node ast.ResultSetNode, input []*ast.TableSource) []*ast.T
 		if x.From != nil {
 			input = extractTableList(x.From.TableRefs, input)
 		}
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		for _, sel := range x.SelectList.Selects {
 			input = extractTableList(sel, input)
 		}
@@ -8364,19 +8375,25 @@ func (s *session) checkSelectItem(node ast.ResultSetNode,
 	}
 
 	switch x := node.(type) {
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		stmt := x.SelectList
 		for _, sel := range stmt.Selects[:len(stmt.Selects)-1] {
-			if sel.Limit != nil {
-				s.appendErrorNo(ErrWrongUsage, "UNION", "LIMIT")
-			}
-			if sel.OrderBy != nil {
-				s.appendErrorNo(ErrWrongUsage, "UNION", "ORDER BY")
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				if selectStmt.Limit != nil {
+					s.appendErrorNo(ErrWrongUsage, "UNION", "LIMIT")
+				}
+				if selectStmt.OrderBy != nil {
+					s.appendErrorNo(ErrWrongUsage, "UNION", "ORDER BY")
+				}
 			}
 		}
 
 		for _, sel := range stmt.Selects {
-			s.checkSubSelectItem(sel, outerTables)
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				s.checkSubSelectItem(selectStmt, outerTables)
+			}
 		}
 
 	case *ast.SelectStmt:
@@ -8424,7 +8441,7 @@ func (s *session) checkSelectItem(node ast.ResultSetNode,
 				return []*TableInfo{t}
 			}
 
-		case *ast.UnionStmt:
+		case *ast.SetOprStmt:
 			s.checkSelectItem(tblSource, nil, false)
 
 			cols := s.getSubSelectColumns(tblSource)

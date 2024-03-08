@@ -65,9 +65,10 @@ func ExtractCorColumns(expr Expression) (cols []*CorrelatedColumn) {
 // It's often observed that the pattern of the caller like this:
 //
 // cols := ExtractColumns(...)
-// for _, col := range cols {
-//     if xxx(col) {...}
-// }
+//
+//	for _, col := range cols {
+//	    if xxx(col) {...}
+//	}
 //
 // Provide an additional filter argument, this can be done in one step.
 // To avoid allocation for cols that not need.
@@ -502,4 +503,40 @@ func ColumnSliceIsIntersect(s1, s2 []*Column) bool {
 		}
 	}
 	return false
+}
+
+// DatumToConstant generates a Constant expression from a Datum.
+func DatumToConstant(d types.Datum, tp byte) *Constant {
+	return &Constant{Value: d, RetType: types.NewFieldType(tp)}
+}
+
+func GetParamExpression(ctx sessionctx.Context, v *ast.ParamMarkerExpr) (Expression, error) {
+	useCache := ctx.GetSessionVars().StmtCtx.UseCache
+	tp := types.NewFieldType(mysql.TypeUnspecified)
+	types.DefaultParamTypeForValue(v.GetValue(), tp)
+	value := &Constant{Value: v.Datum, RetType: tp}
+	if useCache {
+		f, err := NewFunctionBase(ctx, ast.GetParam, &v.Type,
+			DatumToConstant(types.NewIntDatum(int64(v.Order)), mysql.TypeLonglong))
+		if err != nil {
+			return nil, err
+		}
+		f.GetType().Tp = v.Type.Tp
+		value.DeferredExpr = f
+	}
+	return value, nil
+}
+
+// GetStringFromConstant gets a string value from the Constant expression.
+func GetStringFromConstant(ctx sessionctx.Context, value Expression) (string, bool, error) {
+	con, ok := value.(*Constant)
+	if !ok {
+		err := errors.Errorf("Not a Constant expression %v", value)
+		return "", true, errors.Trace(err)
+	}
+	str, isNull, err := con.EvalString(ctx, chunk.Row{})
+	if err != nil || isNull {
+		return "", true, errors.Trace(err)
+	}
+	return str, false, nil
 }

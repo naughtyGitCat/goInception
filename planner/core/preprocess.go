@@ -75,8 +75,8 @@ func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 		p.checkDropDatabaseGrammar(node)
 	case *ast.ShowStmt:
 		p.resolveShowStmt(node)
-	case *ast.UnionSelectList:
-		p.checkUnionSelectList(node)
+	case *ast.SetOprSelectList:
+		p.checkSetOprSelectList(node)
 	case *ast.DeleteTableList:
 		return in, true
 	case *ast.Join:
@@ -226,18 +226,22 @@ func (p *preprocessor) checkAutoIncrement(stmt *ast.CreateTableStmt) {
 // checkUnionSelectList checks union's selectList.
 // refer: https://dev.mysql.com/doc/refman/5.7/en/union.html
 // "To apply ORDER BY or LIMIT to an individual SELECT, place the clause inside the parentheses that enclose the SELECT."
-func (p *preprocessor) checkUnionSelectList(stmt *ast.UnionSelectList) {
+func (p *preprocessor) checkSetOprSelectList(stmt *ast.SetOprSelectList) {
 	for _, sel := range stmt.Selects[:len(stmt.Selects)-1] {
-		if sel.IsInBraces {
-			continue
-		}
-		if sel.Limit != nil {
-			p.err = ErrWrongUsage.GenWithStackByArgs("UNION", "LIMIT")
-			return
-		}
-		if sel.OrderBy != nil {
-			p.err = ErrWrongUsage.GenWithStackByArgs("UNION", "ORDER BY")
-			return
+		switch s := sel.(type) {
+		case *ast.SelectStmt:
+			if s.IsInBraces {
+				continue
+			}
+			if s.Limit != nil {
+				p.err = ErrWrongUsage.GenWithStackByArgs("UNION", "LIMIT")
+			}
+			if s.OrderBy != nil {
+				p.err = ErrWrongUsage.GenWithStackByArgs("UNION", "ORDER BY")
+				return
+			}
+		case *ast.SetOprSelectList:
+			p.checkSetOprSelectList(s)
 		}
 	}
 }

@@ -53,11 +53,11 @@ func (ts *testDMLSuite) TestDMLVisitorCover(c *C) {
 
 		// TODO: cover childrens
 		{&InsertStmt{Table: tableRefsClause}, 1, 1},
-		{&UnionStmt{}, 0, 0},
+		{&SetOprStmt{}, 0, 0},
 		{&UpdateStmt{TableRefs: tableRefsClause}, 1, 1},
 		{&SelectStmt{}, 0, 0},
 		{&FieldList{}, 0, 0},
-		{&UnionSelectList{}, 0, 0},
+		{&SetOprSelectList{}, 0, 0},
 		{&WindowSpec{}, 0, 0},
 		{&PartitionByClause{}, 0, 0},
 		{&FrameClause{}, 0, 0},
@@ -120,9 +120,11 @@ func (tc *testDMLSuite) TestTableNameIndexHintsRestore(c *C) {
 		{"t use index for group by (`foo``bar`) ignore key for order by (`baz``1`, `xyz`)", "`t` USE INDEX FOR GROUP BY (`foo``bar`) IGNORE INDEX FOR ORDER BY (`baz``1`, `xyz`)"},
 		{"t use index for group by (`foo``bar`) ignore key for group by (`baz``1`, `xyz`)", "`t` USE INDEX FOR GROUP BY (`foo``bar`) IGNORE INDEX FOR GROUP BY (`baz``1`, `xyz`)"},
 		{"t use index for order by (`foo``bar`) ignore key for group by (`baz``1`, `xyz`)", "`t` USE INDEX FOR ORDER BY (`foo``bar`) IGNORE INDEX FOR GROUP BY (`baz``1`, `xyz`)"},
+		{"t tt use index for order by (`foo``bar`) ignore key for group by (`baz``1`, `xyz`)", "`t` AS `tt` USE INDEX FOR ORDER BY (`foo``bar`) IGNORE INDEX FOR GROUP BY (`baz``1`, `xyz`)"},
+		{"t as tt use index for order by (`foo``bar`) ignore key for group by (`baz``1`, `xyz`)", "`t` AS `tt` USE INDEX FOR ORDER BY (`foo``bar`) IGNORE INDEX FOR GROUP BY (`baz``1`, `xyz`)"},
 	}
 	extractNodeFunc := func(node Node) Node {
-		return node.(*SelectStmt).From.TableRefs.Left.(*TableSource).Source.(*TableName)
+		return node.(*SelectStmt).From.TableRefs.Left
 	}
 	RunNodeRestoreTest(c, testCases, "SELECT * FROM %s", extractNodeFunc)
 }
@@ -249,6 +251,20 @@ func (tc *testDMLSuite) TestDeleteTableListRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "DELETE FROM %s USING t1, t2;", extractNodeFunc)
 }
 
+func (tc *testDMLSuite) TestDeleteTableIndexHintRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"DELETE FROM t1 USE key (`fld1`) WHERE fld=1",
+			"DELETE FROM `t1` USE INDEX (`fld1`) WHERE `fld`=1"},
+		{"DELETE FROM t1 as tbl USE key (`fld1`) WHERE tbl.fld=2",
+			"DELETE FROM `t1` AS `tbl` USE INDEX (`fld1`) WHERE `tbl`.`fld`=2"},
+	}
+
+	extractNodeFunc := func(node Node) Node {
+		return node.(*DeleteStmt)
+	}
+	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+}
+
 func (tc *testExpressionsSuite) TestByItemRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"a", "`a`"},
@@ -282,10 +298,10 @@ func (tc *testDMLSuite) TestOrderByClauseRestore(c *C) {
 	}
 	RunNodeRestoreTest(c, testCases, "SELECT 1 FROM t1 %s", extractNodeFunc)
 
-	extractNodeFromUnionStmtFunc := func(node Node) Node {
-		return node.(*UnionStmt).OrderBy
+	extractNodeFromSetOprStmtFunc := func(node Node) Node {
+		return node.(*SetOprStmt).OrderBy
 	}
-	RunNodeRestoreTest(c, testCases, "SELECT 1 FROM t1 UNION SELECT 2 FROM t2 %s", extractNodeFromUnionStmtFunc)
+	RunNodeRestoreTest(c, testCases, "SELECT 1 FROM t1 UNION SELECT 2 FROM t2 %s", extractNodeFromSetOprStmtFunc)
 }
 
 func (tc *testDMLSuite) TestAssignmentRestore(c *C) {
@@ -309,4 +325,10 @@ func (ts *testDMLSuite) TestHavingClauseRestore(c *C) {
 		return node.(*SelectStmt).Having
 	}
 	RunNodeRestoreTest(c, testCases, "select 1 from t1 group by 1 %s", extractNodeFunc)
+}
+
+func (ts *testDMLSuite) TestFulltextSearchModifier(c *C) {
+	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).IsBooleanMode(), IsFalse)
+	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).IsNaturalLanguageMode(), IsTrue)
+	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).WithQueryExpansion(), IsFalse)
 }

@@ -17,8 +17,11 @@ package ast
 func IsReadOnly(node Node) bool {
 	switch st := node.(type) {
 	case *SelectStmt:
-		if st.LockTp == SelectLockForUpdate {
-			return false
+		if st.LockInfo != nil {
+			switch st.LockInfo.LockType {
+			case SelectLockForUpdate, SelectLockForUpdateNoWait, SelectLockForUpdateWaitN:
+				return false
+			}
 		}
 
 		checker := readOnlyChecker{
@@ -28,6 +31,13 @@ func IsReadOnly(node Node) bool {
 		node.Accept(&checker)
 		return checker.readOnly
 	case *ExplainStmt, *DoStmt:
+		return true
+	case *SetOprSelectList:
+		for _, sel := range node.(*SetOprSelectList).Selects {
+			if !IsReadOnly(sel) {
+				return false
+			}
+		}
 		return true
 	default:
 		return false

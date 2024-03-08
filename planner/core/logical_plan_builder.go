@@ -134,8 +134,8 @@ func (b *PlanBuilder) buildResultSetNode(node ast.ResultSetNode) (p LogicalPlan,
 		switch v := x.Source.(type) {
 		case *ast.SelectStmt:
 			p, err = b.buildSelect(v)
-		case *ast.UnionStmt:
-			p, err = b.buildUnion(v)
+		case *ast.SetOprStmt:
+			p, err = b.buildSetOpr(v)
 		case *ast.TableName:
 			p, err = b.buildDataSource(v)
 		default:
@@ -168,8 +168,8 @@ func (b *PlanBuilder) buildResultSetNode(node ast.ResultSetNode) (p LogicalPlan,
 		return p, nil
 	case *ast.SelectStmt:
 		return b.buildSelect(x)
-	case *ast.UnionStmt:
-		return b.buildUnion(x)
+	case *ast.SetOprStmt:
+		return b.buildSetOpr(x)
 	default:
 		return nil, ErrUnsupportedType.GenWithStack("Unsupported ast.ResultSetNode(%T) for buildResultSetNode()", x)
 	}
@@ -362,10 +362,10 @@ func (b *PlanBuilder) buildJoin(joinNode *ast.Join) (LogicalPlan, error) {
 // on the "USING" clause.
 //
 // According to the standard SQL, columns are ordered in the following way:
-// 1. coalesced common columns of "leftPlan" and "rightPlan", in the order they
-//    appears in "leftPlan".
-// 2. the rest columns in "leftPlan", in the order they appears in "leftPlan".
-// 3. the rest columns in "rightPlan", in the order they appears in "rightPlan".
+//  1. coalesced common columns of "leftPlan" and "rightPlan", in the order they
+//     appears in "leftPlan".
+//  2. the rest columns in "leftPlan", in the order they appears in "leftPlan".
+//  3. the rest columns in "rightPlan", in the order they appears in "rightPlan".
 func (b *PlanBuilder) buildUsingClause(p *LogicalJoin, leftPlan, rightPlan LogicalPlan, join *ast.Join) error {
 	filter := make(map[string]bool, len(join.Using))
 	for _, col := range join.Using {
@@ -377,9 +377,10 @@ func (b *PlanBuilder) buildUsingClause(p *LogicalJoin, leftPlan, rightPlan Logic
 // buildNaturalJoin builds natural join output schema. It finds out all the common columns
 // then using the same mechanism as buildUsingClause to eliminate redundant columns and build join conditions.
 // According to standard SQL, producing this display order:
-// 	All the common columns
-// 	Every column in the first (left) table that is not a common column
-// 	Every column in the second (right) table that is not a common column
+//
+//	All the common columns
+//	Every column in the first (left) table that is not a common column
+//	Every column in the second (right) table that is not a common column
 func (b *PlanBuilder) buildNaturalJoin(p *LogicalJoin, leftPlan, rightPlan LogicalPlan, join *ast.Join) error {
 	return b.coalesceCommonColumns(p, leftPlan, rightPlan, join.Tp == ast.RightJoin, nil)
 }
@@ -684,17 +685,21 @@ func (b *PlanBuilder) buildProjection4Union(u *LogicalUnionAll) {
 	}
 }
 
-func (b *PlanBuilder) buildUnion(union *ast.UnionStmt) (LogicalPlan, error) {
-	distinctSelectPlans, allSelectPlans, err := b.divideUnionSelectPlans(union.SelectList.Selects)
+func (b *PlanBuilder) buildUnion(selects []LogicalPlan, afterSetOpts []*ast.SetOprType) (LogicalPlan, error) {
+	if len(selects) == 1 {
+		return selects[0], nil
+	}
+	distinctSelectPlans, allSelectPlans, err := b.divideUnionSelectPlans(selects, afterSetOpts)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 
 	unionDistinctPlan := b.buildUnionAll(distinctSelectPlans)
 	if unionDistinctPlan != nil {
 		unionDistinctPlan = b.buildDistinct(unionDistinctPlan, unionDistinctPlan.Schema().Len())
 		if len(allSelectPlans) > 0 {
-			allSelectPlans = append(allSelectPlans, unionDistinctPlan)
+			// Can't change the statements order in order to get the correct column info.
+			allSelectPlans = append([]LogicalPlan{unionDistinctPlan}, allSelectPlans...)
 		}
 	}
 
@@ -704,19 +709,6 @@ func (b *PlanBuilder) buildUnion(union *ast.UnionStmt) (LogicalPlan, error) {
 		unionPlan = unionAllPlan
 	}
 
-	if union.OrderBy != nil {
-		unionPlan, err = b.buildSort(unionPlan, union.OrderBy.Items, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
-	if union.Limit != nil {
-		unionPlan, err = b.buildLimit(unionPlan, union.Limit)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
 	return unionPlan, nil
 }
 
@@ -724,30 +716,19 @@ func (b *PlanBuilder) buildUnion(union *ast.UnionStmt) (LogicalPlan, error) {
 // and divide result plans into "union-distinct" and "union-all" parts.
 // divide rule ref: https://dev.mysql.com/doc/refman/5.7/en/union.html
 // "Mixed UNION types are treated such that a DISTINCT union overrides any ALL union to its left."
-func (b *PlanBuilder) divideUnionSelectPlans(selects []*ast.SelectStmt) (distinctSelects []LogicalPlan, allSelects []LogicalPlan, err error) {
-	firstUnionAllIdx, columnNums := 0, -1
+func (b *PlanBuilder) divideUnionSelectPlans(selects []LogicalPlan, setOprTypes []*ast.SetOprType) (distinctSelects []LogicalPlan, allSelects []LogicalPlan, err error) {
+	firstUnionAllIdx := 0
+	columnNums := selects[0].Schema().Len()
 	// The last slot is reserved for appending distinct union outside this function.
-	children := make([]LogicalPlan, len(selects), len(selects)+1)
-	for i := len(selects) - 1; i >= 0; i-- {
-		stmt := selects[i]
-		if firstUnionAllIdx == 0 && stmt.IsAfterUnionDistinct {
+	for i := len(selects) - 1; i > 0; i-- {
+		if firstUnionAllIdx == 0 && *setOprTypes[i] != ast.UnionAll {
 			firstUnionAllIdx = i + 1
 		}
-
-		selectPlan, err := b.buildSelect(stmt)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-
-		if columnNums == -1 {
-			columnNums = selectPlan.Schema().Len()
-		}
-		if selectPlan.Schema().Len() != columnNums {
+		if selects[i].Schema().Len() != columnNums {
 			return nil, nil, ErrWrongNumberOfColumnsInSelect.GenWithStackByArgs()
 		}
-		children[i] = selectPlan
 	}
-	return children[:firstUnionAllIdx], children[firstUnionAllIdx:], nil
+	return selects[:firstUnionAllIdx], selects[firstUnionAllIdx:], nil
 }
 
 func (b *PlanBuilder) buildUnionAll(subPlan []LogicalPlan) LogicalPlan {
@@ -815,17 +796,18 @@ func getUintForLimitOffset(sc *stmtctx.StatementContext, val interface{}) (uint6
 	return 0, errors.Errorf("Invalid type %T for LogicalLimit/Offset", val)
 }
 
-func extractLimitCountOffset(sc *stmtctx.StatementContext, limit *ast.Limit) (count uint64,
+func extractLimitCountOffset(ctx sessionctx.Context, limit *ast.Limit) (count uint64,
 	offset uint64, err error) {
+	var isExpectedType bool
 	if limit.Count != nil {
-		count, err = getUintForLimitOffset(sc, limit.Count.GetValue())
-		if err != nil {
+		count, _, isExpectedType = getUintFromNode(ctx, limit.Count)
+		if !isExpectedType {
 			return 0, 0, ErrWrongArguments.GenWithStackByArgs("LIMIT")
 		}
 	}
 	if limit.Offset != nil {
-		offset, err = getUintForLimitOffset(sc, limit.Offset.GetValue())
-		if err != nil {
+		offset, _, isExpectedType = getUintFromNode(ctx, limit.Offset)
+		if !isExpectedType {
 			return 0, 0, ErrWrongArguments.GenWithStackByArgs("LIMIT")
 		}
 	}
@@ -838,8 +820,7 @@ func (b *PlanBuilder) buildLimit(src LogicalPlan, limit *ast.Limit) (LogicalPlan
 		offset, count uint64
 		err           error
 	)
-	sc := b.ctx.GetSessionVars().StmtCtx
-	if count, offset, err = extractLimitCountOffset(sc, limit); err != nil {
+	if count, offset, err = extractLimitCountOffset(b.ctx, limit); err != nil {
 		return nil, err
 	}
 
@@ -1688,8 +1669,8 @@ func (b *PlanBuilder) buildSelect(sel *ast.SelectStmt) (p LogicalPlan, err error
 		}
 	}
 
-	if sel.LockTp != ast.SelectLockNone {
-		p = b.buildSelectLock(p, sel.LockTp)
+	if sel.LockInfo != nil && sel.LockInfo.LockType != ast.SelectLockNone {
+		p = b.buildSelectLock(p, sel.LockInfo)
 	}
 
 	hasAgg := b.detectSelectAgg(sel)
@@ -2383,4 +2364,216 @@ func getInnerFromParentheses(expr ast.ExprNode) ast.ExprNode {
 		return getInnerFromParentheses(pexpr.Expr)
 	}
 	return expr
+}
+
+func (b *PlanBuilder) buildSetOpr(setOpr *ast.SetOprStmt) (LogicalPlan, error) {
+	selectPlans := make([]LogicalPlan, 0, len(setOpr.SelectList.Selects))
+	afterSetOprs := make([]*ast.SetOprType, 0, len(setOpr.SelectList.Selects))
+	selects := setOpr.SelectList.Selects
+	for i := 0; i < len(selects); i++ {
+		intersects := []ast.Node{selects[i]}
+		for i+1 < len(selects) {
+			breakIteration := false
+			switch x := selects[i+1].(type) {
+			case *ast.SelectStmt:
+				if *x.AfterSetOperator != ast.Intersect && *x.AfterSetOperator != ast.IntersectAll {
+					breakIteration = true
+				}
+			case *ast.SetOprSelectList:
+				if *x.AfterSetOperator != ast.Intersect && *x.AfterSetOperator != ast.IntersectAll {
+					breakIteration = true
+				}
+			}
+			if breakIteration {
+				break
+			}
+			intersects = append(intersects, selects[i+1])
+			i++
+		}
+		selectPlan, afterSetOpr, err := b.buildIntersect(intersects)
+		if err != nil {
+			return nil, err
+		}
+		selectPlans = append(selectPlans, selectPlan)
+		afterSetOprs = append(afterSetOprs, afterSetOpr)
+	}
+	setOprPlan, err := b.buildExcept(selectPlans, afterSetOprs)
+	if err != nil {
+		return nil, err
+	}
+	oldLen := setOprPlan.Schema().Len()
+	for i := 0; i < len(setOpr.SelectList.Selects); i++ {
+		b.handleHelper.popMap()
+	}
+	b.handleHelper.pushMap(nil)
+
+	if setOpr.OrderBy != nil {
+		setOprPlan, err = b.buildSort(setOprPlan, setOpr.OrderBy.Items, nil)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	if setOpr.Limit != nil {
+		setOprPlan, err = b.buildLimit(setOprPlan, setOpr.Limit)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	// Fix issue #8189 (https://github.com/pingcap/tidb/issues/8189).
+	// If there are extra expressions generated from `ORDER BY` clause, generate a `Projection` to remove them.
+	if oldLen != setOprPlan.Schema().Len() {
+		proj := LogicalProjection{Exprs: expression.Column2Exprs(setOprPlan.Schema().Columns[:oldLen])}.init(b.ctx)
+		proj.SetChildren(setOprPlan)
+		schema := expression.NewSchema(setOprPlan.Schema().Clone().Columns[:oldLen]...)
+		for _, col := range schema.Columns {
+			col.UniqueID = b.ctx.GetSessionVars().AllocPlanColumnID()
+		}
+		proj.SetSchema(schema)
+		return proj, nil
+	}
+
+	return setOprPlan, nil
+}
+
+func (b *PlanBuilder) buildIntersect(selects []ast.Node) (LogicalPlan, *ast.SetOprType, error) {
+	var leftPlan LogicalPlan
+	var err error
+	var afterSetOperator *ast.SetOprType
+	switch x := selects[0].(type) {
+	case *ast.SelectStmt:
+		afterSetOperator = x.AfterSetOperator
+		leftPlan, err = b.buildSelect(x)
+	case *ast.SetOprSelectList:
+		afterSetOperator = x.AfterSetOperator
+		leftPlan, err = b.buildSetOpr(&ast.SetOprStmt{SelectList: x})
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(selects) == 1 {
+		return leftPlan, afterSetOperator, nil
+	}
+
+	columnNums := leftPlan.Schema().Len()
+	for i := 1; i < len(selects); i++ {
+		var rightPlan LogicalPlan
+		switch x := selects[i].(type) {
+		case *ast.SelectStmt:
+			if *x.AfterSetOperator == ast.IntersectAll {
+				return nil, nil, errors.Errorf("TiDB do not support intersect all")
+			}
+			rightPlan, err = b.buildSelect(x)
+		case *ast.SetOprSelectList:
+			if *x.AfterSetOperator == ast.IntersectAll {
+				return nil, nil, errors.Errorf("TiDB do not support intersect all")
+			}
+			rightPlan, err = b.buildSetOpr(&ast.SetOprStmt{SelectList: x})
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if rightPlan.Schema().Len() != columnNums {
+			return nil, nil, ErrWrongNumberOfColumnsInSelect.GenWithStackByArgs()
+		}
+		leftPlan, err = b.buildSemiJoinForSetOperator(leftPlan, rightPlan, SemiJoin)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return leftPlan, afterSetOperator, nil
+}
+
+func (b *PlanBuilder) buildExcept(selects []LogicalPlan, afterSetOpts []*ast.SetOprType) (LogicalPlan, error) {
+	unionPlans := []LogicalPlan{selects[0]}
+	tmpAfterSetOpts := []*ast.SetOprType{nil}
+	columnNums := selects[0].Schema().Len()
+	for i := 1; i < len(selects); i++ {
+		rightPlan := selects[i]
+		if rightPlan.Schema().Len() != columnNums {
+			return nil, ErrWrongNumberOfColumnsInSelect.GenWithStackByArgs()
+		}
+		if *afterSetOpts[i] == ast.Except {
+			leftPlan, err := b.buildUnion(unionPlans, tmpAfterSetOpts)
+			if err != nil {
+				return nil, err
+			}
+			leftPlan, err = b.buildSemiJoinForSetOperator(leftPlan, rightPlan, AntiSemiJoin)
+			if err != nil {
+				return nil, err
+			}
+			unionPlans = []LogicalPlan{leftPlan}
+			tmpAfterSetOpts = []*ast.SetOprType{nil}
+		} else {
+			unionPlans = append(unionPlans, rightPlan)
+			tmpAfterSetOpts = append(tmpAfterSetOpts, afterSetOpts[i])
+		}
+	}
+	return b.buildUnion(unionPlans, tmpAfterSetOpts)
+}
+
+func (b *PlanBuilder) buildSemiJoinForSetOperator(
+	leftOriginPlan LogicalPlan,
+	rightPlan LogicalPlan,
+	joinType JoinType) (leftPlan LogicalPlan, err error) {
+	leftPlan = b.buildDistinct(leftOriginPlan, leftOriginPlan.Schema().Len())
+	joinPlan := LogicalJoin{JoinType: joinType}.init(b.ctx)
+	joinPlan.SetChildren(leftPlan, rightPlan)
+	joinPlan.SetSchema(leftPlan.Schema())
+	//joinPlan.names = make([]*types.FieldName, leftPlan.Schema().Len())
+	//copy(joinPlan.names, leftPlan.OutputNames())
+	for j := 0; j < len(rightPlan.Schema().Columns); j++ {
+		leftCol, rightCol := leftPlan.Schema().Columns[j], rightPlan.Schema().Columns[j]
+		if leftCol.RetType.Tp != rightCol.RetType.Tp {
+			return nil, errors.New("set operator doesn't support different column type")
+		}
+		eqCond, err := expression.NewFunction(b.ctx, ast.NullEQ, types.NewFieldType(mysql.TypeTiny), leftCol, rightCol)
+		if err != nil {
+			return nil, err
+		}
+		joinPlan.EqualConditions = append(joinPlan.EqualConditions, eqCond.(*expression.ScalarFunction))
+	}
+	return joinPlan, nil
+}
+
+// getUintForLimitOffset gets uint64 value for limit/offset.
+// For ordinary statement, limit/offset should be uint64 constant value.
+// For prepared statement, limit/offset is string. We should convert it to uint64.
+func getUintFromNode(ctx sessionctx.Context, n ast.Node) (uVal uint64, isNull bool, isExpectedType bool) {
+	var val interface{}
+	switch v := n.(type) {
+	case *ast.ValueExpr:
+		val = v.GetValue()
+	case *ast.ParamMarkerExpr:
+		param, err := expression.GetParamExpression(ctx, v)
+		if err != nil {
+			return 0, false, false
+		}
+		str, isNull, err := expression.GetStringFromConstant(ctx, param)
+		if err != nil {
+			return 0, false, false
+		}
+		if isNull {
+			return 0, true, true
+		}
+		val = str
+	default:
+		return 0, false, false
+	}
+	switch v := val.(type) {
+	case uint64:
+		return v, false, true
+	case int64:
+		if v >= 0 {
+			return uint64(v), false, true
+		}
+	case string:
+		sc := ctx.GetSessionVars().StmtCtx
+		uVal, err := types.StrToUint(sc, v)
+		if err != nil {
+			return 0, false, false
+		}
+		return uVal, false, true
+	}
+	return 0, false, false
 }

@@ -33,7 +33,7 @@ func (s *testCacheableSuite) TestCacheable(c *C) {
 	stmt = &ast.InsertStmt{}
 	c.Assert(Cacheable(stmt), IsFalse)
 
-	stmt = &ast.UnionStmt{}
+	stmt = &ast.SetOprStmt{}
 	c.Assert(Cacheable(stmt), IsFalse)
 
 	stmt = &ast.UpdateStmt{}

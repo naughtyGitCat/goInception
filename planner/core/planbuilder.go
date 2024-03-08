@@ -129,6 +129,24 @@ type PlanBuilder struct {
 	// inStraightJoin represents whether the current "SELECT" statement has
 	// "STRAIGHT_JOIN" option.
 	inStraightJoin bool
+	handleHelper   *handleColHelper
+}
+
+type handleColHelper struct {
+	id2HandleMapStack []map[int64][]*expression.Column
+	stackTail         int
+}
+
+func (hch *handleColHelper) popMap() map[int64][]*expression.Column {
+	ret := hch.id2HandleMapStack[hch.stackTail-1]
+	hch.stackTail--
+	hch.id2HandleMapStack = hch.id2HandleMapStack[:hch.stackTail]
+	return ret
+}
+
+func (hch *handleColHelper) pushMap(m map[int64][]*expression.Column) {
+	hch.id2HandleMapStack = append(hch.id2HandleMapStack, m)
+	hch.stackTail++
 }
 
 // GetVisitInfo gets the visitInfo of the PlanBuilder.
@@ -176,8 +194,8 @@ func (b *PlanBuilder) Build(node ast.Node) (Plan, error) {
 		return b.buildPrepare(x), nil
 	case *ast.SelectStmt:
 		return b.buildSelect(x)
-	case *ast.UnionStmt:
-		return b.buildUnion(x)
+	case *ast.SetOprStmt:
+		return b.buildSetOpr(x)
 	case *ast.UpdateStmt:
 		return b.buildUpdate(x)
 	case *ast.ShowStmt:
@@ -388,7 +406,7 @@ func findIndexByName(indices []*model.IndexInfo, name model.CIStr) *model.IndexI
 	return nil
 }
 
-func (b *PlanBuilder) buildSelectLock(src LogicalPlan, lock ast.SelectLockType) *LogicalLock {
+func (b *PlanBuilder) buildSelectLock(src LogicalPlan, lock *ast.SelectLockInfo) *LogicalLock {
 	selectLock := LogicalLock{Lock: lock}.init(b.ctx)
 	selectLock.SetChildren(src)
 	return selectLock

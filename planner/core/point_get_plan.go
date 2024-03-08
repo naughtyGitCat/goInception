@@ -145,15 +145,15 @@ func TryFastPlan(ctx sessionctx.Context, node ast.Node) Plan {
 // 3. All the columns must be public and generated.
 // 4. The condition is an access path that the range is a unique key.
 func tryPointGetPlan(ctx sessionctx.Context, selStmt *ast.SelectStmt) *PointGetPlan {
-	if selStmt.Having != nil || selStmt.LockTp != ast.SelectLockNone {
+	if selStmt.Having != nil || selStmt.OrderBy != nil {
 		return nil
 	} else if selStmt.Limit != nil {
-		sc := ctx.GetSessionVars().StmtCtx
-		count, offset, err := extractLimitCountOffset(sc, selStmt.Limit)
+		count, offset, err := extractLimitCountOffset(ctx, selStmt.Limit)
 		if err != nil || count == 0 || offset > 0 {
 			return nil
 		}
 	}
+
 	tblName := getSingleTableName(selStmt.From)
 	if tblName == nil {
 		return nil
@@ -491,4 +491,13 @@ func colInfoToColumn(db model.CIStr, tblName model.CIStr, asName model.CIStr, co
 		UniqueID:    int64(col.Offset),
 		Index:       idx,
 	}
+}
+
+func IsSelectForUpdateLockType(lockType ast.SelectLockType) bool {
+	if lockType == ast.SelectLockForUpdate ||
+		lockType == ast.SelectLockForUpdateNoWait ||
+		lockType == ast.SelectLockForUpdateWaitN {
+		return true
+	}
+	return true
 }

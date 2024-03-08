@@ -45,7 +45,7 @@ func (s *session) maskingCommand(ctx context.Context, stmtNode ast.StmtNode,
 	switch node := stmtNode.(type) {
 	case *ast.UseStmt:
 		s.dbName = node.DBName
-	case *ast.UnionStmt, *ast.SelectStmt:
+	case *ast.SetOprStmt, *ast.SelectStmt:
 		p := masking{
 			session:       s,
 			maskingFields: make([]MaskingFieldInfo, 0),
@@ -81,13 +81,17 @@ func (s *masking) checkSelectItem(node ast.ResultSetNode, level int) (
 	}
 
 	switch x := node.(type) {
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		for _, sel := range x.SelectList.Selects {
-			tmpTables, tmpFields := s.checkSubSelectItem(sel, level)
-			if tmpTables != nil {
-				tables = append(tables, tmpTables...)
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				tmpTables, tmpFields := s.checkSubSelectItem(selectStmt, level)
+				if tmpTables != nil {
+					tables = append(tables, tmpTables...)
+				}
+				fields = append(fields, tmpFields...)
 			}
-			fields = append(fields, tmpFields...)
+
 		}
 		return
 	case *ast.SelectStmt:
@@ -121,7 +125,7 @@ func (s *masking) checkSelectItem(node ast.ResultSetNode, level int) (
 		case *ast.SelectStmt:
 			return s.checkSubSelectItem(tblSource, level+1)
 
-		case *ast.UnionStmt:
+		case *ast.SetOprStmt:
 			return s.checkSelectItem(tblSource, level+1)
 
 		default:

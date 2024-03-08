@@ -246,7 +246,7 @@ func (la *LogicalApply) PruneColumns(parentUsedCols []*expression.Column) {
 
 // PruneColumns implements LogicalPlan interface.
 func (p *LogicalLock) PruneColumns(parentUsedCols []*expression.Column) {
-	if p.Lock != ast.SelectLockForUpdate {
+	if !IsSelectForUpdateLockType(p.Lock.LockType) {
 		p.baseLogicalPlan.PruneColumns(parentUsedCols)
 	} else {
 		for _, cols := range p.children[0].Schema().TblID2Handle {

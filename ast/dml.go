@@ -26,7 +26,7 @@ import (
 var (
 	_ DMLNode = &DeleteStmt{}
 	_ DMLNode = &InsertStmt{}
-	_ DMLNode = &UnionStmt{}
+	_ DMLNode = &SetOprStmt{}
 	_ DMLNode = &UpdateStmt{}
 	_ DMLNode = &SelectStmt{}
 	_ DMLNode = &ShowStmt{}
@@ -46,7 +46,7 @@ var (
 	_ Node = &TableName{}
 	_ Node = &TableRefsClause{}
 	_ Node = &TableSource{}
-	_ Node = &UnionSelectList{}
+	_ Node = &SetOprSelectList{}
 	_ Node = &WildCardField{}
 	_ Node = &WindowSpec{}
 	_ Node = &FrameClause{}
@@ -188,12 +188,14 @@ type TableName struct {
 }
 
 // Restore implements Node interface.
-func (n *TableName) Restore(ctx *RestoreCtx) error {
+func (n *TableName) restoreName(ctx *RestoreCtx) {
 	if n.Schema.String() != "" {
 		ctx.WriteName(n.Schema.String())
 		ctx.WritePlain(".")
 	}
 	ctx.WriteName(n.Name.String())
+}
+func (n *TableName) restorePartitions(ctx *RestoreCtx) {
 	if len(n.PartitionNames) > 0 {
 		ctx.WriteKeyWord(" PARTITION")
 		ctx.WritePlain("(")
@@ -205,14 +207,21 @@ func (n *TableName) Restore(ctx *RestoreCtx) error {
 		}
 		ctx.WritePlain(")")
 	}
+}
+func (n *TableName) restoreIndexHints(ctx *RestoreCtx) error {
 	for _, value := range n.IndexHints {
 		ctx.WritePlain(" ")
 		if err := value.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while splicing IndexHints")
 		}
 	}
-
 	return nil
+}
+
+func (n *TableName) Restore(ctx *RestoreCtx) error {
+	n.restoreName(ctx)
+	n.restorePartitions(ctx)
+	return n.restoreIndexHints(ctx)
 }
 
 // TableGroupName represents a table group name.
@@ -243,9 +252,9 @@ type IndexHintType int
 
 // IndexHintUseType values.
 const (
-	HintUse    IndexHintType = 1
-	HintIgnore IndexHintType = 2
-	HintForce  IndexHintType = 3
+	HintUse IndexHintType = iota + 1
+	HintIgnore
+	HintForce
 )
 
 // IndexHintScope is the type for index hint for join, order by or group by.
@@ -253,10 +262,10 @@ type IndexHintScope int
 
 // Index hint scopes.
 const (
-	HintForScan    IndexHintScope = 1
-	HintForJoin    IndexHintScope = 2
-	HintForOrderBy IndexHintScope = 3
-	HintForGroupBy IndexHintScope = 4
+	HintForScan IndexHintScope = iota + 1
+	HintForJoin
+	HintForOrderBy
+	HintForGroupBy
 )
 
 // IndexHint represents a hint for optimizer to use/ignore/force for join/order by/group by.
@@ -270,11 +279,11 @@ type IndexHint struct {
 func (n *IndexHint) Restore(ctx *RestoreCtx) error {
 	indexHintType := ""
 	switch n.HintType {
-	case 1:
+	case HintUse:
 		indexHintType = "USE INDEX"
-	case 2:
+	case HintIgnore:
 		indexHintType = "IGNORE INDEX"
-	case 3:
+	case HintForce:
 		indexHintType = "FORCE INDEX"
 	default: // Prevent accidents
 		return errors.New("IndexHintType has an error while matching")
@@ -282,13 +291,13 @@ func (n *IndexHint) Restore(ctx *RestoreCtx) error {
 
 	indexHintScope := ""
 	switch n.HintScope {
-	case 1:
+	case HintForScan:
 		indexHintScope = ""
-	case 2:
+	case HintForJoin:
 		indexHintScope = " FOR JOIN"
-	case 3:
+	case HintForOrderBy:
 		indexHintScope = " FOR ORDER BY"
-	case 4:
+	case HintForGroupBy:
 		indexHintScope = " FOR GROUP BY"
 	default: // Prevent accidents
 		return errors.New("IndexHintScope has an error while matching")
@@ -402,23 +411,40 @@ type TableSource struct {
 func (n *TableSource) Restore(ctx *RestoreCtx) error {
 	needParen := false
 	switch n.Source.(type) {
-	case *SelectStmt, *UnionStmt:
+	case *SelectStmt, *SetOprStmt:
 		needParen = true
 	}
-	if needParen {
-		ctx.WritePlain("(")
+	if tn, tnCase := n.Source.(*TableName); tnCase {
+		if needParen {
+			ctx.WritePlain("(")
+		}
+		tn.restoreName(ctx)
+		tn.restorePartitions(ctx)
+		if asName := n.AsName.String(); asName != "" {
+			ctx.WriteKeyWord(" AS ")
+			ctx.WriteName(asName)
+		}
+		if err := tn.restoreIndexHints(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore TableSource.Source.(*TableName).IndexHints")
+		}
+		if needParen {
+			ctx.WritePlain(")")
+		}
+	} else {
+		if needParen {
+			ctx.WritePlain("(")
+		}
+		if err := n.Source.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore TableSource.Source")
+		}
+		if needParen {
+			ctx.WritePlain(")")
+		}
+		if asName := n.AsName.String(); asName != "" {
+			ctx.WriteKeyWord(" AS ")
+			ctx.WriteName(asName)
+		}
 	}
-	if err := n.Source.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore TableSource.Source")
-	}
-	if needParen {
-		ctx.WritePlain(")")
-	}
-	if asName := n.AsName.String(); asName != "" {
-		ctx.WriteKeyWord(" AS ")
-		ctx.WriteName(asName)
-	}
-
 	return nil
 }
 
@@ -445,17 +471,28 @@ const (
 	SelectLockNone SelectLockType = iota
 	SelectLockForUpdate
 	SelectLockInShareMode
+	SelectLockForUpdateNoWait
+	SelectLockForUpdateWaitN
 )
 
+type SelectLockInfo struct {
+	LockType SelectLockType
+	WaitSec  uint64
+}
+
 // String implements fmt.Stringer.
-func (slt SelectLockType) String() string {
-	switch slt {
+func (n SelectLockType) String() string {
+	switch n {
 	case SelectLockNone:
 		return "none"
 	case SelectLockForUpdate:
 		return "for update"
 	case SelectLockInShareMode:
 		return "in share mode"
+	case SelectLockForUpdateNoWait:
+		return "for update nowait"
+	case SelectLockForUpdateWaitN:
+		return "for update wait seconds"
 	}
 	return "unsupported select lock type"
 }
@@ -781,11 +818,10 @@ type SelectStmt struct {
 	// Limit is the limit clause.
 	Limit *Limit
 	// LockTp is the lock type
-	LockTp SelectLockType
+	LockInfo *SelectLockInfo
 	// TableHints represents the table level Optimizer Hint for join type
-	TableHints []*TableOptimizerHint
-	// IsAfterUnionDistinct indicates whether it's a stmt after "union distinct".
-	IsAfterUnionDistinct bool
+	TableHints       []*TableOptimizerHint
+	AfterSetOperator *SetOprType
 	// IsInBraces indicates whether it's a stmt in brace.
 	IsInBraces bool
 	// QueryBlockOffset indicates the order of this SelectStmt if counted from left to right in the sql text.
@@ -900,14 +936,18 @@ func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while restore SelectStmt.Limit")
 		}
 	}
-
-	switch n.LockTp {
-	case SelectLockInShareMode:
-		ctx.WriteKeyWord(" LOCK ")
-		ctx.WriteKeyWord(n.LockTp.String())
-	case SelectLockForUpdate:
-		ctx.WritePlain(" ")
-		ctx.WriteKeyWord(n.LockTp.String())
+	if n.LockInfo != nil {
+		switch n.LockInfo.LockType {
+		case SelectLockInShareMode:
+			ctx.WriteKeyWord(" LOCK ")
+			ctx.WriteKeyWord(n.LockInfo.LockType.String())
+		case SelectLockForUpdate, SelectLockForUpdateNoWait:
+			ctx.WritePlain(" ")
+			ctx.WriteKeyWord(n.LockInfo.LockType.String())
+		case SelectLockForUpdateWaitN:
+			ctx.WriteKeyWord(" FOR UPDATE WAIT ")
+			ctx.WritePlainf("%d", n.LockInfo.WaitSec)
+		}
 	}
 	return nil
 }
@@ -1000,28 +1040,38 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 }
 
 // UnionSelectList represents the select list in a union statement.
-type UnionSelectList struct {
+type SetOprSelectList struct {
 	node
 
-	Selects []*SelectStmt
+	AfterSetOperator *SetOprType
+	Selects          []Node
 }
 
 // Restore implements Node interface.
-func (n *UnionSelectList) Restore(ctx *RestoreCtx) error {
-	for i, selectStmt := range n.Selects {
-		if i != 0 {
-			ctx.WriteKeyWord(" UNION ")
-			if !selectStmt.IsAfterUnionDistinct {
-				ctx.WriteKeyWord("ALL ")
+func (n *SetOprSelectList) Restore(ctx *RestoreCtx) error {
+	for i, stmt := range n.Selects {
+		switch selectStmt := stmt.(type) {
+		case *SelectStmt:
+			if i != 0 {
+				ctx.WriteKeyWord(" " + selectStmt.AfterSetOperator.String() + " ")
 			}
-		}
-		if selectStmt.IsInBraces {
-			ctx.WritePlain("(")
-		}
-		if err := selectStmt.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore UnionSelectList.SelectStmt")
-		}
-		if selectStmt.IsInBraces {
+			if selectStmt.IsInBraces {
+				ctx.WritePlain("(")
+			}
+			if err := selectStmt.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore SetOprSelectList.SelectStmt")
+			}
+			if selectStmt.IsInBraces {
+				ctx.WritePlain(")")
+			}
+		case *SetOprSelectList:
+			if i != 0 {
+				ctx.WriteKeyWord(" " + selectStmt.AfterSetOperator.String() + " ")
+			}
+			err := selectStmt.Restore(ctx)
+			if err != nil {
+				return err
+			}
 			ctx.WritePlain(")")
 		}
 	}
@@ -1029,68 +1079,97 @@ func (n *UnionSelectList) Restore(ctx *RestoreCtx) error {
 }
 
 // Accept implements Node Accept interface.
-func (n *UnionSelectList) Accept(v Visitor) (Node, bool) {
+func (n *SetOprSelectList) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*UnionSelectList)
+	n = newNode.(*SetOprSelectList)
 	for i, sel := range n.Selects {
 		node, ok := sel.Accept(v)
 		if !ok {
 			return n, false
 		}
-		n.Selects[i] = node.(*SelectStmt)
+		n.Selects[i] = node
 	}
 	return v.Leave(n)
 }
 
+type SetOprType uint8
+
+const (
+	Union SetOprType = iota
+	UnionAll
+	Except
+	ExceptAll
+	Intersect
+	IntersectAll
+)
+
+func (s *SetOprType) String() string {
+	switch *s {
+	case Union:
+		return "UNION"
+	case UnionAll:
+		return "UNION ALL"
+	case Except:
+		return "EXCEPT"
+	case ExceptAll:
+		return "EXCEPT ALL"
+	case Intersect:
+		return "INTERSECT"
+	case IntersectAll:
+		return "INTERSECT ALL"
+	}
+	return ""
+}
+
 // UnionStmt represents "union statement"
 // See https://dev.mysql.com/doc/refman/5.7/en/union.html
-type UnionStmt struct {
+type SetOprStmt struct {
 	dmlNode
 	resultSetNode
 
-	SelectList *UnionSelectList
+	SelectList *SetOprSelectList
 	OrderBy    *OrderByClause
 	Limit      *Limit
 }
 
 // Restore implements Node interface.
-func (n *UnionStmt) Restore(ctx *RestoreCtx) error {
+func (n *SetOprStmt) Restore(ctx *RestoreCtx) error {
 	if err := n.SelectList.Restore(ctx); err != nil {
-		return errors.Annotate(err, "An error occurred while restore UnionStmt.SelectList")
+		return errors.Annotate(err, "An error occurred while restore SetOprStmt.SelectList")
 	}
 
 	if n.OrderBy != nil {
 		ctx.WritePlain(" ")
 		if err := n.OrderBy.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore UnionStmt.OrderBy")
+			return errors.Annotate(err, "An error occurred while restore SetOprStmt.OrderBy")
 		}
 	}
 
 	if n.Limit != nil {
 		ctx.WritePlain(" ")
 		if err := n.Limit.Restore(ctx); err != nil {
-			return errors.Annotate(err, "An error occurred while restore UnionStmt.Limit")
+			return errors.Annotate(err, "An error occurred while restore SetOprStmt.Limit")
 		}
 	}
 	return nil
 }
 
 // Accept implements Node Accept interface.
-func (n *UnionStmt) Accept(v Visitor) (Node, bool) {
+func (n *SetOprStmt) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*UnionStmt)
+	n = newNode.(*SetOprStmt)
 	if n.SelectList != nil {
 		node, ok := n.SelectList.Accept(v)
 		if !ok {
 			return n, false
 		}
-		n.SelectList = node.(*UnionSelectList)
+		n.SelectList = node.(*SetOprSelectList)
 	}
 	if n.OrderBy != nil {
 		node, ok := n.OrderBy.Accept(v)
@@ -1343,6 +1422,9 @@ type InsertStmt struct {
 	Priority    mysql.PriorityEnum
 	OnDuplicate []*Assignment
 	Select      ResultSetNode
+	// TableHints represents the table level Optimizer Hint for join type.
+	TableHints     []*TableOptimizerHint
+	PartitionNames []model.CIStr
 }
 
 // Restore implements Node interface.
@@ -1351,6 +1433,15 @@ func (n *InsertStmt) Restore(ctx *RestoreCtx) error {
 		ctx.WriteKeyWord("REPLACE ")
 	} else {
 		ctx.WriteKeyWord("INSERT ")
+	}
+	if n.TableHints != nil && len(n.TableHints) != 0 {
+		ctx.WritePlain("/*+ ")
+		for i, tableHint := range n.TableHints {
+			if err := tableHint.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while restore InsertStmt.TableHints[%d]", i)
+			}
+		}
+		ctx.WritePlain("*/ ")
 	}
 	if err := n.Priority.Restore(ctx); err != nil {
 		return errors.Trace(err)
@@ -1364,6 +1455,17 @@ func (n *InsertStmt) Restore(ctx *RestoreCtx) error {
 	ctx.WriteKeyWord("INTO ")
 	if err := n.Table.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore InsertStmt.Table")
+	}
+	if len(n.PartitionNames) != 0 {
+		ctx.WriteKeyWord(" PARTITION")
+		ctx.WritePlain("(")
+		for i := 0; i < len(n.PartitionNames); i++ {
+			if i != 0 {
+				ctx.WritePlain(", ")
+			}
+			ctx.WriteName(n.PartitionNames[i].String())
+		}
+		ctx.WritePlain(")")
 	}
 	if n.Columns != nil {
 		ctx.WritePlain(" (")
@@ -1398,7 +1500,7 @@ func (n *InsertStmt) Restore(ctx *RestoreCtx) error {
 	if n.Select != nil {
 		ctx.WritePlain(" ")
 		switch v := n.Select.(type) {
-		case *SelectStmt, *UnionStmt:
+		case *SelectStmt, *SetOprStmt:
 			if err := v.Restore(ctx); err != nil {
 				return errors.Annotate(err, "An error occurred while restore InsertStmt.Select")
 			}
@@ -2583,4 +2685,25 @@ func (n *SplitOption) Restore(ctx *RestoreCtx) error {
 		ctx.WritePlain(")")
 	}
 	return nil
+}
+
+type FulltextSearchModifier int
+
+const (
+	FulltextSearchModifierNaturalLanguageMode = 0
+	FulltextSearchModifierBooleanMode         = 1
+	FulltextSearchModifierModeMask            = 0xF
+	FulltextSearchModifierWithQueryExpansion  = 1 << 4
+)
+
+func (m FulltextSearchModifier) IsBooleanMode() bool {
+	return m&FulltextSearchModifierModeMask == FulltextSearchModifierBooleanMode
+}
+
+func (m FulltextSearchModifier) IsNaturalLanguageMode() bool {
+	return m&FulltextSearchModifierModeMask == FulltextSearchModifierNaturalLanguageMode
+}
+
+func (m FulltextSearchModifier) WithQueryExpansion() bool {
+	return m&FulltextSearchModifierWithQueryExpansion == FulltextSearchModifierWithQueryExpansion
 }

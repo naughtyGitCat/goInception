@@ -205,19 +205,26 @@ func (s *session) printSelectItem(node ast.ResultSetNode) bool {
 	log.Debug("printSelectItem")
 
 	switch x := node.(type) {
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		stmt := x.SelectList
 		for _, sel := range stmt.Selects[:len(stmt.Selects)-1] {
-			if sel.Limit != nil {
-				s.appendErrorNo(ErrWrongUsage, "UNION", "LIMIT")
-			}
-			if sel.OrderBy != nil {
-				s.appendErrorNo(ErrWrongUsage, "UNION", "ORDER BY")
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				if selectStmt.Limit != nil {
+					s.appendErrorNo(ErrWrongUsage, "UNION", "LIMIT")
+				}
+				if selectStmt.OrderBy != nil {
+					s.appendErrorNo(ErrWrongUsage, "UNION", "ORDER BY")
+				}
 			}
 		}
 
 		for _, sel := range stmt.Selects {
-			s.printSubSelectItem(sel)
+			switch selectStmt := sel.(type) {
+			case *ast.SelectStmt:
+				s.printSubSelectItem(selectStmt)
+			}
+
 		}
 
 	case *ast.SelectStmt:

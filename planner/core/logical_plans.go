@@ -604,5 +604,5 @@ type LogicalLimit struct {
 type LogicalLock struct {
 	baseLogicalPlan
 
-	Lock ast.SelectLockType
+	Lock *ast.SelectLockInfo
 }

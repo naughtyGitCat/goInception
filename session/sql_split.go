@@ -107,7 +107,7 @@ func (s *session) splitCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.DropIndexStmt:
 		s.addSplitNode(node.Table.Schema.O, node.Table.Name.O, false, node, sql)
 
-	case *ast.UnionStmt, *ast.SelectStmt:
+	case *ast.SetOprStmt, *ast.SelectStmt:
 		return nil, nil
 
 	case *ast.CreateViewStmt:

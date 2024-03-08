@@ -800,7 +800,7 @@ func getLeftTable(node ast.ResultSetNode) *ast.TableSource {
 		if x.From != nil {
 			return getLeftTable(x.From.TableRefs)
 		}
-	case *ast.UnionStmt:
+	case *ast.SetOprStmt:
 		for _, sel := range x.SelectList.Selects {
 			return getLeftTable(sel)
 		}

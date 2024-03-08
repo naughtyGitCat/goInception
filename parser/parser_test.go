@@ -14,6 +14,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
 	"strings"
@@ -286,7 +287,11 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{";", true, ""},
 		{"INSERT INTO foo VALUES (1234)", true, "INSERT INTO `foo` VALUES (1234)"},
 		{"INSERT INTO foo VALUES (1234, 5678)", true, "INSERT INTO `foo` VALUES (1234,5678)"},
-		{"INSERT INTO t1 (SELECT * FROM t2)", true, "INSERT INTO `t1` SELECT * FROM `t2`"},
+		{"INSERT INTO t1 (SELECT * FROM t2)", true, "INSERT INTO `t1` (SELECT * FROM `t2`)"},
+		{"INSERT INTO t partition (p0) values(1234)", true, "INSERT INTO `t` PARTITION(`p0`) VALUES (1234)"},
+		{"REPLACE INTO t partition (p0) values(1234)", true, "REPLACE INTO `t` PARTITION(`p0`) VALUES (1234)"},
+		{"INSERT INTO t partition (p0, p1, p2) values(1234)", true, "INSERT INTO `t` PARTITION(`p0`, `p1`, `p2`) VALUES (1234)"},
+		{"REPLACE INTO t partition (p0, p1, p2) values(1234)", true, "REPLACE INTO `t` PARTITION(`p0`, `p1`, `p2`) VALUES (1234)"},
 		// 15
 		{"INSERT INTO foo VALUES (1 || 2)", true, "INSERT INTO `foo` VALUES (1 OR 2)"},
 		{"INSERT INTO foo VALUES (1 | 2)", true, "INSERT INTO `foo` VALUES (1|2)"},
@@ -420,7 +425,8 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		// select for update
 		{"SELECT * from t for update", true, "SELECT * FROM `t` FOR UPDATE"},
 		{"SELECT * from t lock in share mode", true, "SELECT * FROM `t` LOCK IN SHARE MODE"},
-
+		{"SELECT * from t for update nowait", true, "SELECT * FROM `t` FOR UPDATE NOWAIT"},
+		{"SELECT * from t limit 1 for update wait 11", true, "SELECT * FROM `t` LIMIT 1 FOR UPDATE WAIT 11"},
 		// from join
 		{"SELECT * from t1, t2, t3", true, "SELECT * FROM ((`t1`) JOIN `t2`) JOIN `t3`"},
 		{"select * from t1 join t2 left join t3 on t2.id = t3.id", true, "SELECT * FROM (`t1` JOIN `t2`) LEFT JOIN `t3` ON `t2`.`id`=`t3`.`id`"},
@@ -567,7 +573,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		// for select with partition
 		{"SELECT * FROM t PARTITION (P1)", true, "SELECT * FROM `t` partition (p1)"},
 		// for https://github.com/pingcap/tidb/issues/320
-		{`(select 1);`, true, "SELECT 1"},
+		{`(select 1);`, true, "(SELECT 1)"},
 
 		// for https://github.com/pingcap/tidb/issues/1050
 		{`SELECT /*!40001 SQL_NO_CACHE */ * FROM test WHERE 1 limit 0, 2000;`, true, "SELECT SQL_NO_CACHE * FROM `test` WHERE 1 LIMIT 0,2000"},
@@ -2385,6 +2391,9 @@ func (s *testParserSuite) TestSubquery(c *C) {
 		{"SELECT NOT EXISTS (select 1)", true, "SELECT NOT EXISTS (SELECT 1)"},
 		{"SELECT + NOT EXISTS (select 1)", false, ""},
 		{"SELECT - NOT EXISTS (select 1)", false, ""},
+		{"SELECT * FROM t where t.a in (select a from t limit 1, 10)", true, "SELECT * FROM `t` WHERE `t`.`a` IN (SELECT `a` FROM `t` LIMIT 1,10)"},
+		{"SELECT * FROM t where t.a in ((select a from t limit 1, 10))", true, "SELECT * FROM `t` WHERE `t`.`a` IN ((SELECT `a` FROM `t` LIMIT 1,10))"},
+		{"SELECT * FROM t where t.a in ((select a from t limit 1, 10), 1)", true, "SELECT * FROM `t` WHERE `t`.`a` IN ((SELECT `a` FROM `t` LIMIT 1,10),1)"},
 	}
 	s.RunTest(c, table, false)
 
@@ -2405,7 +2414,7 @@ func (s *testParserSuite) TestSubquery(c *C) {
 		})
 	}
 }
-func (s *testParserSuite) TestUnion(c *C) {
+func (s *testParserSuite) TestSetOperator(c *C) {
 	defer testleak.AfterTest(c)()
 	table := []testCase{
 		{"select c1 from t1 union select c2 from t2", true, "SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
@@ -2428,8 +2437,64 @@ func (s *testParserSuite) TestUnion(c *C) {
 		{"insert into t select c1 from t1 union select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
 		{"insert into t (c) select c1 from t1 union select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` UNION SELECT `c2` FROM `t2`"},
 		{"select 2 as a from dual union select 1 as b from dual order by a", true, "SELECT 2 AS `a` UNION SELECT 1 AS `b` ORDER BY `a`"},
+		// except
+		{"select c1 from t1 except select c2 from t2", true, "SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2`"},
+		{"select c1 from t1 except (select c2 from t2)", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`)"},
+		{"select c1 from t1 except (select c2 from t2) order by c1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) ORDER BY `c1`"},
+		{"select c1 from t1 except select c2 from t2 order by c2", true, "SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2` ORDER BY `c2`"},
+		{"select c1 from t1 except (select c2 from t2) limit 1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) LIMIT 1"},
+		{"select c1 from t1 except (select c2 from t2) limit 1, 1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) LIMIT 1,1"},
+		{"select c1 from t1 except (select c2 from t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` EXCEPT (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) except (select c2 from t2) order by c1 except select c3 from t3", false, ""},
+		{"(select c1 from t1) except (select c2 from t2) limit 1 except select c3 from t3", false, ""},
+		{"(select c1 from t1) except select c2 from t2 except (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) EXCEPT SELECT `c2` FROM `t2` EXCEPT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select (select 1 except select 1) as a", true, "SELECT (SELECT 1 EXCEPT SELECT 1) AS `a`"},
+		{"select * from (select 1 except select 2) as a", true, "SELECT * FROM (SELECT 1 EXCEPT SELECT 2) AS `a`"},
+		{"insert into t select c1 from t1 except select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2`"},
+		{"insert into t (c) select c1 from t1 except select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` EXCEPT SELECT `c2` FROM `t2`"},
+		{"select 2 as a from dual except select 1 as b from dual order by a", true, "SELECT 2 AS `a` EXCEPT SELECT 1 AS `b` ORDER BY `a`"},
+		// intersect
+		{"select c1 from t1 intersect select c2 from t2", true, "SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2`"},
+		{"select c1 from t1 intersect (select c2 from t2)", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`)"},
+		{"select c1 from t1 intersect (select c2 from t2) order by c1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) ORDER BY `c1`"},
+		{"select c1 from t1 intersect select c2 from t2 order by c2", true, "SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2` ORDER BY `c2`"},
+		{"select c1 from t1 intersect (select c2 from t2) limit 1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) LIMIT 1"},
+		{"select c1 from t1 intersect (select c2 from t2) limit 1, 1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) LIMIT 1,1"},
+		{"select c1 from t1 intersect (select c2 from t2) order by c1 limit 1", true, "SELECT `c1` FROM `t1` INTERSECT (SELECT `c2` FROM `t2`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) intersect (select c2 from t2) order by c1 intersect select c3 from t3", false, ""},
+		{"(select c1 from t1) intersect (select c2 from t2) limit 1 intersect select c3 from t3", false, ""},
+		{"(select c1 from t1) intersect select c2 from t2 intersect (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT SELECT `c2` FROM `t2` INTERSECT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select (select 1 intersect select 1) as a", true, "SELECT (SELECT 1 INTERSECT SELECT 1) AS `a`"},
+		{"select * from (select 1 intersect select 2) as a", true, "SELECT * FROM (SELECT 1 INTERSECT SELECT 2) AS `a`"},
+		{"insert into t select c1 from t1 intersect select c2 from t2", true, "INSERT INTO `t` SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2`"},
+		{"insert into t (c) select c1 from t1 intersect select c2 from t2", true, "INSERT INTO `t` (`c`) SELECT `c1` FROM `t1` INTERSECT SELECT `c2` FROM `t2`"},
+		{"select 2 as a from dual intersect select 1 as b from dual order by a", true, "SELECT 2 AS `a` INTERSECT SELECT 1 AS `b` ORDER BY `a`"},
+		// mixture of union, except and intersect
+		{"(select c1 from t1) intersect select c2 from t2 union (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT SELECT `c2` FROM `t2` UNION (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) union all select c2 from t2 except (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) UNION ALL SELECT `c2` FROM `t2` EXCEPT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) except select c2 from t2 intersect (select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) EXCEPT SELECT `c2` FROM `t2` INTERSECT (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select 1 union distinct select 1 except select 1 intersect select 1", true, "SELECT 1 UNION SELECT 1 EXCEPT SELECT 1 INTERSECT SELECT 1"},
+		// mixture of union, except and intersect with parentheses
+		{"(select c1 from t1) intersect all (select c2 from t2 union (select c3 from t3)) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) INTERSECT ALL (SELECT `c2` FROM `t2` UNION (SELECT `c3` FROM `t3`)) ORDER BY `c1` LIMIT 1"},
+		{"(select c1 from t1) union all (select c2 from t2 except select c3 from t3) order by c1 limit 1", true, "(SELECT `c1` FROM `t1`) UNION ALL (SELECT `c2` FROM `t2` EXCEPT SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"((select c1 from t1) except select c2 from t2) intersect all (select c3 from t3) order by c1 limit 1", true, "((SELECT `c1` FROM `t1`) EXCEPT SELECT `c2` FROM `t2`) INTERSECT ALL (SELECT `c3` FROM `t3`) ORDER BY `c1` LIMIT 1"},
+		{"select 1 union distinct (select 1 except all select 1 intersect select 1)", true, "SELECT 1 UNION (SELECT 1 EXCEPT ALL SELECT 1 INTERSECT SELECT 1)"},
 	}
 	s.RunTest(c, table, false)
+}
+
+func checkOrderBy(c *C, s ast.Node, hasOrderBy []bool, i int) int {
+	switch x := s.(type) {
+	case *ast.SelectStmt:
+		c.Assert(x.OrderBy != nil, Equals, hasOrderBy[i])
+		return i + 1
+	case *ast.SetOprSelectList:
+		for _, sel := range x.Selects {
+			i = checkOrderBy(c, sel, hasOrderBy, i)
+		}
+		return i
+	}
+	return i
 }
 
 func (s *testParserSuite) TestLikeEscape(c *C) {
@@ -2702,32 +2767,32 @@ func (s *testParserSuite) TestView(c *C) {
 		{"create or replace algorithm = merge definer = current_user view v as select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
 
 		// create view with `(` select statement `)`
-		// {"create view v as (select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = undefined view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = temptable view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` WITH LOCAL CHECK OPTION"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = current_user view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t`"},
+		{"create view v as (select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = undefined view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = temptable view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t`) WITH LOCAL CHECK OPTION"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = current_user view v as (select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t`)"},
 
 		// create view with union statement
-		// {"create view v as select * from t union select * from t", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = undefined view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = temptable view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security definer view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as select * from t union select * from t with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` UNION SELECT * FROM `t` WITH LOCAL CHECK OPTION"},
-		// {"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as select * from t union select * from t with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
-		// {"create or replace algorithm = merge definer = current_user view v as select * from t union select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION SELECT * FROM `t`"},
+		{"create view v as (select * from t union all select * from t)", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = undefined view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = temptable view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = TEMPTABLE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security definer view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY DEFINER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t)", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t) with local check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`) WITH LOCAL CHECK OPTION"},
+		{"create or replace algorithm = merge definer = 'root' sql security invoker view v(a,b) as (select * from t union all select * from t) with cascaded check option", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = `root`@`%` SQL SECURITY INVOKER VIEW `v` (`a`,`b`) AS (SELECT * FROM `t` UNION ALL SELECT * FROM `t`)"},
+		{"create or replace algorithm = merge definer = current_user view v as select * from t union all select * from t", true, "CREATE OR REPLACE ALGORITHM = MERGE DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
 
 		// create view with union all statement
 		// {"create view v as select * from t union all select * from t", true, "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `t` UNION ALL SELECT * FROM `t`"},
@@ -3185,4 +3250,49 @@ func (s *testParserSuite) TestNotExistsSubquery(c *C) {
 		c.Assert(ok, IsTrue)
 		c.Assert(exists.Not, Equals, tt.ok)
 	}
+}
+
+func (s *testParserSuite) TestFulltextSearch(c *C) {
+	parser := New()
+
+	st, err := parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search')", "", "")
+	c.Assert(err, IsNil)
+	c.Assert(st.(*ast.SelectStmt), NotNil)
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH() AGAINST('search')", "", "")
+	c.Assert(err, NotNil)
+	c.Assert(st, IsNil)
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST()", "", "")
+	c.Assert(err, NotNil)
+	c.Assert(st, IsNil)
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search' IN)", "", "")
+	c.Assert(err, NotNil)
+	c.Assert(st, IsNil)
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(content) AGAINST('search' IN BOOLEAN MODE WITH QUERY EXPANSION)", "", "")
+	c.Assert(err, NotNil)
+	c.Assert(st, IsNil)
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' IN NATURAL LANGUAGE MODE)", "", "")
+	c.Assert(err, IsNil)
+	c.Assert(st.(*ast.SelectStmt), NotNil)
+	writer := bytes.NewBufferString("")
+	st.(*ast.SelectStmt).Where.Format(writer)
+	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\")")
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' IN BOOLEAN MODE)", "", "")
+	c.Assert(err, IsNil)
+	c.Assert(st.(*ast.SelectStmt), NotNil)
+	writer.Reset()
+	st.(*ast.SelectStmt).Where.Format(writer)
+	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\" IN BOOLEAN MODE)")
+
+	st, err = parser.ParseOneStmt("SELECT * FROM fulltext_test WHERE MATCH(title,content) AGAINST('search' WITH QUERY EXPANSION)", "", "")
+	c.Assert(err, IsNil)
+	c.Assert(st.(*ast.SelectStmt), NotNil)
+	writer.Reset()
+	st.(*ast.SelectStmt).Where.Format(writer)
+	c.Assert(writer.String(), Equals, "MATCH(title,content) AGAINST(\"search\" WITH QUERY EXPANSION)")
 }

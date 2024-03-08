@@ -23,7 +23,7 @@ import (
 
 // ExplainInfo implements PhysicalPlan interface.
 func (p *PhysicalLock) ExplainInfo() string {
-	return p.Lock.String()
+	return p.Lock.LockType.String()
 }
 
 // ExplainInfo implements PhysicalPlan interface.

@@ -254,7 +254,7 @@ type PhysicalMergeJoin struct {
 type PhysicalLock struct {
 	basePhysicalPlan
 
-	Lock ast.SelectLockType
+	Lock *ast.SelectLockInfo
 }
 
 // PhysicalLimit is the physical operator of Limit.
