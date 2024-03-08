@@ -544,6 +544,8 @@ import (
 	inplace          "INPLACE"
 	instant          "INSTANT"
 	internal         "INTERNAL"
+	jsonArrayagg     "JSON_ARRAYAGG"
+	jsonObjectAgg    "JSON_OBJECTAGG"
 	min              "MIN"
 	max              "MAX"
 	maxExecutionTime "MAX_EXECUTION_TIME"
@@ -5194,6 +5196,8 @@ NotKeywordToken:
 |	"TIMESTAMPDIFF"
 |	"TOP"
 |	"TRIM"
+|	"JSON_ARRAYAGG"
+|	"JSON_OBJECTAGG"
 
 /************************************************************************************
  *
@@ -6214,6 +6218,55 @@ SumExpr:
 			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}, Distinct: $3.(bool)}
 		}
 	}
+|	"JSON_ARRAYAGG" '(' Expression ')' OptWindowingClause
+	{
+		if $5 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$3}, Spec: *($5.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3}}
+		}
+	}
+|	"JSON_ARRAYAGG" '(' "ALL" Expression ')' OptWindowingClause
+	{
+		if $6 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4}, Spec: *($6.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4}}
+		}
+	}
+|	"JSON_OBJECTAGG" '(' Expression ',' Expression ')' OptWindowingClause
+	{
+		if $7 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$3, $5}, Spec: *($7.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3, $5}}
+		}
+	}
+|	"JSON_OBJECTAGG" '(' "ALL" Expression ',' Expression ')' OptWindowingClause
+	{
+		if $8 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4, $6}, Spec: *($8.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4, $6}}
+		}
+	}
+|	"JSON_OBJECTAGG" '(' Expression ',' "ALL" Expression ')' OptWindowingClause
+	{
+		if $8 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$3, $6}, Spec: *($8.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$3, $6}}
+		}
+	}
+|	"JSON_OBJECTAGG" '(' "ALL" Expression ',' "ALL" Expression ')' OptWindowingClause
+	{
+		if $9 != nil {
+			$$ = &ast.WindowFuncExpr{Name: $1, Args: []ast.ExprNode{$4, $7}, Spec: *($9.(*ast.WindowSpec))}
+		} else {
+			$$ = &ast.AggregateFuncExpr{F: $1, Args: []ast.ExprNode{$4, $7}}
+		}
+	}
+
 
 OptGConcatSeparator:
 	{

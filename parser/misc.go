@@ -360,6 +360,8 @@ var tokenMap = map[string]int{
 	"JOBS":                     jobs,
 	"JOB":                      job,
 	"JOIN":                     join,
+	"JSON_ARRAYAGG":            jsonArrayagg,
+	"JSON_OBJECTAGG":           jsonObjectAgg,
 	"JSON":                     jsonType,
 	"KEY":                      key,
 	"KEY_BLOCK_SIZE":           keyBlockSize,
