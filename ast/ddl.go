@@ -896,9 +896,8 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 	if err := n.Table.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while splicing CreateTableStmt Table")
 	}
-	ctx.WritePlain(" ")
 	if n.ReferTable != nil {
-		ctx.WriteKeyWord("LIKE ")
+		ctx.WriteKeyWord(" LIKE ")
 		if err := n.ReferTable.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while splicing CreateTableStmt ReferTable")
 		}
@@ -909,7 +908,7 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 		ctx.WritePlain("(")
 		for i, col := range n.Cols {
 			if i > 0 {
-				ctx.WritePlain(",")
+				ctx.WritePlain(" (")
 			}
 			if err := col.Restore(ctx); err != nil {
 				return errors.Annotatef(err, "An error occurred while splicing CreateTableStmt ColumnDef: [%v]", i)

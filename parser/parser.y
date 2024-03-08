@@ -900,6 +900,7 @@ import (
 	ReorganizePartitionRuleOpt    "optional reorganize partition partition list and definitions"
 	RowFormat                     "Row format option"
 	RowValue                      "Row value"
+	RowStmt                       "Row constructor"
 	SelectLockOpt                 "FOR UPDATE or LOCK IN SHARE MODE,"
 	SelectStmtCalcFoundRows       "SELECT statement optional SQL_CALC_FOUND_ROWS"
 	SelectStmtSQLCache            "SELECT statement optional SQL_CAHCE/SQL_NO_CACHE"
@@ -968,6 +969,7 @@ import (
 	Values                        "values"
 	ValuesList                    "values list"
 	ValuesOpt                     "values optional"
+	ValuesStmtList                "VALUES statement field list"
 	VariableAssignment            "set variable value"
 	VariableAssignmentList        "set variable value list"
 	ViewAlgorithm                 "view algorithm"
@@ -6681,6 +6683,7 @@ SelectStmtBasic:
 			SelectStmtOpts: $2.(*ast.SelectStmtOpts),
 			Distinct:       $2.(*ast.SelectStmtOpts).Distinct,
 			Fields:         $3.(*ast.FieldList),
+			Kind:           ast.SelectStmtKindSelect,
 		}
 		$$ = st
 	}
@@ -6788,9 +6791,61 @@ SelectStmt:
 		}
 		$$ = st
 	}
+|	"TABLE" TableName OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	{
+		st := &ast.SelectStmt{
+			Kind: ast.SelectStmtKindTable,
+		}
+		ts := &ast.TableSource{Source: $2.(*ast.TableName)}
+		st.From = &ast.TableRefsClause{TableRefs: &ast.Join{Left: ts}}
+		if $3 != nil {
+			st.OrderBy = $3.(*ast.OrderByClause)
+		}
+		if $4 != nil {
+			st.Limit = $4.(*ast.Limit)
+		}
+		if $5 != nil {
+			st.LockInfo = $5.(*ast.SelectLockInfo)
+		}
+		$$ = st
+	}
+|	"VALUES" ValuesStmtList OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	{
+		st := &ast.SelectStmt{
+			Kind:  ast.SelectStmtKindValues,
+			Lists: $2.([]*ast.RowExpr),
+		}
+		if $3 != nil {
+			st.OrderBy = $3.(*ast.OrderByClause)
+		}
+		if $4 != nil {
+			st.Limit = $4.(*ast.Limit)
+		}
+		if $5 != nil {
+			st.LockInfo = $5.(*ast.SelectLockInfo)
+		}
+		$$ = st
+	}
+
 
 FromDual:
 	"FROM" "DUAL"
+
+ValuesStmtList:
+	RowStmt
+	{
+		$$ = append([]*ast.RowExpr{}, $1.(*ast.RowExpr))
+	}
+|	ValuesStmtList ',' RowStmt
+	{
+		$$ = append($1.([]*ast.RowExpr), $3.(*ast.RowExpr))
+	}
+
+RowStmt:
+	"ROW" RowValue
+	{
+		$$ = &ast.RowExpr{Values: $2.([]ast.ExprNode)}
+	}	
 
 WindowClauseOptional:
 	{
