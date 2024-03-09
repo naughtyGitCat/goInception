@@ -2025,6 +2025,7 @@ type SelectStmtOpts struct {
 	StraightJoin    bool
 	Priority        mysql.PriorityEnum
 	TableHints      []*TableOptimizerHint
+	ExplicitAll     bool
 }
 
 // TableOptimizerHint is Table level optimizer hint

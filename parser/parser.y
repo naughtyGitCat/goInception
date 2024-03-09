@@ -945,6 +945,7 @@ import (
 	SubPartitionOpt               "SubPartition option"
 	SubPartitionNumOpt            "SubPartition NUM option"
 	Symbol                        "Constraint Symbol"
+	TableAliasRefList			  "table alias reference list"
 	TableAsName                   "table alias name"
 	TableAsNameOpt                "table alias name optional"
 	TableElement                  "table definition element"
@@ -961,6 +962,7 @@ import (
 	TableLock                     "Table name and lock type"
 	TableLockList                 "Table lock list"
 	TableName                     "Table name"
+	TableNameOptWild			  "Table name with optional wildcard"
 	TableNameList                 "Table name list"
 	TableNameListOpt              "Table name list opt"
 	TableOption                   "create table option"
@@ -1010,6 +1012,7 @@ import (
 	OptLeadLagInfo                "Optional LEAD/LAG info"
 	OptNullTreatment              "Optional NULL treatment"
 	OptPartitionClause            "Optional PARTITION clause"
+	OptWild						  "Optional Wildcard"
 	OptWindowOrderByClause        "Optional ORDER BY clause in WINDOW"
 	OptWindowFrameClause          "Optional FRAME clause in WINDOW"
 	OptWindowingClause            "Optional OVER clause"
@@ -4117,31 +4120,35 @@ DoStmt:
  *
  *******************************************************************/
 DeleteWithoutUsingStmt:
-	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableName TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
+	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
 	{
 		// Single Table
 		tn := $7.(*ast.TableName)
-		tn.IndexHints = $9.([]*ast.IndexHint)
-		join := &ast.Join{Left: &ast.TableSource{Source: tn, AsName: $8.(model.CIStr)}, Right: nil}
+		tn.IndexHints = $10.([]*ast.IndexHint)
+		tn.PartitionNames = $8.([]model.CIStr)
+		join := &ast.Join{Left: &ast.TableSource{Source: tn, AsName: $9.(model.CIStr)}, Right: nil}
 		x := &ast.DeleteStmt{
 			TableRefs: &ast.TableRefsClause{TableRefs: join},
 			Priority:  $3.(mysql.PriorityEnum),
 			Quick:     $4.(bool),
 			IgnoreErr: $5.(bool),
 		}
-		if $10 != nil {
-			x.Where = $10.(ast.ExprNode)
+		if $2 != nil {
+			x.TableHints = $2.([]*ast.TableOptimizerHint)
 		}
 		if $11 != nil {
-			x.Order = $11.(*ast.OrderByClause)
+			x.Where = $11.(ast.ExprNode)
 		}
 		if $12 != nil {
-			x.Limit = $12.(*ast.Limit)
+			x.Order = $12.(*ast.OrderByClause)
+		}
+		if $13 != nil {
+			x.Limit = $13.(*ast.Limit)
  		}
 
 		$$ = x
 	}
-|	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional TableNameList "FROM" TableRefs WhereClauseOptional
+|	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional TableAliasRefList "FROM" TableRefs WhereClauseOptional
 	{
 		// Multiple Table
 		x := &ast.DeleteStmt{
@@ -4162,7 +4169,7 @@ DeleteWithoutUsingStmt:
 		$$ = x
 	}
 DeleteWithUsingStmt:
-	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableNameList "USING" TableRefs WhereClauseOptional
+	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableAliasRefList "USING" TableRefs WhereClauseOptional
 	{
 		// Multiple Table
 		x := &ast.DeleteStmt{
@@ -6663,6 +6670,35 @@ TableName:
 		$$ = &ast.TableName{Schema: model.NewCIStr($1), Name: model.NewCIStr($3)}
 	}
 
+TableNameOptWild:
+	Identifier OptWild
+	{
+		$$ = &ast.TableName{Name:model.NewCIStr($1)}
+	}
+|	Identifier '.' Identifier OptWild
+	{
+		$$ = &ast.TableName{Schema:model.NewCIStr($1),	Name:model.NewCIStr($3)}
+	}
+
+TableAliasRefList:
+	TableNameOptWild
+	{
+		tbl := []*ast.TableName{$1.(*ast.TableName)}
+		$$ = tbl
+	}
+|	TableAliasRefList ',' TableNameOptWild
+	{
+		$$ = append($1.([]*ast.TableName), $3.(*ast.TableName))
+	}
+
+OptWild:
+	%prec empty
+	{
+	}
+|	'.' '*'
+	{
+	}
+
 TableNameList:
 	TableName
 	{
@@ -6950,6 +6986,7 @@ SelectStmt:
 	{
 		st := &ast.SelectStmt{
 			Kind: ast.SelectStmtKindTable,
+			Fields: &ast.FieldList{Fields: []*ast.SelectField{{WildCard: &ast.WildCardField{}}}},
 		}
 		ts := &ast.TableSource{Source: $2.(*ast.TableName)}
 		st.From = &ast.TableRefsClause{TableRefs: &ast.Join{Left: ts}}
@@ -6968,6 +7005,7 @@ SelectStmt:
 	{
 		st := &ast.SelectStmt{
 			Kind:  ast.SelectStmtKindValues,
+			Fields: &ast.FieldList{Fields: []*ast.SelectField{{WildCard: &ast.WildCardField{}}}},
 			Lists: $2.([]*ast.RowExpr),
 		}
 		if $3 != nil {
