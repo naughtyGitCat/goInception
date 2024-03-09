@@ -871,7 +871,8 @@ import (
 	DuplicateOpt                  "[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement"
 	OptFull                       "Full or empty"
 	OptTabPartition               "PARTITION or empty"
-	Order                         "ORDER BY clause optional collation specification"
+	OptOrder                      "Optional ordering keyword: ASC/DESC. Default to ASC"
+	Order                         "Ordering keyword: ASC or DESC"
 	OrderBy                       "ORDER BY clause"
 	OrReplace                     "or replace"
 	ByItem                        "BY item"
@@ -3423,7 +3424,7 @@ SubPartitionMethod:
 			KeyAlgorithm: keyAlgorithm,
 		}
 	}
-|	LinearOpt "HASH" '(' Expression ')'
+|	LinearOpt "HASH" '(' BitExpr ')'
 	{
 		$$ = &ast.PartitionMethod{
 			Tp:     model.PartitionTypeHash,
@@ -3543,7 +3544,7 @@ PartitionMethod:
 	{
 		$$ = $1
 	}
-|	"RANGE" '(' Expression ')' PartitionIntervalOpt
+|	"RANGE" '(' BitExpr ')' PartitionIntervalOpt
 	{
 		partitionInterval, _ := $5.(*ast.PartitionInterval)
 		$$ = &ast.PartitionMethod{
@@ -3561,7 +3562,7 @@ PartitionMethod:
 			Interval:    partitionInterval,
 		}
 	}
-|	"LIST" '(' Expression ')'
+|	"LIST" '(' BitExpr ')'
 	{
 		$$ = &ast.PartitionMethod{
 			Tp:   model.PartitionTypeList,
@@ -4379,7 +4380,7 @@ MaxValueOrExpression:
 	{
 		$$ = &ast.MaxValueExpr{}
 	}
-|	Expression
+|	BitExpr
 	{
 		$$ = $1
 	}

@@ -88,15 +88,20 @@ func TrimComment(txt string) string {
 	return specCodeEnd.ReplaceAllString(txt, "")
 }
 
+type ParserConfig struct {
+	EnableWindowFunction        bool
+	EnableStrictDoubleTypeCheck bool
+}
+
 // Parser represents a parser instance. Some temporary objects are stored in it to reduce object allocation during Parse function.
 type Parser struct {
-	charset    string
-	collation  string
-	result     []ast.StmtNode
-	src        string
-	lexer      Scanner
-	hintParser *hintParser
-
+	charset               string
+	collation             string
+	result                []ast.StmtNode
+	src                   string
+	lexer                 Scanner
+	hintParser            *hintParser
+	strictDoubleFieldType bool
 	// the following fields are used by yyParse to reduce allocation.
 	cache  []yySymType
 	yylval yySymType
@@ -109,9 +114,20 @@ type stmtTexter interface {
 
 // New returns a Parser object.
 func New() *Parser {
-	return &Parser{
+	p := &Parser{
 		cache: make([]yySymType, 200),
 	}
+	p.SetStrictDoubleTypeCheck(true)
+	return p
+}
+
+func (parser *Parser) SetStrictDoubleTypeCheck(val bool) {
+	parser.strictDoubleFieldType = val
+}
+
+func (parser *Parser) SetParserConfig(config ParserConfig) {
+	parser.EnableWindowFunc(config.EnableWindowFunction)
+	parser.SetStrictDoubleTypeCheck(config.EnableStrictDoubleTypeCheck)
 }
 
 // Parse parses a query string to raw ast.StmtNode.
