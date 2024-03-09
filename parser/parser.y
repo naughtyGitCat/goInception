@@ -38,12 +38,6 @@ import (
 	"github.com/hanchuanchuan/goInception/types"
 )
 
-// this is local type definition to serve ON UPDATE /ON DELETE
-type OnDeleteUpdateDef struct {
-    OnDelete *ast.OnDeleteOpt
-    OnUpdate *ast.OnUpdateOpt
-}
-
 %}
 
 %union {
@@ -448,6 +442,7 @@ type OnDeleteUpdateDef struct {
 	only                   "ONLY"
 	open                   "OPEN"
 	parser                 "PARSER"
+	partial                "PARTIAL"
 	partitioning           "PARTITIONING"
 	password               "PASSWORD"
 	partitions             "PARTITIONS"
@@ -488,6 +483,7 @@ type OnDeleteUpdateDef struct {
 	share                  "SHARE"
 	shared                 "SHARED"
 	signed                 "SIGNED"
+	simple                 "SIMPLE"
 	slave                  "SLAVE"
 	slow                   "SLOW"
 	snapshot               "SNAPSHOT"
@@ -909,7 +905,7 @@ type OnDeleteUpdateDef struct {
 	ReferDef                      "Reference definition"
 	OnDelete					  "ON DELETE clause"
 	OnUpdate			          "ON UPDATE clause"
-	OnDeleteUpdateOpt   		  "optional ON DELETE clause + ON UPDATE clause"
+	OnDeleteUpdateOpt   		  "optional ON DELETE and UPDATE clause"
 	OptGConcatSeparator           "optional GROUP_CONCAT SEPARATOR"
 	ReferOpt                      "reference option"
 	ReorganizePartitionRuleOpt    "optional reorganize partition partition list and definitions"
@@ -1098,7 +1094,8 @@ type OnDeleteUpdateDef struct {
 	SearchedWhenThenList          "Procedure search WhenThen list"
 	ElseCaseOpt                   "Optional procedure else statement, expressed by `else .../nil`"
 	ProcedureFetchList            "Procedure fetch into variables"
-
+	Match                         "[MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]"
+	MatchOpt                      "optional MATCH clause"
 
 %type	<ident>
 	AsOpt             "AS or EmptyString"
@@ -2467,14 +2464,42 @@ ConstraintElemInner:
 		}
 	}
 
-ReferDef:
-	"REFERENCES" TableName '(' IndexColNameList ')' OnDeleteUpdateOpt
+
+Match:
+	"MATCH" "FULL"
 	{
+		$$ = ast.MatchFull
+	}
+|	"MATCH" "PARTIAL"
+	{
+		$$ = ast.MatchPartial
+	}
+|	"MATCH" "SIMPLE"
+	{
+		$$ = ast.MatchSimple
+	}
+
+MatchOpt:
+	{
+		$$ = ast.MatchNone
+	}
+|	Match
+	{
+		$$ = $1
+		yylex.AppendError(yylex.Errorf("The MATCH clause is parsed but ignored by all storage engines."))
+		parser.lastErrorAsWarn()
+	}
+
+ReferDef:
+	"REFERENCES" TableName '(' IndexColNameList ')' MatchOpt OnDeleteUpdateOpt
+	{	
+		onDeleteUpdate := $7.([2]interface{})
 		$$ = &ast.ReferenceDef{
 			Table:         $2.(*ast.TableName),
 			IndexColNames: $4.([]*ast.IndexColName),
-			OnDelete: $6.(OnDeleteUpdateDef).OnDelete,
-			OnUpdate: $6.(OnDeleteUpdateDef).OnUpdate,
+			OnDelete: onDeleteUpdate[0].(*ast.OnDeleteOpt),
+			OnUpdate: onDeleteUpdate[1].(*ast.OnUpdateOpt),
+			Match: $6.(ast.MatchType),
 		}
 	}
 
@@ -2491,25 +2516,25 @@ OnUpdate:
 	}
 
 OnDeleteUpdateOpt:
-    OnDelete OnUpdate
-    {
-        $$ = OnDeleteUpdateDef{ $1.(*ast.OnDeleteOpt), $2.(*ast.OnUpdateOpt) }
-	}
-|   OnUpdate OnDelete
-    {
-        $$ = OnDeleteUpdateDef{ $2.(*ast.OnDeleteOpt), $1.(*ast.OnUpdateOpt) }
-	}
-|   OnUpdate
-    {
-        $$ = OnDeleteUpdateDef{ &ast.OnDeleteOpt{}, $1.(*ast.OnUpdateOpt) }
-    } %prec lowerThanOn
-|   OnDelete
-    {
-        $$ = OnDeleteUpdateDef{ $1.(*ast.OnDeleteOpt), &ast.OnUpdateOpt{} }
-    } %prec lowerThanOn
-|   {
-		$$ = OnDeleteUpdateDef{ &ast.OnDeleteOpt{}, &ast.OnUpdateOpt{} }
+	{
+		$$ = [2]interface{}{&ast.OnDeleteOpt{}, &ast.OnUpdateOpt{}}
 	} %prec lowerThanOn
+|	OnDelete  %prec lowerThanOn
+	{
+		$$ = [2]interface{}{$1, &ast.OnUpdateOpt{}}
+ 	}
+|	OnUpdate %prec lowerThanOn
+	{
+		$$ = [2]interface{}{&ast.OnDeleteOpt{}, $1}
+	}
+|	OnDelete OnUpdate
+	{
+		$$ = [2]interface{}{$1, $2}
+	}
+|	OnUpdate OnDelete
+	{
+		$$ = [2]interface{}{$2, $1}
+ 	}
 
 ReferOpt:
 	"RESTRICT"
@@ -2528,6 +2553,12 @@ ReferOpt:
 	{
 		$$ = ast.ReferOptionNoAction
 	}
+|	"SET" "DEFAULT"
+	{
+		$$ = ast.ReferOptionSetDefault
+		yylex.AppendError(yylex.Errorf("The SET DEFAULT clause is parsed but ignored by all storage engines."))
+		parser.lastErrorAsWarn()
+	}	
 
 /*
  * The DEFAULT clause specifies a default value for a column.
@@ -5020,6 +5051,8 @@ UnReservedKeyword:
 |	"ROLLBACK"
 |	"SESSION"
 |	"SIGNED"
+|	"PARTIAL"
+|	"SIMPLE"
 |	"SNAPSHOT"
 |	"START"
 |	"STATUS"
