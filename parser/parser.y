@@ -5675,13 +5675,6 @@ SimpleIdent:
 			Name:  model.NewCIStr($3),
 		}}
 	}
-|	'.' Identifier '.' Identifier
-	{
-		$$ = &ast.ColumnNameExpr{Name: &ast.ColumnName{
-			Table: model.NewCIStr($2),
-			Name:  model.NewCIStr($4),
-		}}
-	}
 |	Identifier '.' Identifier '.' Identifier
 	{
 		$$ = &ast.ColumnNameExpr{Name: &ast.ColumnName{
@@ -6931,17 +6924,19 @@ RepeatableOpt:
 	}
 
 SelectStmt:
-	SelectStmtBasic OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	SelectStmtBasic WhereClauseOptional OrderByOptional SelectStmtLimitOpt SelectLockOpt
 	{
 		st := $1.(*ast.SelectStmt)
-		if $4 != nil {
-			st.LockInfo = $4.(*ast.SelectLockInfo)
+		if $5 != nil {
+			st.LockInfo = $5.(*ast.SelectLockInfo)
 		}
 		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
 		if lastField.Expr != nil && lastField.AsName.O == "" {
 			src := parser.src
 			var lastEnd int
 			if $2 != nil {
+				lastEnd = yyS[yypt-3].offset - 1
+			} else if $3 != nil {
 				lastEnd = yyS[yypt-2].offset - 1
 			} else if $3 != nil {
 				lastEnd = yyS[yypt-1].offset - 1
@@ -6956,10 +6951,13 @@ SelectStmt:
 			lastField.SetText(src[lastField.Offset:lastEnd])
 		}
 		if $2 != nil {
-			st.OrderBy = $2.(*ast.OrderByClause)
+			st.Where = $2.(ast.ExprNode)
 		}
 		if $3 != nil {
-			st.Limit = $3.(*ast.Limit)
+			st.OrderBy = $3.(*ast.OrderByClause)
+		}
+		if $4 != nil {
+			st.Limit = $4.(*ast.Limit)
 		}
 		$$ = st
 	}

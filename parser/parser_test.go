@@ -604,12 +604,14 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		// for dual
 		{"select 1 from dual", true, "SELECT 1"},
 		{"select 1 from dual limit 1", true, "SELECT 1 LIMIT 1"},
-		{"select 1 where exists (select 2)", false, ""},
+		{"select 1 where exists (select 2)", true, "SELECT 1 FROM DUAL WHERE EXISTS (SELECT 2)"},
 		{"select 1 from dual where not exists (select 2)", true, "SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 2)"},
 		{"select 1 as a from dual order by a", true, "SELECT 1 AS `a` ORDER BY `a`"},
 		{"select 1 as a from dual where 1 < any (select 2) order by a", true, "SELECT 1 AS `a` FROM DUAL WHERE 1<ANY (SELECT 2) ORDER BY `a`"},
 		{"select 1 order by 1", true, "SELECT 1 ORDER BY 1"},
 
+		//https://github.com/pingcap/tidb/issues/14297
+		{"select 1 where 1=1", true, "SELECT 1 FROM DUAL WHERE 1=1"},
 		// for select with partition
 		{"SELECT * FROM t PARTITION (P1)", true, "SELECT * FROM `t` partition (p1)"},
 		// for https://github.com/pingcap/tidb/issues/320
@@ -927,6 +929,7 @@ func (s *testParserSuite) TestExpression(c *C) {
 		{"select {ts123 '1989-09-10 11:11:11'}", true, "SELECT '1989-09-10 11:11:11'"},
 		{"select {ts123 123}", true, "SELECT 123"},
 		{"select {ts123 1 xor 1}", true, "SELECT 1 XOR 1"},
+		{"select .t.a from t", false, ""},
 	}
 	s.RunTest(c, table, false)
 }
