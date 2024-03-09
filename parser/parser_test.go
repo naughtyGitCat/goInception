@@ -96,7 +96,7 @@ func (s *testParserSuite) TestSimple(c *C) {
 		"max_rows", "min_rows", "national", "row", "quarter", "escape", "grants", "status", "fields", "triggers",
 		"delay_key_write", "isolation", "partitions", "repeatable", "committed", "uncommitted", "only", "serializable", "level",
 		"curtime", "variables", "dayname", "version", "btree", "hash", "row_format", "dynamic", "fixed", "compressed",
-		"compact", "redundant", "sql_no_cache sql_no_cache", "sql_cache sql_cache", "action", "round",
+		"compact", "redundant", "1 sql_no_cache", "1 sql_cache", "action", "round",
 		"enable", "disable", "reverse", "space", "privileges", "get_lock", "release_lock", "sleep", "no", "greatest", "least",
 		"binlog", "hex", "unhex", "function", "indexes", "from_unixtime", "processlist", "events", "less", "than", "timediff",
 		"ln", "log", "log2", "log10", "timestampdiff", "pi", "quote", "none", "super", "shared", "exclusive",
@@ -311,7 +311,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"SELECT DISTINCTS * FROM t", false, ""},
 		{"SELECT DISTINCT * FROM t", true, "SELECT DISTINCT * FROM `t`"},
 		{"SELECT DISTINCTROW * FROM t", true, "SELECT DISTINCT * FROM `t`"},
-		{"SELECT ALL * FROM t", true, "SELECT * FROM `t`"},
+		{"SELECT ALL * FROM t", true, "SELECT ALL * FROM `t`"},
 		{"SELECT DISTINCT ALL * FROM t", false, ""},
 		{"SELECT DISTINCTROW ALL * FROM t", false, ""},
 		{"INSERT INTO foo (a) VALUES (42)", true, "INSERT INTO `foo` (`a`) VALUES (42)"},
@@ -475,6 +475,7 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"select * from t1 natural left outer join t2", true, "SELECT * FROM `t1` NATURAL LEFT JOIN `t2`"},
 		{"select * from t1 natural inner join t2", false, ""},
 		{"select * from t1 natural cross join t2", false, ""},
+		{"select * from t3 join t1 join t2 on t1.a=t2.a on t3.b=t2.b", true, "SELECT * FROM `t3` JOIN (`t1` JOIN `t2` ON `t1`.`a`=`t2`.`a`) ON `t3`.`b`=`t2`.`b`"},
 
 		// for straight_join
 		{"select * from t1 straight_join t2 on t1.id = t2.id", true, "SELECT * FROM `t1` STRAIGHT_JOIN `t2` ON `t1`.`id`=`t2`.`id`"},
@@ -3485,4 +3486,47 @@ func (s *testParserSuite) TestTableSample(c *C) {
 		_, err := p.ParseOneStmt(sql, "", "")
 		c.Assert(err, IsNil, comment)
 	}
+}
+
+// nodeTextCleaner clean the text of a node and it's child node.
+// For test only.
+type nodeTextCleaner struct {
+}
+
+// Enter implements Visitor interface.
+// Enter implements Visitor interface.
+func (checker *nodeTextCleaner) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
+	in.SetText("")
+	switch node := in.(type) {
+	case *ast.Constraint:
+		if node.Option != nil {
+			if node.Option.KeyBlockSize == 0x0 && node.Option.Tp == 0 && node.Option.Comment == "" {
+				node.Option = nil
+			}
+		}
+	case *ast.FuncCallExpr:
+		node.FnName.O = strings.ToLower(node.FnName.O)
+		switch node.FnName.L {
+		case "convert":
+			node.Args[1].(*ast.ValueExpr).Datum.SetBytes(nil)
+		}
+	case *ast.AggregateFuncExpr:
+		node.F = strings.ToLower(node.F)
+	case *ast.FieldList:
+		for _, f := range node.Fields {
+			f.Offset = 0
+		}
+	case *ast.AlterTableSpec:
+		for _, opt := range node.Options {
+			opt.StrValue = strings.ToLower(opt.StrValue)
+		}
+	case *ast.Join:
+		node.ExplicitParens = false
+	}
+	return in, false
+}
+
+// Leave implements Visitor interface.
+func (checker *nodeTextCleaner) Leave(in ast.Node) (out ast.Node, ok bool) {
+	return in, true
 }

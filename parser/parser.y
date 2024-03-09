@@ -898,6 +898,7 @@ import (
 	PasswordOpt                   "Password option"
 	ColumnPosition                "Column position [First|After ColumnName]"
 	PrepareSQL                    "Prepare statement sql string"
+	Priority                      "Statement priority"
 	PriorityOpt                   "Statement priority option"
 	PrivElem                      "Privilege element"
 	PrivElemList                  "Privilege element list"
@@ -914,13 +915,13 @@ import (
 	RowValue                      "Row value"
 	RowStmt                       "Row constructor"
 	SelectLockOpt                 "FOR UPDATE or LOCK IN SHARE MODE,"
-	SelectStmtCalcFoundRows       "SELECT statement optional SQL_CALC_FOUND_ROWS"
 	SelectStmtSQLCache            "SELECT statement optional SQL_CAHCE/SQL_NO_CACHE"
-	SelectStmtStraightJoin        "SELECT statement optional STRAIGHT_JOIN"
 	SelectStmtFieldList           "SELECT statement field list"
 	SelectStmtLimit                        "SELECT statement LIMIT clause"
 	SelectStmtLimitOpt                     "SELECT statement optional LIMIT clause"
+	SelectStmtOpt                          "Select statement option"
 	SelectStmtOpts                "Select statement options"
+	SelectStmtOptsList                     "Select statement options list"
 	SelectStmtBasic               "SELECT statement from constant value"
 	SelectStmtFromDualTable            "SELECT statement from dual"
 	SelectStmtFromTable           "SELECT statement from table"
@@ -1058,8 +1059,8 @@ import (
 	NUM                           "A number"
 	NumList                       "Some numbers"
 	LengthNum                     "Field length num(uint64)"
-	HintTableList                 "Table list in optimizer hint"
 	TableOptimizerHints           "Table level optimizer hints"
+	TableOptimizerHintsOpt        "Table level optimizer hints option"
 	AttributesOpt                 "Attributes options"
 	SpOptInout                    "Optional procedure param type"
 	OptSpPdparams                 "Optional procedure param list"
@@ -1151,6 +1152,10 @@ import (
 	FunctionNameDateArithMultiForms "Date arith function call names (adddate or subdate)"
 	ProcedurceLabelOpt              "Optional Procedure label name"
 %precedence empty
+%precedence lowerThanSelectOpt
+%precedence sqlBufferResult
+%precedence sqlBigResult
+%precedence sqlSmallResult
 %precedence sqlCache sqlNoCache
 %precedence lowerThanIntervalKeyword
 %precedence interval
@@ -1170,10 +1175,11 @@ import (
 %precedence remove
 %precedence lowerThenOrder
 %precedence order
-%left join straightJoin inner cross left right full natural
+
 
 /* A dummy token to force the priority of TableRef production in a join. */
 %left tableRefPriority
+%left join straightJoin inner cross left right full natural
 %precedence lowerThanOn
 %precedence on using
 %right assignmentEq
@@ -4120,7 +4126,7 @@ DoStmt:
  *
  *******************************************************************/
 DeleteWithoutUsingStmt:
-	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
+	"DELETE" TableOptimizerHintsOpt PriorityOpt QuickOptional IgnoreOptional "FROM" TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
 	{
 		// Single Table
 		tn := $7.(*ast.TableName)
@@ -4148,7 +4154,7 @@ DeleteWithoutUsingStmt:
 
 		$$ = x
 	}
-|	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional TableAliasRefList "FROM" TableRefs WhereClauseOptional
+|	"DELETE" TableOptimizerHintsOpt PriorityOpt QuickOptional IgnoreOptional TableAliasRefList "FROM" TableRefs WhereClauseOptional
 	{
 		// Multiple Table
 		x := &ast.DeleteStmt{
@@ -4169,7 +4175,7 @@ DeleteWithoutUsingStmt:
 		$$ = x
 	}
 DeleteWithUsingStmt:
-	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableAliasRefList "USING" TableRefs WhereClauseOptional
+	"DELETE" TableOptimizerHintsOpt PriorityOpt QuickOptional IgnoreOptional "FROM" TableAliasRefList "USING" TableRefs WhereClauseOptional
 	{
 		// Multiple Table
 		x := &ast.DeleteStmt{
@@ -5297,7 +5303,7 @@ NotKeywordToken:
  *  TODO: support PARTITION
  **********************************************************************************/
 InsertIntoStmt:
-	"INSERT" TableOptimizerHints PriorityOpt IgnoreOptional IntoOpt TableName PartitionNameListOpt InsertValues OnDuplicateKeyUpdate
+	"INSERT" TableOptimizerHintsOpt PriorityOpt IgnoreOptional IntoOpt TableName PartitionNameListOpt InsertValues OnDuplicateKeyUpdate
 	{
 		x := $8.(*ast.InsertStmt)
 		x.Priority = $3.(mysql.PriorityEnum)
@@ -6643,11 +6649,8 @@ CastType:
 		$$ = x
 	}
 
-PriorityOpt:
-	{
-		$$ = mysql.NoPriority
-	}
-|	"LOW_PRIORITY"
+Priority:
+	"LOW_PRIORITY"
 	{
 		$$ = mysql.LowPriority
 	}
@@ -6659,6 +6662,12 @@ PriorityOpt:
 	{
 		$$ = mysql.DelayedPriority
 	}
+
+PriorityOpt:
+	{
+		$$ = mysql.NoPriority
+	}
+|	Priority
 
 TableName:
 	Identifier
@@ -7393,7 +7402,9 @@ TableFactor:
 		$$ = &ast.TableSource{Source: $2.(ast.ResultSetNode), AsName: $4.(model.CIStr)}
 	}
 |	'(' TableRefs ')'
-	{
+	{	
+		j := $2.(*ast.Join)
+		j.ExplicitParens = true
 		$$ = $2
 	}
 
@@ -7509,7 +7520,7 @@ JoinTable:
 	/* Use %prec to evaluate production TableRef before cross join */
 	TableRef CrossOpt TableRef %prec tableRefPriority
 	{
-		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), Tp: ast.CrossJoin}
+		$$ = ast.NewCrossJoin($1.(ast.ResultSetNode), $3.(ast.ResultSetNode))
 	}
 |	TableRef CrossOpt TableRef "ON" Expression
 	{
@@ -7607,38 +7618,113 @@ SelectStmtLimitOpt:
 	}
 |	SelectStmtLimit
 
-SelectStmtOpts:
-	TableOptimizerHints DefaultFalseDistinctOpt PriorityOpt SelectStmtSQLCache SelectStmtCalcFoundRows SelectStmtStraightJoin
+SelectStmtOpt:
+	TableOptimizerHints
 	{
 		opt := &ast.SelectStmtOpts{}
-		if $1 != nil {
-			opt.TableHints = $1.([]*ast.TableOptimizerHint)
+		opt.SQLCache = true
+		opt.TableHints = $1.([]*ast.TableOptimizerHint)
+		$$ = opt
+	}
+|	DistinctOpt
+	{
+		opt := &ast.SelectStmtOpts{}
+		opt.SQLCache = true
+		if $1.(bool) {
+			opt.Distinct = true
+		} else {
+			opt.Distinct = false
+			opt.ExplicitAll = true
 		}
-		if $2 != nil {
-			opt.Distinct = $2.(bool)
-		}
-		if $3 != nil {
-			opt.Priority = $3.(mysql.PriorityEnum)
-		}
-		if $4 != nil {
-			opt.SQLCache = $4.(bool)
-		}
-		if $5 != nil {
-			opt.CalcFoundRows = $5.(bool)
-		}
-		if $6 != nil {
-			opt.StraightJoin = $6.(bool)
-		}
-
+		$$ = opt
+	}
+|	Priority
+	{
+		opt := &ast.SelectStmtOpts{}
+		opt.SQLCache = true
+		opt.Priority = $1.(mysql.PriorityEnum)
+		$$ = opt
+	}
+|	SelectStmtSQLCache
+	{
+		opt := &ast.SelectStmtOpts{}
+		opt.SQLCache = $1.(bool)
+		$$ = opt
+	}
+|	"SQL_CALC_FOUND_ROWS"
+	{
+		opt := &ast.SelectStmtOpts{}
+		opt.SQLCache = true
+		opt.CalcFoundRows = true
+		$$ = opt
+	}
+|	"STRAIGHT_JOIN"
+	{
+		opt := &ast.SelectStmtOpts{}
+		opt.SQLCache = true
+		opt.StraightJoin = true
 		$$ = opt
 	}
 
-TableOptimizerHints:
-	/* empty */
+SelectStmtOpts:
+	%prec empty
 	{
-		$$ = nil
+		opt := &ast.SelectStmtOpts{}
+		opt.SQLCache = true
+		$$ = opt
 	}
-|	hintComment
+|	SelectStmtOptsList %prec lowerThanSelectOpt
+
+SelectStmtOptsList:
+	SelectStmtOptsList SelectStmtOpt
+	{
+		opts := $1.(*ast.SelectStmtOpts)
+		opt := $2.(*ast.SelectStmtOpts)
+
+		// Merge options.
+		// Always use the first hint.
+		if opt.TableHints != nil && opts.TableHints == nil {
+			opts.TableHints = opt.TableHints
+		}
+		if opt.Distinct {
+			opts.Distinct = true
+		}
+		if opt.Priority != mysql.NoPriority {
+			opts.Priority = opt.Priority
+		}
+		if opt.SQLSmallResult {
+			opts.SQLSmallResult = true
+		}
+		if opt.SQLBigResult {
+			opts.SQLBigResult = true
+		}
+		if opt.SQLBufferResult {
+			opts.SQLBufferResult = true
+		}
+		if !opt.SQLCache {
+			opts.SQLCache = false
+		}
+		if opt.CalcFoundRows {
+			opts.CalcFoundRows = true
+		}
+		if opt.StraightJoin {
+			opts.StraightJoin = true
+		}
+		if opt.ExplicitAll {
+			opts.ExplicitAll = true
+		}
+
+		if opts.Distinct && opts.ExplicitAll {
+			yylex.AppendError(ErrWrongUsage.GenWithStackByArgs("ALL", "DISTINCT"))
+			return 1
+		}
+
+		$$ = opts
+	}
+|	SelectStmtOpt
+
+TableOptimizerHints:
+	hintComment
 	{
 		hints, warns := parser.parseHint($1)
 		for _, w := range warns {
@@ -7648,31 +7734,16 @@ TableOptimizerHints:
 		$$ = hints
 	}
 
-HintTableList:
-	Identifier
-	{
-		$$ = []model.CIStr{model.NewCIStr($1)}
-	}
-|	HintTableList ',' Identifier
-	{
-		$$ = append($1.([]model.CIStr), model.NewCIStr($3))
-	}
+TableOptimizerHintsOpt:
+	/* empty */
+ 	{
+		$$ = nil
+ 	}
+|	TableOptimizerHints
 
-SelectStmtCalcFoundRows:
-	{
-		$$ = false
-	}
-|	"SQL_CALC_FOUND_ROWS"
-	{
-		$$ = true
-	}
 
 SelectStmtSQLCache:
-	%prec empty
-	{
-		$$ = true
-	}
-|	"SQL_CACHE"
+	"SQL_CACHE"
 	{
 		$$ = true
 	}
@@ -7681,15 +7752,6 @@ SelectStmtSQLCache:
 		$$ = false
 	}
 
-SelectStmtStraightJoin:
-	%prec empty
-	{
-		$$ = false
-	}
-|	"STRAIGHT_JOIN"
-	{
-		$$ = true
-	}
 
 SelectStmtFieldList:
 	FieldList
@@ -9648,7 +9710,7 @@ StringName:
  * See https://dev.mysql.com/doc/refman/5.7/en/update.html
  ***********************************************************************************/
 UpdateStmt:
-	"UPDATE" TableOptimizerHints PriorityOpt IgnoreOptional TableRef "SET" AssignmentList WhereClauseOptional OrderByOptional LimitClause
+	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRef "SET" AssignmentList WhereClauseOptional OrderByOptional LimitClause
 	{
 		var refs *ast.Join
 		if x, ok := $5.(*ast.Join); ok {
@@ -9676,7 +9738,7 @@ UpdateStmt:
 		}
 		$$ = st
 	}
-|	"UPDATE" TableOptimizerHints PriorityOpt IgnoreOptional TableRefs "SET" AssignmentList WhereClauseOptional
+|	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRefs "SET" AssignmentList WhereClauseOptional
 	{
 		st := &ast.UpdateStmt{
 			Priority:  $3.(mysql.PriorityEnum),
