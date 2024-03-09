@@ -254,6 +254,7 @@ import (
 	starting          "STARTING"
 	straightJoin      "STRAIGHT_JOIN"
 	tableKwd          "TABLE"
+	tableSample       "TABLESAMPLE"
 	tablegroup        "TABLEGROUP"
 	template          "TEMPLATE"
 	stored            "STORED"
@@ -309,6 +310,7 @@ import (
 	avgRowLength           "AVG_ROW_LENGTH"
 	avg                    "AVG"
 	begin                  "BEGIN"
+	bernoulli              "BERNOULLI"
 	binding                "BINDING"
 	binlog                 "BINLOG"
 	bitType                "BIT"
@@ -335,6 +337,7 @@ import (
 	osc_percent            "OSC_PERCENT"
 	stop                   "STOP"
 	pause                  "PAUSE"
+	percent                "PERCENT"
 	resume                 "RESUME"
 	committed              "COMMITTED"
 	compact                "COMPACT"
@@ -487,6 +490,7 @@ import (
 	start                  "START"
 	statsPersistent        "STATS_PERSISTENT"
 	status                 "STATUS"
+	system                 "SYSTEM"
 	systemTime             "SYSTEM_TIME"
 	subpartition           "SUBPARTITION"
 	subpartitions          "SUBPARTITIONS"
@@ -601,6 +605,7 @@ import (
 	builtinUser
 	builtinVarPop
 	builtinVarSamp
+	regions                    "REGIONS"
 
 %token	<item>
 
@@ -659,6 +664,7 @@ import (
 	DefaultValueExpr       "DefaultValueExpr(Now or Signed Literal)"
 	NowSymOptionFraction   "NowSym with optional fraction part"
 	WindowFuncCall         "WINDOW function call"
+	RepeatableOpt          "Repeatable optional in sample clause"
 
 %type	<statement>
 	AdminStmt            "Check table statement or show ddl statement"
@@ -691,6 +697,8 @@ import (
 	DropViewStmt         "DROP VIEW statement"
 	DeallocateStmt       "Deallocate prepared statement"
 	DeleteFromStmt       "DELETE FROM statement"
+	DeleteWithoutUsingStmt "Normal DELETE statement"
+	DeleteWithUsingStmt    "DELETE USING statement"
 	EmptyStmt            "empty statement"
 	ExecuteStmt          "Execute statement"
 	ExplainStmt          "EXPLAIN statement"
@@ -955,6 +963,9 @@ import (
 	TableOptionList               "create table option list"
 	TableRef                      "table reference"
 	TableRefs                     "table references"
+	TableSampleOpt                "table sample clause optional"
+	TableSampleMethodOpt          "table sample method optional"
+	TableSampleUnitOpt            "table sample unit optional"
 	TableToTable                  "rename table to table"
 	TableToTableList              "rename table to table by list"
 	TransactionChar               "Transaction characteristic"
@@ -4045,7 +4056,7 @@ DoStmt:
  *  Delete Statement
  *
  *******************************************************************/
-DeleteFromStmt:
+DeleteWithoutUsingStmt:
 	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableName TableAsNameOpt IndexHintListOpt WhereClauseOptional OrderByOptional LimitClause
 	{
 		// Single Table
@@ -4090,7 +4101,8 @@ DeleteFromStmt:
 		}
 		$$ = x
 	}
-|	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableNameList "USING" TableRefs WhereClauseOptional
+DeleteWithUsingStmt:
+	"DELETE" TableOptimizerHints PriorityOpt QuickOptional IgnoreOptional "FROM" TableNameList "USING" TableRefs WhereClauseOptional
 	{
 		// Multiple Table
 		x := &ast.DeleteStmt{
@@ -4109,6 +4121,10 @@ DeleteFromStmt:
 		}
 		$$ = x
 	}
+
+DeleteFromStmt:
+	DeleteWithoutUsingStmt
+|	DeleteWithUsingStmt
 
 DatabaseSym:
 	"DATABASE"
@@ -5150,6 +5166,9 @@ UnReservedKeyword:
 |	"AGAINST"
 |	"EXPANSION"
 |	"LANGUAGE"
+|	"BERNOULLI"
+|	"PERCENT"
+|	"SYSTEM"
 
 TiDBKeyword:
 	"ADMIN"
@@ -5167,6 +5186,7 @@ TiDBKeyword:
 |	"TIDB_HJ"
 |	"TIDB_SMJ"
 |	"TIDB_INLJ"
+|	"REGIONS"
 
 NotKeywordToken:
 	"ADDDATE"
@@ -6730,6 +6750,79 @@ SelectStmtFromTable:
 		$$ = st
 	}
 
+
+TableSampleOpt:
+	%prec empty
+	{
+		$$ = nil
+	}
+|	"TABLESAMPLE" TableSampleMethodOpt '(' Expression TableSampleUnitOpt ')' RepeatableOpt
+	{
+		var repSeed ast.ExprNode
+		if $7 != nil {
+			repSeed = ast.NewValueExpr($7)
+		}
+		$$ = &ast.TableSample{
+			SampleMethod:     $2.(ast.SampleMethodType),
+			Expr:             ast.NewValueExpr($4),
+			SampleClauseUnit: $5.(ast.SampleClauseUnitType),
+			RepeatableSeed:   repSeed,
+		}
+	}
+|	"TABLESAMPLE" TableSampleMethodOpt '(' ')' RepeatableOpt
+	{
+		var repSeed ast.ExprNode
+		if $5 != nil {
+			repSeed = ast.NewValueExpr($5)
+		}
+		$$ = &ast.TableSample{
+			SampleMethod:   $2.(ast.SampleMethodType),
+			RepeatableSeed: repSeed,
+		}
+	}
+
+TableSampleMethodOpt:
+	%prec empty
+	{
+		$$ = ast.SampleMethodTypeNone
+	}
+|	"SYSTEM"
+	{
+		$$ = ast.SampleMethodTypeSystem
+	}
+|	"BERNOULLI"
+	{
+		$$ = ast.SampleMethodTypeBernoulli
+	}
+|	"REGIONS"
+	{
+		$$ = ast.SampleMethodTypeTiDBRegion
+	}
+
+TableSampleUnitOpt:
+	%prec empty
+	{
+		$$ = ast.SampleClauseUnitTypeDefault
+	}
+|	"ROWS"
+	{
+		$$ = ast.SampleClauseUnitTypeRow
+	}
+|	"PERCENT"
+	{
+		$$ = ast.SampleClauseUnitTypePercent
+	}
+
+RepeatableOpt:
+	%prec empty
+	{
+		$$ = nil
+	}
+|	"REPEATABLE" '(' Expression ')'
+	{
+		$$ = $3
+	}
+
 SelectStmt:
 	SelectStmtBasic OrderByOptional SelectStmtLimitOpt SelectLockOpt
 	{
@@ -7181,11 +7274,14 @@ TableRef:
 	}
 
 TableFactor:
-	TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt
+	TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt TableSampleOpt
 	{
 		tn := $1.(*ast.TableName)
 		tn.PartitionNames = $2.([]model.CIStr)
 		tn.IndexHints = $4.([]*ast.IndexHint)
+		if $5 != nil {
+			tn.TableSample = $5.(*ast.TableSample)
+		}
 		$$ = &ast.TableSource{Source: tn, AsName: $3.(model.CIStr)}
 	}
 |	'(' SetOprStmt1 ')' TableAsNameOpt
