@@ -199,7 +199,7 @@ type DDL interface {
 	CreateTableWithLike(ctx sessionctx.Context, ident, referIdent ast.Ident, ifNotExists bool) error
 	DropTable(ctx sessionctx.Context, tableIdent ast.Ident) (err error)
 	CreateIndex(ctx sessionctx.Context, tableIdent ast.Ident, unique bool, indexName model.CIStr,
-		columnNames []*ast.IndexColName, indexOption *ast.IndexOption) error
+		columnNames []*ast.IndexPartSpecification, indexOption *ast.IndexOption) error
 	DropIndex(ctx sessionctx.Context, tableIdent ast.Ident, indexName model.CIStr) error
 	AlterTable(ctx sessionctx.Context, tableIdent ast.Ident, spec []*ast.AlterTableSpec) error
 	TruncateTable(ctx sessionctx.Context, tableIdent ast.Ident) error

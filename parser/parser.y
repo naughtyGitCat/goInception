@@ -834,8 +834,6 @@ import (
 	IfExists                      "If Exists"
 	IfNotExists                   "If Not Exists"
 	IgnoreOptional                "IGNORE or empty"
-	IndexColName                  "Index column name"
-	IndexColNameList              "List of index column name"
 	IndexHint                     "index hint"
 	IndexHintList                 "index hint list"
 	IndexHintListOpt              "index hint list opt"
@@ -852,6 +850,9 @@ import (
 	IndexType                     "index type"
 	IndexTypeName                 "index type name"
 	IndexTypeOpt                  "optional index type"
+	IndexPartSpecification		"Index column name or expression"
+	IndexPartSpecificationList	"List of index column name or expression"
+	IndexPartSpecificationListOpt   "Optional list of index column name or expression"
 	InsertValues                  "Rest part of INSERT/REPLACE INTO statement"
 	JoinTable                     "join table"
 	JoinType                      "join type"
@@ -1125,7 +1126,7 @@ import (
 	FromOrIn          "From or In"
 	OptTable          "Optional table keyword"
 	OptInteger        "Optional Integer keyword"
-	NationalOpt       "National option"
+	NationalOpt		  "National option"
 	CharsetKw         "charset or charater set"
 	CommaOpt          "optional comma"
 	logAnd            "logical and operator"
@@ -2316,11 +2317,11 @@ ColumnOptionListOpt:
 
 ConstraintElem:
 	ConstraintElemInner
-|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')'  IndexOptionList
+|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')'  IndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintGlobal,
-			Keys: $5.([]*ast.IndexColName),
+			Keys: $5.([]*ast.IndexPartSpecification),
 			ColumnNames: $9.([]*ast.ColumnName),
 			Name: $3.(string),
 		}
@@ -2330,11 +2331,11 @@ ConstraintElem:
 		$$ = c
 	}
 
-|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')' IndexOptionList
+|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')' IndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintUniqueGlobal,
-			Keys: $6.([]*ast.IndexColName),
+			Keys: $6.([]*ast.IndexPartSpecification),
 			ColumnNames: $10.([]*ast.ColumnName),
 			Name: $4.(string),
 		}
@@ -2346,11 +2347,12 @@ ConstraintElem:
 
 
 ConstraintElemInner:
-	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexColNameList ')'  PartitionIndexOptionList
+	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexPartSpecificationList ')'  PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintPrimaryKey,
-			Keys: $5.([]*ast.IndexColName),
+			Keys: $5.([]*ast.IndexPartSpecification),
+			Name: $3.([]interface{})[0].(string),
 		}
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
@@ -2363,11 +2365,11 @@ ConstraintElemInner:
 		}
 		$$ = c
 	}
-|	"FULLTEXT" KeyOrIndexOpt IndexName '(' IndexColNameList ')' PartitionIndexOptionList
+|	"FULLTEXT" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintFulltext,
-			Keys: $5.([]*ast.IndexColName),
+			Keys: $5.([]*ast.IndexPartSpecification),
 			Name: $3.(string),
 		}
 		if $7 != nil {
@@ -2375,11 +2377,11 @@ ConstraintElemInner:
 		}
 		$$ = c
 	}
-|	"SPATIAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' PartitionIndexOptionList
+|	"SPATIAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintSpatial,
-			Keys: $5.([]*ast.IndexColName),
+			Keys: $5.([]*ast.IndexPartSpecification),
 			Name: $3.(string),
 		}
 		if $7 != nil {
@@ -2388,11 +2390,11 @@ ConstraintElemInner:
 		$$ = c
 	}
 
-|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' PartitionIndexOptionList
+|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintGlobal,
-			Keys: $5.([]*ast.IndexColName),
+			Keys: $5.([]*ast.IndexPartSpecification),
 			Name: $3.(string),
 		}	
 		if $7 != nil {
@@ -2402,11 +2404,11 @@ ConstraintElemInner:
 		$$ = c
 	}
 
-|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexColNameList ')' PartitionIndexOptionList
+|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintUniqueGlobal,
-			Keys: $6.([]*ast.IndexColName),
+			Keys: $6.([]*ast.IndexPartSpecification),
 			Name: $4.(string),
 		}
 		if $8 != nil {
@@ -2415,12 +2417,12 @@ ConstraintElemInner:
 		$$ = c
 	}
 
-|	KeyOrIndex IfNotExists IndexNameAndTypeOpt '(' IndexColNameList ')' PartitionIndexOptionList
+|	KeyOrIndex IfNotExists IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			IfNotExists: $2.(bool),
 			Tp:          ast.ConstraintIndex,
-			Keys:        $5.([]*ast.IndexColName),
+			Keys:        $5.([]*ast.IndexPartSpecification),
 		}
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
@@ -2434,11 +2436,11 @@ ConstraintElemInner:
 		}
 		$$ = c
 	}
-|	"UNIQUE" KeyOrIndexOpt IndexNameAndTypeOpt '(' IndexColNameList ')' PartitionIndexOptionList
+|	"UNIQUE" KeyOrIndexOpt IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' PartitionIndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintUniq,
-			Keys: $5.([]*ast.IndexColName),
+			Keys: $5.([]*ast.IndexPartSpecification),
 		}
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
@@ -2453,12 +2455,12 @@ ConstraintElemInner:
 		$$ = c
 	}
 	
-|	"FOREIGN" "KEY" IfNotExists IndexName '(' IndexColNameList ')' ReferDef
+|	"FOREIGN" "KEY" IfNotExists IndexName '(' IndexPartSpecificationList ')' ReferDef
 	{
 		$$ = &ast.Constraint{
 			IfNotExists: $3.(bool),
 			Tp:          ast.ConstraintForeignKey,
-			Keys:        $6.([]*ast.IndexColName),
+			Keys:        $6.([]*ast.IndexPartSpecification),
 			Name:        $4.(string),
 			Refer:       $8.(*ast.ReferenceDef),
 		}
@@ -2491,17 +2493,18 @@ MatchOpt:
 	}
 
 ReferDef:
-	"REFERENCES" TableName '(' IndexColNameList ')' MatchOpt OnDeleteUpdateOpt
+	"REFERENCES" TableName IndexPartSpecificationListOpt MatchOpt OnDeleteUpdateOpt
 	{	
-		onDeleteUpdate := $7.([2]interface{})
+		onDeleteUpdate := $5.([2]interface{})
 		$$ = &ast.ReferenceDef{
 			Table:         $2.(*ast.TableName),
-			IndexColNames: $4.([]*ast.IndexColName),
+			IndexPartSpecifications: $3.([]*ast.IndexPartSpecification),
 			OnDelete: onDeleteUpdate[0].(*ast.OnDeleteOpt),
 			OnUpdate: onDeleteUpdate[1].(*ast.OnUpdateOpt),
-			Match: $6.(ast.MatchType),
+			Match: $4.(ast.MatchType),
 		}
 	}
+
 
 OnDelete:
 	"ON" "DELETE" ReferOpt
@@ -2654,7 +2657,7 @@ NumLiteral:
  *     LOCK [=] {DEFAULT | NONE | SHARED | EXCLUSIVE}
  *******************************************************************************************/
 CreateIndexStmt:
-	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexColNameList ')' PartitionIndexOptionList IndexLockAndAlgorithmOpt PartitionOpt
+	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' PartitionIndexOptionList IndexLockAndAlgorithmOpt PartitionOpt
 	{
 		var indexOption *ast.IndexOption
 		if $12 != nil {
@@ -2685,7 +2688,7 @@ CreateIndexStmt:
 			IfNotExists:   $4.(bool),
 			IndexName:     $5,
 			Table:         $8.(*ast.TableName),
-			IndexColNames: $10.([]*ast.IndexColName),
+			IndexPartSpecifications: $10.([]*ast.IndexPartSpecification),
 			IndexOption:   indexOption,
 			KeyType:       $2.(ast.IndexKeyType),
 			Unique:        $2.(ast.IndexKeyType) == ast.IndexKeyTypeUnique,
@@ -2694,22 +2697,36 @@ CreateIndexStmt:
 		}
 	}
 
-IndexColName:
-	ColumnName OptFieldLen Order
+
+IndexPartSpecificationListOpt:
+ 	{
+		$$ = ([]*ast.IndexPartSpecification)(nil)
+	}
+|	'(' IndexPartSpecificationList ')'
 	{
-		// Order is parsed but just ignored as MySQL did
-		$$ = &ast.IndexColName{Column: $1.(*ast.ColumnName), Length: $2.(int)}
+		$$ = $2
+ 	}
+
+IndexPartSpecificationList:
+	IndexPartSpecification
+	{
+		$$ = []*ast.IndexPartSpecification{$1.(*ast.IndexPartSpecification)}
+	}
+|	IndexPartSpecificationList ',' IndexPartSpecification
+	{
+		$$ = append($1.([]*ast.IndexPartSpecification), $3.(*ast.IndexPartSpecification))
 	}
 
-IndexColNameList:
-	IndexColName
-	{
-		$$ = []*ast.IndexColName{$1.(*ast.IndexColName)}
-	}
-|	IndexColNameList ',' IndexColName
-	{
-		$$ = append($1.([]*ast.IndexColName), $3.(*ast.IndexColName))
-	}
+IndexPartSpecification:
+	ColumnName OptFieldLen Order
+ 	{
+		// Order is parsed but just ignored as MySQL did.
+		$$ = &ast.IndexPartSpecification{Column: $1.(*ast.ColumnName), Length: $2.(int)}
+ 	}
+|	'(' Expression ')' Order
+ 	{
+		$$ = &ast.IndexPartSpecification{Expr: $2}
+ 	}
 
 IndexLockAndAlgorithmOpt:
 	{

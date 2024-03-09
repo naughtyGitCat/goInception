@@ -175,14 +175,14 @@ func (s *testDDLSuite) TestIndexError(c *C) {
 	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionAddIndex, []interface{}{1}, ctx, d)
 	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionAddIndex,
 		[]interface{}{false, model.NewCIStr("t"), 1,
-			[]*ast.IndexColName{{Column: &ast.ColumnName{Name: model.NewCIStr("c")}, Length: 256}}}, ctx, d)
+			[]*ast.IndexPartSpecification{{Column: &ast.ColumnName{Name: model.NewCIStr("c")}, Length: 256}}}, ctx, d)
 	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionAddIndex,
 		[]interface{}{false, model.NewCIStr("c1_index"), 1,
-			[]*ast.IndexColName{{Column: &ast.ColumnName{Name: model.NewCIStr("c")}, Length: 256}}}, ctx, d)
+			[]*ast.IndexPartSpecification{{Column: &ast.ColumnName{Name: model.NewCIStr("c")}, Length: 256}}}, ctx, d)
 	testCreateIndex(c, ctx, d, dbInfo, tblInfo, false, "c1_index", "c1")
 	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionAddIndex,
 		[]interface{}{false, model.NewCIStr("c1_index"), 1,
-			[]*ast.IndexColName{{Column: &ast.ColumnName{Name: model.NewCIStr("c1")}, Length: 256}}}, ctx, d)
+			[]*ast.IndexPartSpecification{{Column: &ast.ColumnName{Name: model.NewCIStr("c1")}, Length: 256}}}, ctx, d)
 
 	// for dropping index
 	doDDLJobErr(c, dbInfo.ID, tblInfo.ID, model.ActionDropIndex, []interface{}{1}, ctx, d)
@@ -383,7 +383,7 @@ func (s *testDDLSuite) TestCancelJob(c *C) {
 	// for adding index
 	test = &tests[0]
 	validArgs := []interface{}{false, model.NewCIStr("idx"),
-		[]*ast.IndexColName{{
+		[]*ast.IndexPartSpecification{{
 			Column: &ast.ColumnName{Name: model.NewCIStr("c1")},
 			Length: -1,
 		}}, nil}

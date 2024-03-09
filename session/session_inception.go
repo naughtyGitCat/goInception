@@ -633,7 +633,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 			tp = ast.ConstraintFulltext
 		}
 		s.checkCreateIndex(node.Table, node.IndexName,
-			node.IndexColNames, node.IndexOption, nil, node.Unique, tp)
+			node.IndexPartSpecifications, node.IndexOption, nil, node.Unique, tp)
 
 	case *ast.DropIndexStmt:
 		s.checkDropIndex(node, currentSql)
@@ -2883,13 +2883,13 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 						switch op.Tp {
 						case ast.ColumnOptionPrimaryKey:
 							s.checkCreateIndex(nil, "PRIMARY",
-								[]*ast.IndexColName{
+								[]*ast.IndexPartSpecification{
 									{Column: field.Name,
 										Length: types.UnspecifiedLength},
 								}, nil, table, true, ast.ConstraintPrimaryKey)
 						case ast.ColumnOptionUniqKey:
 							s.checkCreateIndex(nil, field.Name.String(),
-								[]*ast.IndexColName{
+								[]*ast.IndexPartSpecification{
 									{Column: field.Name, Length: types.UnspecifiedLength},
 								}, nil, table, true, ast.ConstraintUniq)
 
@@ -4563,7 +4563,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 }
 
 func (s *session) checkIndexAttr(tp ast.ConstraintType, name string,
-	keys []*ast.IndexColName, table *TableInfo) {
+	keys []*ast.IndexPartSpecification, table *TableInfo) {
 
 	if tp == ast.ConstraintPrimaryKey {
 
@@ -4652,7 +4652,7 @@ func (s *session) checkIndexAttr(tp ast.ConstraintType, name string,
 }
 
 /* 检查当前索引是否与已存在的索引存在字段重复, 比如(a,b) 与 (a)是存在重复的 */
-func (s *session) checkDupColumnIndex(t *TableInfo, name string, keys []*ast.IndexColName) {
+func (s *session) checkDupColumnIndex(t *TableInfo, name string, keys []*ast.IndexPartSpecification) {
 	columns := ""
 	for _, c := range keys {
 		columns += c.Column.Name.String() + ","
@@ -4703,7 +4703,7 @@ func (s *session) checkCreateForeignKey(t *TableInfo, c *ast.Constraint) {
 
 	refTable := s.getTableFromCache(c.Refer.Table.Schema.O, c.Refer.Table.Name.O, true)
 	if refTable != nil {
-		for _, col := range c.Refer.IndexColNames {
+		for _, col := range c.Refer.IndexPartSpecifications {
 			found := false
 			for _, field := range refTable.Fields {
 				if strings.EqualFold(field.Field, col.Column.Name.O) {
@@ -4716,7 +4716,7 @@ func (s *session) checkCreateForeignKey(t *TableInfo, c *ast.Constraint) {
 			}
 		}
 	}
-	if len(c.Keys) != len(c.Refer.IndexColNames) {
+	if len(c.Keys) != len(c.Refer.IndexPartSpecifications) {
 		s.appendErrorNo(ErrWrongFkDefWithMatch, c.Name)
 	}
 
@@ -5130,7 +5130,7 @@ func (s *session) checkDropIndex(node *ast.DropIndexStmt, sql string) {
 }
 
 func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
-	IndexColNames []*ast.IndexColName, indexOption *ast.IndexOption,
+	IndexColNames []*ast.IndexPartSpecification, indexOption *ast.IndexOption,
 	t *TableInfo, unique bool, tp ast.ConstraintType) {
 	log.Debug("checkCreateIndex")
 

@@ -164,7 +164,7 @@ func (s *session) checkAutoIncrementOp(colDef *ast.ColumnDef, num int) (bool, er
 	return hasAutoIncrement, nil
 }
 
-func (s *session) checkDuplicateColumnName(indexColNames []*ast.IndexColName) {
+func (s *session) checkDuplicateColumnName(indexColNames []*ast.IndexPartSpecification) {
 	colNames := make(map[string]struct{}, len(indexColNames))
 	for _, indexColName := range indexColNames {
 		name := indexColName.Column.Name
@@ -176,7 +176,7 @@ func (s *session) checkDuplicateColumnName(indexColNames []*ast.IndexColName) {
 }
 
 // checkIndexInfo checks index name and index column names.
-func (s *session) checkIndexInfo(tableName, indexName string, indexColNames []*ast.IndexColName) {
+func (s *session) checkIndexInfo(tableName, indexName string, indexColNames []*ast.IndexPartSpecification) {
 	// if strings.EqualFold(indexName, mysql.PrimaryKeyName) {
 	// 	s.AppendErrorNo(ER_WRONG_NAME_FOR_INDEX, indexName, tableName)
 	// }

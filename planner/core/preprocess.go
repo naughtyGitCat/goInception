@@ -358,7 +358,7 @@ func (p *preprocessor) checkCreateIndexGrammar(stmt *ast.CreateIndexStmt) {
 		p.err = ddl.ErrWrongTableName.GenWithStackByArgs(tName)
 		return
 	}
-	p.err = checkIndexInfo(stmt.IndexName, stmt.IndexColNames)
+	p.err = checkIndexInfo(stmt.IndexName, stmt.IndexPartSpecifications)
 }
 
 func (p *preprocessor) checkRenameTableGrammar(stmt *ast.RenameTableStmt) {
@@ -415,7 +415,7 @@ func (p *preprocessor) checkAlterTableGrammar(stmt *ast.AlterTableStmt) {
 }
 
 // checkDuplicateColumnName checks if index exists duplicated columns.
-func checkDuplicateColumnName(indexColNames []*ast.IndexColName) error {
+func checkDuplicateColumnName(indexColNames []*ast.IndexPartSpecification) error {
 	colNames := make(map[string]struct{}, len(indexColNames))
 	for _, indexColName := range indexColNames {
 		name := indexColName.Column.Name
@@ -428,7 +428,7 @@ func checkDuplicateColumnName(indexColNames []*ast.IndexColName) error {
 }
 
 // checkIndexInfo checks index name and index column names.
-func checkIndexInfo(indexName string, indexColNames []*ast.IndexColName) error {
+func checkIndexInfo(indexName string, indexColNames []*ast.IndexPartSpecification) error {
 	if strings.EqualFold(indexName, mysql.PrimaryKeyName) {
 		return ddl.ErrWrongNameForIndex.GenWithStackByArgs(indexName)
 	}

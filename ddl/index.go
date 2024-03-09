@@ -43,7 +43,7 @@ import (
 const maxPrefixLength = 3072
 const maxCommentLength = 1024
 
-func buildIndexColumns(columns []*model.ColumnInfo, idxColNames []*ast.IndexColName) ([]*model.IndexColumn, error) {
+func buildIndexColumns(columns []*model.ColumnInfo, idxColNames []*ast.IndexPartSpecification) ([]*model.IndexColumn, error) {
 	// Build offsets.
 	idxColumns := make([]*model.IndexColumn, 0, len(idxColNames))
 
@@ -132,7 +132,7 @@ func buildIndexColumns(columns []*model.ColumnInfo, idxColNames []*ast.IndexColN
 	return idxColumns, nil
 }
 
-func buildIndexInfo(tblInfo *model.TableInfo, indexName model.CIStr, idxColNames []*ast.IndexColName, state model.SchemaState) (*model.IndexInfo, error) {
+func buildIndexInfo(tblInfo *model.TableInfo, indexName model.CIStr, idxColNames []*ast.IndexPartSpecification, state model.SchemaState) (*model.IndexInfo, error) {
 	idxColumns, err := buildIndexColumns(tblInfo.Columns, idxColNames)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -248,7 +248,7 @@ func (w *worker) onCreateIndex(d *ddlCtx, t *meta.Meta, job *model.Job) (ver int
 	var (
 		unique      bool
 		indexName   model.CIStr
-		idxColNames []*ast.IndexColName
+		idxColNames []*ast.IndexPartSpecification
 		indexOption *ast.IndexOption
 	)
 	err = job.DecodeArgs(&unique, &indexName, &idxColNames, &indexOption)
@@ -1084,10 +1084,11 @@ func (w *worker) buildIndexForReorgInfo(t table.PhysicalTable, workers []*addInd
 // The handle range is split from PD regions now. Each worker deal with a region table key range one time.
 // Each handle range by estimation, concurrent processing needs to perform after the handle range has been acquired.
 // The operation flow is as follows:
-//	1. Open numbers of defaultWorkers goroutines.
-//	2. Split table key range from PD regions.
-//	3. Send tasks to running workers by workers's task channel. Each task deals with a region key ranges.
-//	4. Wait all these running tasks finished, then continue to step 3, until all tasks is done.
+//  1. Open numbers of defaultWorkers goroutines.
+//  2. Split table key range from PD regions.
+//  3. Send tasks to running workers by workers's task channel. Each task deals with a region key ranges.
+//  4. Wait all these running tasks finished, then continue to step 3, until all tasks is done.
+//
 // The above operations are completed in a transaction.
 // Finally, update the concurrent processing of the total number of rows, and store the completed handle value.
 func (w *worker) addPhysicalTableIndex(t table.PhysicalTable, indexInfo *model.IndexInfo, reorgInfo *reorgInfo) error {

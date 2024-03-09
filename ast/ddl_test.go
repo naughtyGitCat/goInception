@@ -25,7 +25,7 @@ type testDDLSuite struct {
 
 func (ts *testDDLSuite) TestDDLVisitorCover(c *C) {
 	ce := &checkExpr{}
-	constraint := &Constraint{Keys: []*IndexColName{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Refer: &ReferenceDef{}, Option: &IndexOption{}}
+	constraint := &Constraint{Keys: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Refer: &ReferenceDef{}, Option: &IndexOption{}}
 
 	alterTableSpec := &AlterTableSpec{Constraint: constraint, Options: []*TableOption{{}}, NewTable: &TableName{}, NewColumns: []*ColumnDef{{Name: &ColumnName{}}}, OldColumnName: &ColumnName{}, Position: &ColumnPosition{RelativeColumn: &ColumnName{}}}
 
@@ -49,9 +49,9 @@ func (ts *testDDLSuite) TestDDLVisitorCover(c *C) {
 		{&ColumnDef{Name: &ColumnName{}, Options: []*ColumnOption{{Expr: ce}}}, 1, 1},
 		{&ColumnOption{Expr: ce}, 1, 1},
 		{&ColumnPosition{RelativeColumn: &ColumnName{}}, 0, 0},
-		{&Constraint{Keys: []*IndexColName{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Refer: &ReferenceDef{}, Option: &IndexOption{}}, 0, 0},
-		{&IndexColName{Column: &ColumnName{}}, 0, 0},
-		{&ReferenceDef{Table: &TableName{}, IndexColNames: []*IndexColName{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, OnDelete: &OnDeleteOpt{}, OnUpdate: &OnUpdateOpt{}}, 0, 0},
+		{&Constraint{Keys: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, Refer: &ReferenceDef{}, Option: &IndexOption{}}, 0, 0},
+		{&IndexPartSpecification{Column: &ColumnName{}}, 0, 0},
+		{&ReferenceDef{Table: &TableName{}, IndexPartSpecifications: []*IndexPartSpecification{{Column: &ColumnName{}}, {Column: &ColumnName{}}}, OnDelete: &OnDeleteOpt{}, OnUpdate: &OnUpdateOpt{}}, 0, 0},
 	}
 
 	for _, v := range stmts {
@@ -69,7 +69,7 @@ func (ts *testDDLSuite) TestDDLIndexColNameRestore(c *C) {
 		{"world(2)", "`world`(2)"},
 	}
 	extractNodeFunc := func(node Node) Node {
-		return node.(*CreateIndexStmt).IndexColNames[0]
+		return node.(*CreateIndexStmt).IndexPartSpecifications[0]
 	}
 	RunNodeRestoreTest(c, testCases, "CREATE INDEX idx ON t (%s) USING HASH", extractNodeFunc)
 }
@@ -140,6 +140,7 @@ func (ts *testDDLSuite) TestDDLReferenceDefRestore(c *C) {
 		{"REFERENCES parent(id,hello(12)) ON DELETE CASCADE", "REFERENCES `parent`(`id`, `hello`(12)) ON DELETE CASCADE"},
 		{"REFERENCES parent(id(8),hello(12)) ON DELETE CASCADE", "REFERENCES `parent`(`id`(8), `hello`(12)) ON DELETE CASCADE"},
 		{"REFERENCES parent(id)", "REFERENCES `parent`(`id`)"},
+		{"REFERENCES parent((id+1))", "REFERENCES `parent`((`id`+1))"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node.(*CreateTableStmt).Constraints[1].Refer
@@ -151,19 +152,36 @@ func (ts *testDDLSuite) TestDDLConstraintRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"INDEX par_ind (parent_id)", "INDEX `par_ind`(`parent_id`)"},
 		{"INDEX par_ind (parent_id(6))", "INDEX `par_ind`(`parent_id`(6))"},
+		{"INDEX expr_ind ((id + parent_id))", "INDEX `expr_ind`((`id`+`parent_id`))"},
+		{"INDEX expr_ind ((lower(id)))", "INDEX `expr_ind`((LOWER(`id`)))"},
 		{"key par_ind (parent_id)", "INDEX `par_ind`(`parent_id`)"},
+		{"key expr_ind ((lower(id)))", "INDEX `expr_ind`((LOWER(`id`)))"},
 		{"unique par_ind (parent_id)", "UNIQUE `par_ind`(`parent_id`)"},
 		{"unique key par_ind (parent_id)", "UNIQUE `par_ind`(`parent_id`)"},
 		{"unique index par_ind (parent_id)", "UNIQUE `par_ind`(`parent_id`)"},
+		{"unique expr_ind ((id + parent_id))", "UNIQUE `expr_ind`((`id`+`parent_id`))"},
+		{"unique key expr_ind ((id + parent_id))", "UNIQUE `expr_ind`((`id`+`parent_id`))"},
+		{"unique expr_ind ((lower(id)))", "UNIQUE `expr_ind`((LOWER(`id`)))"},
+		{"unique key expr_ind ((lower(id)))", "UNIQUE `expr_ind`((LOWER(`id`)))"},
+		{"unique index expr_ind ((id + parent_id))", "UNIQUE `expr_ind`((`id`+`parent_id`))"},
+		{"unique index expr_ind ((lower(id)))", "UNIQUE `expr_ind`((LOWER(`id`)))"},
 		{"fulltext key full_id (parent_id)", "FULLTEXT `full_id`(`parent_id`)"},
 		{"fulltext INDEX full_id (parent_id)", "FULLTEXT `full_id`(`parent_id`)"},
+		{"fulltext INDEX full_id ((parent_id+1))", "FULLTEXT `full_id`((`parent_id`+1))"},
 		{"PRIMARY KEY (id)", "PRIMARY KEY(`id`)"},
+		{"PRIMARY KEY ((id+1))", "PRIMARY KEY((`id`+1))"},
 		{"CONSTRAINT FOREIGN KEY (parent_id(2),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "CONSTRAINT FOREIGN KEY (`parent_id`(2), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
 		{"CONSTRAINT FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
+		{"CONSTRAINT FOREIGN KEY (parent_id(2),hello(4)) REFERENCES parent((id+1)) ON DELETE CASCADE", "CONSTRAINT FOREIGN KEY (`parent_id`(2), `hello`(4)) REFERENCES `parent`((`id`+1)) ON DELETE CASCADE"},
+		{"CONSTRAINT FOREIGN KEY (parent_id) REFERENCES parent((id+1)) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT FOREIGN KEY (`parent_id`) REFERENCES `parent`((`id`+1)) ON DELETE CASCADE ON UPDATE RESTRICT"},
 		{"CONSTRAINT fk_123 FOREIGN KEY (parent_id(2),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "CONSTRAINT `fk_123` FOREIGN KEY (`parent_id`(2), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
 		{"CONSTRAINT fk_123 FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT `fk_123` FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
+		{"CONSTRAINT fk_123 FOREIGN KEY ((parent_id+1),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "CONSTRAINT `fk_123` FOREIGN KEY ((`parent_id`+1), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
+		{"CONSTRAINT fk_123 FOREIGN KEY ((parent_id+1)) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT `fk_123` FOREIGN KEY ((`parent_id`+1)) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
 		{"FOREIGN KEY (parent_id(2),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "CONSTRAINT FOREIGN KEY (`parent_id`(2), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
 		{"FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
+		{"FOREIGN KEY ((parent_id+1),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "CONSTRAINT FOREIGN KEY ((`parent_id`+1), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
+		{"FOREIGN KEY ((parent_id+1)) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT FOREIGN KEY ((`parent_id`+1)) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node.(*CreateTableStmt).Constraints[0]

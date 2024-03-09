@@ -312,7 +312,7 @@ func columnDefToCol(ctx sessionctx.Context, offset int, colDef *ast.ColumnDef, o
 	if colDef.Options != nil {
 		length := types.UnspecifiedLength
 
-		keys := []*ast.IndexColName{
+		keys := []*ast.IndexPartSpecification{
 			{
 				Column: colDef.Name,
 				Length: length,
@@ -729,7 +729,7 @@ func buildTableInfo(ctx sessionctx.Context, d *ddl, tableName model.CIStr, cols 
 			for _, key := range constr.Keys {
 				fk.Cols = append(fk.Cols, key.Column.Name)
 			}
-			for _, key := range constr.Refer.IndexColNames {
+			for _, key := range constr.Refer.IndexPartSpecifications {
 				fk.RefCols = append(fk.RefCols, key.Column.Name)
 			}
 			fk.OnDelete = int(constr.Refer.OnDelete.ReferOpt)
@@ -1943,7 +1943,7 @@ func getAnonymousIndex(t table.Table, colName model.CIStr) model.CIStr {
 }
 
 func (d *ddl) CreateIndex(ctx sessionctx.Context, ti ast.Ident, unique bool, indexName model.CIStr,
-	idxColNames []*ast.IndexColName, indexOption *ast.IndexOption) error {
+	idxColNames []*ast.IndexPartSpecification, indexOption *ast.IndexOption) error {
 	is := d.infoHandle.Get()
 	schema, ok := is.SchemaByName(ti.Schema)
 	if !ok {
@@ -1992,7 +1992,7 @@ func (d *ddl) CreateIndex(ctx sessionctx.Context, ti ast.Ident, unique bool, ind
 	return errors.Trace(err)
 }
 
-func buildFKInfo(fkName model.CIStr, keys []*ast.IndexColName, refer *ast.ReferenceDef) (*model.FKInfo, error) {
+func buildFKInfo(fkName model.CIStr, keys []*ast.IndexPartSpecification, refer *ast.ReferenceDef) (*model.FKInfo, error) {
 	var fkInfo model.FKInfo
 	fkInfo.Name = fkName
 	fkInfo.RefTable = refer.Table.Name
@@ -2002,8 +2002,8 @@ func buildFKInfo(fkName model.CIStr, keys []*ast.IndexColName, refer *ast.Refere
 		fkInfo.Cols[i] = key.Column.Name
 	}
 
-	fkInfo.RefCols = make([]model.CIStr, len(refer.IndexColNames))
-	for i, key := range refer.IndexColNames {
+	fkInfo.RefCols = make([]model.CIStr, len(refer.IndexPartSpecifications))
+	for i, key := range refer.IndexPartSpecifications {
 		fkInfo.RefCols[i] = key.Column.Name
 	}
 
@@ -2014,7 +2014,7 @@ func buildFKInfo(fkName model.CIStr, keys []*ast.IndexColName, refer *ast.Refere
 
 }
 
-func (d *ddl) CreateForeignKey(ctx sessionctx.Context, ti ast.Ident, fkName model.CIStr, keys []*ast.IndexColName, refer *ast.ReferenceDef) error {
+func (d *ddl) CreateForeignKey(ctx sessionctx.Context, ti ast.Ident, fkName model.CIStr, keys []*ast.IndexPartSpecification, refer *ast.ReferenceDef) error {
 	is := d.infoHandle.Get()
 	schema, ok := is.SchemaByName(ti.Schema)
 	if !ok {

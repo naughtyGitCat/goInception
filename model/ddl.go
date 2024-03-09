@@ -50,10 +50,16 @@ const (
 	ActionRenameIndex        ActionType = 18
 	ActionAddTablePartition  ActionType = 19
 	ActionDropTablePartition ActionType = 20
+	ActionAddPrimaryKey      ActionType = 21
+	ActionDropPrimaryKey     ActionType = 22
 )
 
 // AddIndexStr is a string related to the operation of "add index".
-const AddIndexStr = "add index"
+const (
+	// AddIndexStr is a string related to the operation of "add index".
+	AddIndexStr      = "add index"
+	AddPrimaryKeyStr = "add primary key"
+)
 
 var actionMap = map[ActionType]string{
 	ActionCreateSchema:       "create schema",
@@ -76,6 +82,8 @@ var actionMap = map[ActionType]string{
 	ActionRenameIndex:        "rename index",
 	ActionAddTablePartition:  "add partition",
 	ActionDropTablePartition: "drop table partition",
+	ActionAddPrimaryKey:      AddPrimaryKeyStr,
+	ActionDropPrimaryKey:     "drop primary key",
 }
 
 // String return current ddl action in string
