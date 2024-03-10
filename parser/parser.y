@@ -227,6 +227,7 @@ import (
 	rangeKwd          "RANGE"
 	read              "READ"
 	realType          "REAL"
+	recursive         "RECURSIVE"
 	references        "REFERENCES"
 	regexpKwd         "REGEXP"
 	rename            "RENAME"
@@ -409,9 +410,10 @@ import (
 	invisible              "INVISIBLE"
 	invoker                "INVOKER"
 	jsonType               "JSON"
-	language              "LANGUAGE"
+	language               "LANGUAGE"
 	keyBlockSize           "KEY_BLOCK_SIZE"
 	local                  "LOCAL"
+	locked                 "LOCKED"
 	locality               "LOCALITY"
 	less                   "LESS"
 	level                  "LEVEL"
@@ -484,6 +486,7 @@ import (
 	shared                 "SHARED"
 	signed                 "SIGNED"
 	simple                 "SIMPLE"
+	skip                   "SKIP"
 	slave                  "SLAVE"
 	slow                   "SLOW"
 	snapshot               "SNAPSHOT"
@@ -754,7 +757,9 @@ import (
 	ProcedurelabeledLoopStmt   "The loop block with label in procedure"
 	ProcedureIterate           "The iterate statement in procedure, expressed by `iterate ...`"
 	ProcedureLeave             "The leave statement in procedure, expressed by `leave ...`"
-	CreateViewSelectOpt           "Select/Union statement in CREATE VIEW ... AS SELECT"
+	CreateViewSelectOpt        "Select/Union statement in CREATE VIEW ... AS SELECT"
+	SelectStmtNoWith           "Select statement with CTE clause"
+	UpdateStmtNoWith           "Update statement with CTE clause"
 
 %type	<item>
 	AdminShowSlow                 "Admin Show Slow statement"
@@ -783,6 +788,8 @@ import (
 	ColumnNameList                "column name list"
 	ColumnList                    "column list"
 	ColumnNameListOpt             "column name list opt"
+	IdentList                     "identifier list"
+	IdentListWithParenOpt         "column name list opt with parentheses"
 	ColumnNameListOptWithBrackets "column name list opt with brackets"
 	ColumnSetValue                "insert statement set value by column name"
 	ColumnSetValueList            "insert statement set value by column name list"
@@ -791,6 +798,7 @@ import (
 	ColumnOptionList              "column definition option list"
 	VirtualOrStored               "indicate generated column is stored or not"
 	ColumnOptionListOpt           "optional column definition option list"
+	CommonTableExpr               "Common table expression"
 	Constraint                    "table constraint"
 	ConstraintElem                "table constraint element"
 	ConstraintElemInner           "table constraint element inner"
@@ -914,7 +922,7 @@ import (
 	RowFormat                     "Row format option"
 	RowValue                      "Row value"
 	RowStmt                       "Row constructor"
-	SelectLockOpt                 "FOR UPDATE or LOCK IN SHARE MODE,"
+	SelectLockOpt                 "SELECT lock options"
 	SelectStmtSQLCache            "SELECT statement optional SQL_CAHCE/SQL_NO_CACHE"
 	SelectStmtFieldList           "SELECT statement field list"
 	SelectStmtLimit                        "SELECT statement LIMIT clause"
@@ -1001,6 +1009,8 @@ import (
 	WhenClause                    "When clause"
 	WhenClauseList                "When clause list"
 	WithClustered                 "With Clustered Index Enabled"
+	WithClause                    "With Clause"
+	WithList                      "With list"
 	WithReadLockOpt               "With Read Lock opt"
 	WithGrantOptionOpt            "With Grant Option opt"
 	WithValidation                "with validation"
@@ -1163,6 +1173,8 @@ import (
 %precedence stringLit
 %precedence lowerThanSetKeyword
 %precedence set
+%precedence selectKwd
+%precedence lowerThanSelectStmt
 %precedence lowerThanInsertValues
 %precedence insertValues
 %precedence lowerThanCreateTableSelect
@@ -1416,8 +1428,6 @@ AlterTableSpec:
 		}
 		if $3 == nil {
 			ret.OnAllPartitions = true
-			yylex.AppendError(yylex.Errorf("The TRUNCATE PARTITION ALL clause is parsed but ignored by all storage engines."))
-			return 1
 		} else {
 			ret.PartitionNames = $3.([]model.CIStr)
 		}
@@ -1951,6 +1961,25 @@ ColumnNameListOpt:
 		$$ = $1.([]*ast.ColumnName)
 	}
 
+IdentListWithParenOpt:
+	/* EMPTY */
+	{
+		$$ = []model.CIStr{}
+	}
+|	'(' IdentList ')'
+	{
+		$$ = $2
+	}
+
+IdentList:
+	Identifier
+	{
+		$$ = []model.CIStr{model.NewCIStr($1)}
+	}
+|	IdentList ',' Identifier
+	{
+		$$ = append($1.([]model.CIStr), model.NewCIStr($3))
+	}
 
 ColumnNameListOptWithBrackets:
 	/* EMPTY */
@@ -4198,6 +4227,18 @@ DeleteWithUsingStmt:
 DeleteFromStmt:
 	DeleteWithoutUsingStmt
 |	DeleteWithUsingStmt
+|	WithClause DeleteWithoutUsingStmt
+	{
+		d := $2.(*ast.DeleteStmt)
+		d.With = $1.(*ast.WithClause)
+		$$ = d
+	}
+|	WithClause DeleteWithUsingStmt
+	{
+		d := $2.(*ast.DeleteStmt)
+		d.With = $1.(*ast.WithClause)
+		$$ = d
+	}
 
 DatabaseSym:
 	"DATABASE"
@@ -5244,6 +5285,8 @@ UnReservedKeyword:
 |	"BERNOULLI"
 |	"PERCENT"
 |	"SYSTEM"
+|	"SKIP"
+|	"LOCKED"
 
 TiDBKeyword:
 	"ADMIN"
@@ -6923,7 +6966,17 @@ RepeatableOpt:
 		$$ = $3
 	}
 
+
 SelectStmt:
+	SelectStmtNoWith
+|	WithClause SelectStmtNoWith
+	{
+		st := $2.(*ast.SelectStmt)
+		st.With = $1.(*ast.WithClause)
+		$$ = st
+	}
+
+SelectStmtNoWith:
 	SelectStmtBasic WhereClauseOptional OrderByOptional SelectStmtLimitOpt SelectLockOpt
 	{
 		st := $1.(*ast.SelectStmt)
@@ -7027,6 +7080,43 @@ SelectStmt:
 		$$ = st
 	}
 
+
+WithClause:
+	"WITH" WithList
+	{
+		$$ = $2
+	}
+|	"WITH" recursive WithList
+	{
+		ws := $3.(*ast.WithClause)
+		ws.IsRecursive = true
+		$$ = ws
+	}
+
+WithList:
+	WithList ',' CommonTableExpr
+	{
+		ws := $1.(*ast.WithClause)
+		ws.CTEs = append(ws.CTEs, $3.(*ast.CommonTableExpression))
+		$$ = ws
+	}
+|	CommonTableExpr
+	{
+		ws := &ast.WithClause{}
+		ws.CTEs = make([]*ast.CommonTableExpression, 0, 4)
+		ws.CTEs = append(ws.CTEs, $1.(*ast.CommonTableExpression))
+		$$ = ws
+	}
+
+CommonTableExpr:
+	Identifier IdentListWithParenOpt "AS" SubSelect
+	{
+		cte := &ast.CommonTableExpression{}
+		cte.Name = model.NewCIStr($1)
+		cte.ColNameList = $2.([]model.CIStr)
+		cte.Query = $4.(*ast.SubqueryExpr)
+		$$ = cte
+	}
 
 FromDual:
 	"FROM" "DUAL"
@@ -7793,7 +7883,7 @@ SubSelect2:
 		$$ = &ast.SubqueryExpr{Query: rs}
 	}
 
-// See https://dev.mysql.com/doc/refman/5.7/en/innodb-locking-reads.html
+// See https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html
 SelectLockOpt:
 	/* empty */
 	{
@@ -7803,9 +7893,25 @@ SelectLockOpt:
 	{
 		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForUpdate}
 	}
+|	"FOR" "SHARE"
+	{
+		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShare}
+	}
 |	"FOR" "UPDATE" "NOWAIT"
 	{
 		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForUpdateNoWait}
+	}
+|	"FOR" "SHARE" "NOWAIT"
+	{
+		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShareNoWait}
+	}
+|	"FOR" "UPDATE" "SKIP" "LOCKED"
+	{
+		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForUpdateSkipLocked}
+	}
+|	"FOR" "SHARE" "SKIP" "LOCKED"
+	{
+		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShareSkipLocked}
 	}
 |	"FOR" "UPDATE" "WAIT" NUM
 	{
@@ -7816,7 +7922,7 @@ SelectLockOpt:
 	}
 |	"LOCK" "IN" "SHARE" "MODE"
 	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockInShareMode}
+		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShare}
 	}
 
 // See https://dev.mysql.com/doc/refman/5.7/en/union.html
@@ -9707,7 +9813,16 @@ StringName:
  * Update Statement
  * See https://dev.mysql.com/doc/refman/5.7/en/update.html
  ***********************************************************************************/
-UpdateStmt:
+ UpdateStmt:
+	UpdateStmtNoWith
+|	WithClause UpdateStmtNoWith
+	{
+		u := $2.(*ast.UpdateStmt)
+		u.With = $1.(*ast.WithClause)
+		$$ = u
+	}
+
+UpdateStmtNoWith:
 	"UPDATE" TableOptimizerHintsOpt PriorityOpt IgnoreOptional TableRef "SET" AssignmentList WhereClauseOptional OrderByOptional LimitClause
 	{
 		var refs *ast.Join

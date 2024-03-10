@@ -639,9 +639,12 @@ type SelectLockType int
 const (
 	SelectLockNone SelectLockType = iota
 	SelectLockForUpdate
-	SelectLockInShareMode
+	SelectLockForShare
 	SelectLockForUpdateNoWait
 	SelectLockForUpdateWaitN
+	SelectLockForShareNoWait
+	SelectLockForUpdateSkipLocked
+	SelectLockForShareSkipLocked
 )
 
 type SelectLockInfo struct {
@@ -656,12 +659,18 @@ func (n SelectLockType) String() string {
 		return "none"
 	case SelectLockForUpdate:
 		return "for update"
-	case SelectLockInShareMode:
+	case SelectLockForShare:
 		return "in share mode"
 	case SelectLockForUpdateNoWait:
 		return "for update nowait"
 	case SelectLockForUpdateWaitN:
-		return "for update wait seconds"
+		return "for update wait"
+	case SelectLockForShareNoWait:
+		return "for share nowait"
+	case SelectLockForUpdateSkipLocked:
+		return "for update skip locked"
+	case SelectLockForShareSkipLocked:
+		return "for share skip locked"
 	}
 	return "unsupported select lock type"
 }
@@ -980,6 +989,21 @@ func (s *SelectStmtKind) String() string {
 	return ""
 }
 
+type CommonTableExpression struct {
+	node
+
+	Name        model.CIStr
+	Query       *SubqueryExpr
+	ColNameList []model.CIStr
+}
+
+type WithClause struct {
+	node
+
+	IsRecursive bool
+	CTEs        []*CommonTableExpression
+}
+
 // SelectStmt represents the select query node.
 // See https://dev.mysql.com/doc/refman/5.7/en/select.html
 type SelectStmt struct {
@@ -1020,6 +1044,53 @@ type SelectStmt struct {
 	Kind SelectStmtKind
 	// Lists is filled only when Kind == SelectStmtKindValues
 	Lists []*RowExpr
+	With  *WithClause
+}
+
+func (n *WithClause) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("WITH ")
+	if n.IsRecursive {
+		ctx.WriteKeyWord("RECURSIVE ")
+	}
+	for i, cte := range n.CTEs {
+		if i != 0 {
+			ctx.WritePlain(", ")
+		}
+		ctx.WriteName(cte.Name.String())
+		if len(cte.ColNameList) > 0 {
+			ctx.WritePlain(" (")
+			for j, name := range cte.ColNameList {
+				if j != 0 {
+					ctx.WritePlain(", ")
+				}
+				ctx.WriteName(name.String())
+			}
+			ctx.WritePlain(")")
+		}
+		ctx.WriteKeyWord(" AS ")
+		err := cte.Query.Restore(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	ctx.WritePlain(" ")
+	return nil
+}
+
+func (n *WithClause) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+
+	for _, cte := range n.CTEs {
+		node, ok := cte.Query.Accept(v)
+		if !ok {
+			return n, false
+		}
+		cte.Query = node.(*SubqueryExpr)
+	}
+	return v.Leave(n)
 }
 
 // Restore implements Node interface.
@@ -1030,7 +1101,12 @@ func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 			ctx.WritePlain(")")
 		}()
 	}
-
+	if n.With != nil {
+		err := n.With.Restore(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	ctx.WriteKeyWord(n.Kind.String())
 	ctx.WritePlain(" ")
 	switch n.Kind {
@@ -1163,16 +1239,14 @@ func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 	}
 
 	if n.LockInfo != nil {
+		ctx.WritePlain(" ")
 		switch n.LockInfo.LockType {
-		case SelectLockInShareMode:
-			ctx.WriteKeyWord(" LOCK ")
-			ctx.WriteKeyWord(n.LockInfo.LockType.String())
-		case SelectLockForUpdate, SelectLockForUpdateNoWait:
-			ctx.WritePlain(" ")
-			ctx.WriteKeyWord(n.LockInfo.LockType.String())
+		case SelectLockNone:
 		case SelectLockForUpdateWaitN:
-			ctx.WriteKeyWord(" FOR UPDATE WAIT ")
-			ctx.WritePlainf("%d", n.LockInfo.WaitSec)
+			ctx.WriteKeyWord(n.LockInfo.LockType.String())
+			ctx.WritePlainf(" %d", n.LockInfo.WaitSec)
+		default:
+			ctx.WriteKeyWord(n.LockInfo.LockType.String())
 		}
 	}
 
@@ -1187,6 +1261,13 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 	}
 
 	n = newNode.(*SelectStmt)
+	if n.With != nil {
+		node, ok := n.With.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.With = node.(*WithClause)
+	}
 	if n.TableHints != nil && len(n.TableHints) != 0 {
 		newHints := make([]*TableOptimizerHint, len(n.TableHints))
 		for i, hint := range n.TableHints {
@@ -1362,10 +1443,16 @@ type SetOprStmt struct {
 	SelectList *SetOprSelectList
 	OrderBy    *OrderByClause
 	Limit      *Limit
+	With       *WithClause
 }
 
 // Restore implements Node interface.
 func (n *SetOprStmt) Restore(ctx *RestoreCtx) error {
+	if n.With != nil {
+		if err := n.With.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore UnionStmt.With")
+		}
+	}
 	if err := n.SelectList.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore SetOprStmt.SelectList")
 	}
@@ -1392,7 +1479,13 @@ func (n *SetOprStmt) Accept(v Visitor) (Node, bool) {
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*SetOprStmt)
+	if n.With != nil {
+		node, ok := n.With.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.With = node.(*WithClause)
+	}
 	if n.SelectList != nil {
 		node, ok := n.SelectList.Accept(v)
 		if !ok {
@@ -1837,10 +1930,17 @@ type DeleteStmt struct {
 	BeforeFrom   bool
 	// TableHints represents the table level Optimizer Hint for join type.
 	TableHints []*TableOptimizerHint
+	With       *WithClause
 }
 
 // Restore implements Node interface.
 func (n *DeleteStmt) Restore(ctx *RestoreCtx) error {
+	if n.With != nil {
+		err := n.With.Restore(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	ctx.WriteKeyWord("DELETE ")
 
 	if n.TableHints != nil && len(n.TableHints) != 0 {
@@ -1927,6 +2027,13 @@ func (n *DeleteStmt) Accept(v Visitor) (Node, bool) {
 	}
 
 	n = newNode.(*DeleteStmt)
+	if n.With != nil {
+		node, ok := n.With.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.With = node.(*WithClause)
+	}
 	node, ok := n.TableRefs.Accept(v)
 	if !ok {
 		return n, false
@@ -1979,10 +2086,17 @@ type UpdateStmt struct {
 	IgnoreErr     bool
 	MultipleTable bool
 	TableHints    []*TableOptimizerHint
+	With          *WithClause
 }
 
 // Restore implements Node interface.
 func (n *UpdateStmt) Restore(ctx *RestoreCtx) error {
+	if n.With != nil {
+		err := n.With.Restore(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	ctx.WriteKeyWord("UPDATE ")
 
 	if n.TableHints != nil && len(n.TableHints) != 0 {
@@ -2057,6 +2171,13 @@ func (n *UpdateStmt) Accept(v Visitor) (Node, bool) {
 		return v.Leave(newNode)
 	}
 	n = newNode.(*UpdateStmt)
+	if n.With != nil {
+		node, ok := n.With.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.With = node.(*WithClause)
+	}
 	node, ok := n.TableRefs.Accept(v)
 	if !ok {
 		return n, false
