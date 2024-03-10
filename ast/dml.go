@@ -718,6 +718,7 @@ const (
 type SelectLockInfo struct {
 	LockType SelectLockType
 	WaitSec  uint64
+	Tables   []*TableName
 }
 
 // String implements fmt.Stringer.
@@ -1319,14 +1320,63 @@ func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 		ctx.WritePlain(" ")
 		switch n.LockInfo.LockType {
 		case SelectLockNone:
+		case SelectLockForUpdateNoWait:
+			ctx.WriteKeyWord("for update")
+			if len(n.LockInfo.Tables) != 0 {
+				ctx.WriteKeyWord(" OF ")
+				restoreTables(ctx, n.LockInfo.Tables)
+			}
+			ctx.WriteKeyWord(" nowait")
 		case SelectLockForUpdateWaitN:
-			ctx.WriteKeyWord(n.LockInfo.LockType.String())
+			ctx.WriteKeyWord("for update")
+			if len(n.LockInfo.Tables) != 0 {
+				ctx.WriteKeyWord(" OF ")
+				restoreTables(ctx, n.LockInfo.Tables)
+			}
+			ctx.WriteKeyWord(" wait")
 			ctx.WritePlainf(" %d", n.LockInfo.WaitSec)
+		case SelectLockForShareNoWait:
+			ctx.WriteKeyWord("for share")
+			if len(n.LockInfo.Tables) != 0 {
+				ctx.WriteKeyWord(" OF ")
+				restoreTables(ctx, n.LockInfo.Tables)
+			}
+			ctx.WriteKeyWord(" nowait")
+		case SelectLockForUpdateSkipLocked:
+			ctx.WriteKeyWord("for update")
+			if len(n.LockInfo.Tables) != 0 {
+				ctx.WriteKeyWord(" OF ")
+				restoreTables(ctx, n.LockInfo.Tables)
+			}
+			ctx.WriteKeyWord(" skip locked")
+		case SelectLockForShareSkipLocked:
+			ctx.WriteKeyWord("for share")
+			if len(n.LockInfo.Tables) != 0 {
+				ctx.WriteKeyWord(" OF ")
+				restoreTables(ctx, n.LockInfo.Tables)
+			}
+			ctx.WriteKeyWord(" skip locked")
 		default:
 			ctx.WriteKeyWord(n.LockInfo.LockType.String())
+			if len(n.LockInfo.Tables) != 0 {
+				ctx.WriteKeyWord(" OF ")
+				restoreTables(ctx, n.LockInfo.Tables)
+			}
 		}
 	}
 
+	return nil
+}
+
+func restoreTables(ctx *RestoreCtx, ts []*TableName) error {
+	for i, v := range ts {
+		if err := v.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore SelectStmt.LockInfo")
+		}
+		if i != len(ts)-1 {
+			ctx.WritePlain(", ")
+		}
+	}
 	return nil
 }
 
@@ -1427,6 +1477,16 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Limit = node.(*Limit)
+	}
+
+	if n.LockInfo != nil {
+		for i, t := range n.LockInfo.Tables {
+			node, ok := t.Accept(v)
+			if !ok {
+				return n, false
+			}
+			n.LockInfo.Tables[i] = node.(*TableName)
+		}
 	}
 
 	return v.Leave(n)

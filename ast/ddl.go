@@ -2409,6 +2409,8 @@ const (
 	AlterTableDropTableGroup
 	AlterTableDropFirstPartition
 	AlterTableAddLastPartition
+	AlterTableCache
+	AlterTableNoCache
 
 	// TODO: Add more actions
 )
@@ -3083,6 +3085,10 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 		}
 	case AlterTableDropTableGroup:
 		ctx.WriteKeyWord("DROP TABLEGROUP")
+	case AlterTableCache:
+		ctx.WriteKeyWord("CACHE")
+	case AlterTableNoCache:
+		ctx.WriteKeyWord("NOCACHE")
 	default:
 		// TODO: not support
 		ctx.WritePlainf(" /* AlterTableType(%d) is not supported */ ", n.Tp)

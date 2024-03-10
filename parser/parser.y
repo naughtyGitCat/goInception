@@ -320,6 +320,7 @@ import (
 	boolType               "BOOL"
 	btree                  "BTREE"
 	byteType               "BYTE"
+	cache                  "CACHE"
 	broadcast              "BROADCAST"
 	cascaded               "CASCADED"
 	charsetKwd             "CHARSET"
@@ -437,6 +438,7 @@ import (
 	next                   "NEXT"
 	national               "NATIONAL"
 	no                     "NO"
+	nocache                "NOCACHE"
 	nodegroup              "NODEGROUP"
 	nonclustered           "NONCLUSTERED"
 	none                   "NONE"
@@ -886,6 +888,7 @@ import (
 	OnDuplicateKeyUpdate          "ON DUPLICATE KEY UPDATE value list"
 	OnCommitOpt                   "ON COMMIT DELETE |PRESERVE ROWS"
 	DuplicateOpt                  "[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement"
+	OfTablesOpt                   "OF table_name [, ...]"
 	OptFull                       "Full or empty"
 	OptTemporaryPartition         "TEMPORARY or PARTITION"
 	Order                         "Ordering keyword: ASC or DESC"
@@ -1637,6 +1640,20 @@ AlterTableSpec:
 			AttributesSpec: $1.(*ast.AttributesSpec),
 		}
 	}
+// 	Support caching or non-caching a table in memory for tidb, It can be found in the official Oracle document, see: https://docs.oracle.com/database/121/SQLRF/statements_3001.htm
+|	"CACHE"
+	{
+		$$ = &ast.AlterTableSpec{
+			Tp: ast.AlterTableCache,
+		}
+	}
+|	"NOCACHE"
+	{
+		$$ = &ast.AlterTableSpec{
+			Tp: ast.AlterTableNoCache,
+		}
+	}
+
 
 ReorganizePartitionRuleOpt:
 	/* empty */ %prec lowerThanRemove
@@ -5378,6 +5395,8 @@ UnReservedKeyword:
 |	"SYSTEM"
 |	"SKIP"
 |	"LOCKED"
+|	"CACHE"
+|	"NOCACHE"
 
 TiDBKeyword:
 	"ADMIN"
@@ -5901,7 +5920,7 @@ SimpleExpr:
 	{
 		$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
 	}
-|	SubSelect
+|	SubSelect %prec neg
 |	'(' Expression ')'
 	{
 		startOffset := parser.startOffset(&yyS[yypt-1])
@@ -8057,6 +8076,29 @@ SubSelect:
 		rs.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
 		$$ = &ast.SubqueryExpr{Query: rs}
 	}
+|	'(' SubSelect ')'
+	{
+		subQuery := $2.(*ast.SubqueryExpr).Query
+		isRecursive := true
+		// remove redundant brackets like '((select 1))'
+		for isRecursive {
+			if _, isRecursive = subQuery.(*ast.SubqueryExpr); isRecursive {
+				subQuery = subQuery.(*ast.SubqueryExpr).Query
+			}
+		}
+		switch rs := subQuery.(type) {
+		case *ast.SelectStmt:
+			endOffset := parser.endOffset(&yyS[yypt])
+			parser.setLastSelectFieldText(rs, endOffset)
+			src := parser.src
+			rs.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
+			$$ = &ast.SubqueryExpr{Query: rs}
+		case *ast.SetOprStmt:
+			src := parser.src
+			rs.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
+			$$ = &ast.SubqueryExpr{Query: rs}
+		}
+	}
 
 // See https://dev.mysql.com/doc/refman/8.0/en/innodb-locking-reads.html
 SelectLockOpt:
@@ -8064,40 +8106,72 @@ SelectLockOpt:
 	{
 		$$ = nil
 	}
-|	"FOR" "UPDATE"
+|	"FOR" "UPDATE" OfTablesOpt
 	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForUpdate}
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForUpdate,
+			Tables:   $3.([]*ast.TableName),
+		}
 	}
-|	"FOR" "SHARE"
+|	"FOR" "SHARE" OfTablesOpt
 	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShare}
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForShare,
+			Tables:   $3.([]*ast.TableName),
+		}
 	}
-|	"FOR" "UPDATE" "NOWAIT"
+|	"FOR" "UPDATE" OfTablesOpt "NOWAIT"
 	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForUpdateNoWait}
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForUpdateNoWait,
+			Tables:   $3.([]*ast.TableName),
+		}
 	}
-|	"FOR" "SHARE" "NOWAIT"
-	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShareNoWait}
-	}
-|	"FOR" "UPDATE" "SKIP" "LOCKED"
-	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForUpdateSkipLocked}
-	}
-|	"FOR" "SHARE" "SKIP" "LOCKED"
-	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShareSkipLocked}
-	}
-|	"FOR" "UPDATE" "WAIT" NUM
+|	"FOR" "UPDATE" OfTablesOpt "WAIT" NUM
 	{
 		$$ = &ast.SelectLockInfo{
 			LockType: ast.SelectLockForUpdateWaitN,
-			WaitSec:  getUint64FromNUM($4),
+			WaitSec:  getUint64FromNUM($5),
+			Tables:   $3.([]*ast.TableName),
+		}
+	}
+|	"FOR" "SHARE" OfTablesOpt "NOWAIT"
+	{
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForShareNoWait,
+			Tables:   $3.([]*ast.TableName),
+		}
+	}
+|	"FOR" "UPDATE" OfTablesOpt "SKIP" "LOCKED"
+	{
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForUpdateSkipLocked,
+			Tables:   $3.([]*ast.TableName),
+		}
+	}
+|	"FOR" "SHARE" OfTablesOpt "SKIP" "LOCKED"
+	{
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForShareSkipLocked,
+			Tables:   $3.([]*ast.TableName),
 		}
 	}
 |	"LOCK" "IN" "SHARE" "MODE"
 	{
-		$$ = &ast.SelectLockInfo{LockType: ast.SelectLockForShare}
+		$$ = &ast.SelectLockInfo{
+			LockType: ast.SelectLockForShare,
+			Tables:   []*ast.TableName{},
+		}
+	}
+
+OfTablesOpt:
+	/* empty */
+	{
+		$$ = []*ast.TableName{}
+	}
+|	"OF" TableNameList
+	{
+		$$ = $2.([]*ast.TableName)
 	}
 
 // See https://dev.mysql.com/doc/refman/5.7/en/union.html
@@ -8121,7 +8195,12 @@ SetOprStmt:
 
 SetOprStmtWoutLimitOrderBy:
 	SetOprClauseList SetOpr SelectStmt
-	{
+	{	
+		setOprList1 := $1.([]ast.Node)
+		if sel, isSelect := setOprList1[len(setOprList1)-1].(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+			endOffset := parser.endOffset(&yyS[yypt-1])
+			parser.setLastSelectFieldText(sel, endOffset)
+		}
 		setOpr := &ast.SetOprStmt{SelectList: &ast.SetOprSelectList{Selects: $1.([]ast.Node)}}
 		st := $3.(*ast.SelectStmt)
 		setOpr.Limit = st.Limit
@@ -8135,6 +8214,10 @@ SetOprStmtWoutLimitOrderBy:
 |	SetOprClauseList SetOpr SubSelect
 	{
 		setOprList1 := $1.([]ast.Node)
+		if sel, isSelect := setOprList1[len(setOprList1)-1].(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+			endOffset := parser.endOffset(&yyS[yypt-1])
+			parser.setLastSelectFieldText(sel, endOffset)
+		}
 		var setOprList2 []ast.Node
 		var with2 *ast.WithClause
 		switch x := $3.(*ast.SubqueryExpr).Query.(type) {
@@ -8156,6 +8239,10 @@ SetOprStmtWithLimitOrderBy:
 	SetOprClauseList SetOpr SubSelect OrderBy
 	{
 		setOprList1 := $1.([]ast.Node)
+		if sel, isSelect := setOprList1[len(setOprList1)-1].(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+			endOffset := parser.endOffset(&yyS[yypt-2])
+			parser.setLastSelectFieldText(sel, endOffset)
+		}
 		var setOprList2 []ast.Node
 		var with2 *ast.WithClause
 		switch x := $3.(*ast.SubqueryExpr).Query.(type) {
@@ -8176,6 +8263,10 @@ SetOprStmtWithLimitOrderBy:
 |	SetOprClauseList SetOpr SubSelect SelectStmtLimit
 	{
 		setOprList1 := $1.([]ast.Node)
+		if sel, isSelect := setOprList1[len(setOprList1)-1].(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+			endOffset := parser.endOffset(&yyS[yypt-2])
+			parser.setLastSelectFieldText(sel, endOffset)
+		}
 		var setOprList2 []ast.Node
 		var with2 *ast.WithClause
 		switch x := $3.(*ast.SubqueryExpr).Query.(type) {
@@ -8196,6 +8287,10 @@ SetOprStmtWithLimitOrderBy:
 |	SetOprClauseList SetOpr SubSelect OrderBy SelectStmtLimit
 	{
 		setOprList1 := $1.([]ast.Node)
+		if sel, isSelect := setOprList1[len(setOprList1)-1].(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+			endOffset := parser.endOffset(&yyS[yypt-3])
+			parser.setLastSelectFieldText(sel, endOffset)
+		}
 		var setOprList2 []ast.Node
 		var with2 *ast.WithClause
 		switch x := $3.(*ast.SubqueryExpr).Query.(type) {
@@ -8444,6 +8539,10 @@ SetExpr:
 	"ON"
 	{
 		$$ = ast.NewValueExpr("ON")
+	}
+|	"BINARY"
+	{
+		$$ = ast.NewValueExpr("BINARY")
 	}
 |	ExprOrDefault
 
