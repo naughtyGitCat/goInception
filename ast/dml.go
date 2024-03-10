@@ -151,15 +151,26 @@ func NewCrossJoin(left, right ResultSetNode) (n *Join) {
 
 // Restore implements Node interface.
 func (n *Join) Restore(ctx *RestoreCtx) error {
-	if ctx.JoinLevel != 0 {
-		ctx.WritePlain("(")
-		defer ctx.WritePlain(")")
+	useCommaJoin := false
+	_, leftIsJoin := n.Left.(*Join)
+
+	if leftIsJoin && n.Left.(*Join).Right == nil {
+		if ts, ok := n.Left.(*Join).Left.(*TableSource); ok {
+			switch ts.Source.(type) {
+			case *SelectStmt, *SetOprStmt:
+				useCommaJoin = true
+			}
+		}
 	}
-	ctx.JoinLevel++
+	if leftIsJoin && !useCommaJoin {
+		ctx.WritePlain("(")
+	}
 	if err := n.Left.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore Join.Left")
 	}
-	ctx.JoinLevel--
+	if leftIsJoin && !useCommaJoin {
+		ctx.WritePlain(")")
+	}
 	if n.Right == nil {
 		return nil
 	}
@@ -175,13 +186,22 @@ func (n *Join) Restore(ctx *RestoreCtx) error {
 	if n.StraightJoin {
 		ctx.WriteKeyWord(" STRAIGHT_JOIN ")
 	} else {
-		ctx.WriteKeyWord(" JOIN ")
+		if useCommaJoin {
+			ctx.WritePlain(", ")
+		} else {
+			ctx.WriteKeyWord(" JOIN ")
+		}
 	}
-	ctx.JoinLevel++
+	_, rightIsJoin := n.Right.(*Join)
+	if rightIsJoin {
+		ctx.WritePlain("(")
+	}
 	if err := n.Right.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore Join.Right")
 	}
-	ctx.JoinLevel--
+	if rightIsJoin {
+		ctx.WritePlain(")")
+	}
 
 	if n.On != nil {
 		ctx.WritePlain(" ")
@@ -1064,6 +1084,51 @@ type CommonTableExpression struct {
 	Name        model.CIStr
 	Query       *SubqueryExpr
 	ColNameList []model.CIStr
+	IsRecursive bool
+}
+
+// Restore implements Node interface
+func (c *CommonTableExpression) Restore(ctx *RestoreCtx) error {
+	ctx.WriteName(c.Name.String())
+	if c.IsRecursive {
+		// If the CTE is recursive, we should make it visible for the CTE's query.
+		// Otherwise, we should put it to stack after building the CTE's query.
+		ctx.RecordCTEName(c.Name.L)
+	}
+	if len(c.ColNameList) > 0 {
+		ctx.WritePlain(" (")
+		for j, name := range c.ColNameList {
+			if j != 0 {
+				ctx.WritePlain(", ")
+			}
+			ctx.WriteName(name.String())
+		}
+		ctx.WritePlain(")")
+	}
+	ctx.WriteKeyWord(" AS ")
+	err := c.Query.Restore(ctx)
+	if err != nil {
+		return err
+	}
+	if !c.IsRecursive {
+		ctx.RecordCTEName(c.Name.L)
+	}
+	return nil
+}
+
+// Accept implements Node interface
+func (c *CommonTableExpression) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(c)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+
+	node, ok := c.Query.Accept(v)
+	if !ok {
+		return c, false
+	}
+	c.Query = node.(*SubqueryExpr)
+	return v.Leave(c)
 }
 
 type WithClause struct {
@@ -1128,20 +1193,7 @@ func (n *WithClause) Restore(ctx *RestoreCtx) error {
 		if i != 0 {
 			ctx.WritePlain(", ")
 		}
-		ctx.WriteName(cte.Name.String())
-		if len(cte.ColNameList) > 0 {
-			ctx.WritePlain(" (")
-			for j, name := range cte.ColNameList {
-				if j != 0 {
-					ctx.WritePlain(", ")
-				}
-				ctx.WriteName(name.String())
-			}
-			ctx.WritePlain(")")
-		}
-		ctx.WriteKeyWord(" AS ")
-		err := cte.Query.Restore(ctx)
-		if err != nil {
+		if err := cte.Restore(ctx); err != nil {
 			return err
 		}
 	}
@@ -1156,11 +1208,9 @@ func (n *WithClause) Accept(v Visitor) (Node, bool) {
 	}
 
 	for _, cte := range n.CTEs {
-		node, ok := cte.Query.Accept(v)
-		if !ok {
+		if _, ok := cte.Accept(v); !ok {
 			return n, false
 		}
-		cte.Query = node.(*SubqueryExpr)
 	}
 	return v.Leave(n)
 }
@@ -1168,6 +1218,7 @@ func (n *WithClause) Accept(v Visitor) (Node, bool) {
 // Restore implements Node interface.
 func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 	if n.WithBeforeBraces {
+		defer ctx.RestoreCTEFunc()() //nolint: all_revive
 		err := n.With.Restore(ctx)
 		if err != nil {
 			return err
