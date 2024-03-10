@@ -37,6 +37,7 @@ var (
 	_ Node = &FieldList{}
 	_ Node = &GroupByClause{}
 	_ Node = &HavingClause{}
+	_ Node = &AsOfClause{}
 	_ Node = &Join{}
 	_ Node = &Limit{}
 	_ Node = &OnCondition{}
@@ -248,6 +249,8 @@ type TableName struct {
 	IndexHints     []*IndexHint
 	PartitionNames []model.CIStr
 	TableSample    *TableSample
+	// AS OF is used to see the data as it was at a specific point in time.
+	AsOf *AsOfClause
 }
 
 // Restore implements Node interface.
@@ -286,6 +289,12 @@ func (n *TableName) Restore(ctx *RestoreCtx) error {
 	n.restorePartitions(ctx)
 	if err := n.restoreIndexHints(ctx); err != nil {
 		return err
+	}
+	if n.AsOf != nil {
+		ctx.WritePlain(" ")
+		if err := n.AsOf.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing TableName.Asof")
+		}
 	}
 	if n.TableSample != nil {
 		ctx.WritePlain(" ")
@@ -503,6 +512,12 @@ func (n *TableSource) Restore(ctx *RestoreCtx) error {
 			ctx.WriteKeyWord(" AS ")
 			ctx.WriteName(asName)
 		}
+		if tn.AsOf != nil {
+			ctx.WritePlain(" ")
+			if err := tn.AsOf.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore TableSource.AsOf")
+			}
+		}
 		if err := tn.restoreIndexHints(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore TableSource.Source.(*TableName).IndexHints")
 		}
@@ -545,6 +560,59 @@ func (n *TableSource) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Source = node.(ResultSetNode)
+	return v.Leave(n)
+}
+
+type TimestampBoundMode int
+
+const (
+	TimestampBoundStrong TimestampBoundMode = iota
+	TimestampBoundMaxStaleness
+	TimestampBoundExactStaleness
+	TimestampBoundReadTimestamp
+	TimestampBoundMinReadTimestamp
+)
+
+type TimestampReadModes int
+
+const (
+	TimestampReadStrong TimestampReadModes = iota
+	TimestampReadBoundTimestamp
+	TimestampReadExactTimestamp
+)
+
+type TimestampBound struct {
+	Mode      TimestampBoundMode
+	Timestamp ExprNode
+}
+
+type AsOfClause struct {
+	node
+	Mode   TimestampReadModes
+	TsExpr ExprNode
+}
+
+// Restore implements Node interface.
+func (n *AsOfClause) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("AS OF TIMESTAMP ")
+	if err := n.TsExpr.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while restore AsOfClause.Expr")
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *AsOfClause) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*AsOfClause)
+	node, ok := n.TsExpr.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.TsExpr = node.(ExprNode)
 	return v.Leave(n)
 }
 

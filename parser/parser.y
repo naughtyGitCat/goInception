@@ -52,7 +52,7 @@ import (
 
 	/*yy:token "%c"     */
 	identifier "identifier"
-
+	asof       "AS OF"
 	/*yy:token "_%c"    */
 	underscoreCS "UNDERSCORE_CHARSET"
 
@@ -205,6 +205,7 @@ import (
 	noWriteToBinLog   "NO_WRITE_TO_BINLOG"
 	null              "NULL"
 	numericType       "NUMERIC"
+	of                "OF"
 	nvarcharType      "NVARCHAR"
 	nthValue          "NTH_VALUE"
 	ntile             "NTILE"
@@ -837,6 +838,8 @@ import (
 	GroupByClause                 "GROUP BY clause"
 	HashString                    "Hashed string"
 	HavingClause                  "HAVING clause"
+	AsOfClause                    "AS OF clause"
+	AsOfClauseOpt                 "AS OF clause optional"
 	HandleRange                   "handle range"
 	HandleRangeList               "handle range list"
 	IfExists                      "If Exists"
@@ -4826,6 +4829,22 @@ HavingClause:
 		$$ = &ast.HavingClause{Expr: $2}
 	}
 
+AsOfClauseOpt:
+	%prec empty
+	{
+		$$ = nil
+	}
+|	AsOfClause
+
+AsOfClause:
+	asof "TIMESTAMP" Expression
+	{
+		$$ = &ast.AsOfClause{
+			Mode:   ast.TimestampReadExactTimestamp,
+			TsExpr: $3.(ast.ExprNode),
+		}
+	}
+
 IfExists:
 	{
 		$$ = false
@@ -7471,13 +7490,16 @@ TableRef:
 	}
 
 TableFactor:
-	TableName PartitionNameListOpt TableAsNameOpt IndexHintListOpt TableSampleOpt
+	TableName PartitionNameListOpt TableAsNameOpt AsOfClauseOpt IndexHintListOpt TableSampleOpt
 	{
 		tn := $1.(*ast.TableName)
 		tn.PartitionNames = $2.([]model.CIStr)
-		tn.IndexHints = $4.([]*ast.IndexHint)
-		if $5 != nil {
-			tn.TableSample = $5.(*ast.TableSample)
+		tn.IndexHints = $5.([]*ast.IndexHint)
+		if $6 != nil {
+			tn.TableSample = $6.(*ast.TableSample)
+		}
+		if $4 != nil {
+			tn.AsOf = $4.(*ast.AsOfClause)
 		}
 		$$ = &ast.TableSource{Source: tn, AsName: $3.(model.CIStr)}
 	}
@@ -7507,6 +7529,7 @@ PartitionNameListOpt:
 	}
 
 TableAsNameOpt:
+	%prec empty
 	{
 		$$ = model.CIStr{}
 	}
@@ -8192,6 +8215,17 @@ TransactionChar:
 		varAssigns := []*ast.VariableAssignment{}
 		expr := ast.NewValueExpr("1")
 		varAssigns = append(varAssigns, &ast.VariableAssignment{Name: "tx_read_only", Value: expr, IsSystem: true})
+		$$ = varAssigns
+	}
+|	"READ" "ONLY" AsOfClause
+	{
+		varAssigns := []*ast.VariableAssignment{}
+		expr := ast.NewValueExpr("1")
+		varAssigns = append(varAssigns, &ast.VariableAssignment{Name: "tx_read_only", Value: expr, IsSystem: true})
+		asof := $3.(*ast.AsOfClause)
+		if asof != nil {
+			varAssigns = append(varAssigns, &ast.VariableAssignment{Name: "tx_read_ts", Value: asof.TsExpr, IsSystem: true})
+		}
 		$$ = varAssigns
 	}
 

@@ -433,6 +433,7 @@ var tokenMap = map[string]int{
 	"NULLS":                    nulls,
 	"NUMERIC":                  numericType,
 	"NVARCHAR":                 nvarcharType,
+	"OF":                       of,
 	"OFFSET":                   offset,
 	"ON":                       on,
 	"ONLY":                     only,

@@ -3515,6 +3515,18 @@ func (s *testParserSuite) TestCTE(c *C) {
 	s.RunTest(c, table, false)
 }
 
+func (s *testParserSuite) TestAsOfClause(c *C) {
+	table := []testCase{
+		{"SELECT * FROM `t` AS /* comment */ a;", true, "SELECT * FROM `t` AS `a`"},
+		{"SELECT * FROM `t` AS OF TIMESTAMP READ_TS_IN(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW());", true, "SELECT * FROM `t` AS OF TIMESTAMP READ_TS_IN(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{"select * from `t` as of timestamp '2021-04-15 00:00:00'", true, "SELECT * FROM `t` AS OF TIMESTAMP _UTF8MB4'2021-04-15 00:00:00'"},
+		{"SELECT * FROM (`a` AS OF TIMESTAMP READ_TS_IN(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())) JOIN `b` AS OF TIMESTAMP READ_TS_IN(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW());", true, "SELECT * FROM (`a` AS OF TIMESTAMP READ_TS_IN(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())) JOIN `b` AS OF TIMESTAMP READ_TS_IN(DATE_SUB(NOW(), INTERVAL 3 SECOND), NOW())"},
+		{"INSERT INTO `employees` (SELECT * FROM `employees` AS OF TIMESTAMP (DATE_SUB(NOW(), INTERVAL _UTF8MB4'60' MINUTE)) NOT IN (SELECT * FROM `employees`))", true, "INSERT INTO `employees` (SELECT * FROM `employees` AS OF TIMESTAMP (DATE_SUB(NOW(), INTERVAL _UTF8MB4'60' MINUTE)) NOT IN (SELECT * FROM `employees`))"},
+		{"SET TRANSACTION READ ONLY as of timestamp '2021-04-21 00:42:12'", true, "SET @@SESSION.`tx_read_only`=_UTF8MB4'1', @@SESSION.`tx_read_ts`=_UTF8MB4'2021-04-21 00:42:12'"},
+	}
+	s.RunTest(c, table, false)
+}
+
 // nodeTextCleaner clean the text of a node and it's child node.
 // For test only.
 type nodeTextCleaner struct {
