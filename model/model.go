@@ -170,7 +170,27 @@ type TableInfo struct {
 
 	Partition *PartitionInfo `json:"partition"`
 
-	Compression string `json:"compression"`
+	Compression   string `json:"compression"`
+	TempTableType `json:"temp_table_type"`
+}
+
+type TempTableType byte
+
+const (
+	TempTableNone TempTableType = iota
+	TempTableGlobal
+	TempTableLocal
+)
+
+func (t TempTableType) String() string {
+	switch t {
+	case TempTableGlobal:
+		return "global"
+	case TempTableLocal:
+		return "local"
+	default:
+		return ""
+	}
 }
 
 // TableLockType is the type of the table lock.

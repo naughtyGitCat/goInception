@@ -453,6 +453,7 @@ import (
 	plugins                "PLUGINS"
 	preSplitRegions        "PRE_SPLIT_REGIONS"
 	prepare                "PREPARE"
+	preserve               "PRESERVE"
 	privileges             "PRIVILEGES"
 	process                "PROCESS"
 	processlist            "PROCESSLIST"
@@ -882,9 +883,10 @@ import (
 	NoWriteToBinLogAliasOpt       "NO_WRITE_TO_BINLOG alias LOCAL or empty"
 	ObjectType                    "Grant statement object type"
 	OnDuplicateKeyUpdate          "ON DUPLICATE KEY UPDATE value list"
+	OnCommitOpt                   "ON COMMIT DELETE |PRESERVE ROWS"
 	DuplicateOpt                  "[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement"
 	OptFull                       "Full or empty"
-	OptTabPartition               "PARTITION or empty"
+	OptTemporaryPartition         "TEMPORARY or PARTITION"
 	Order                         "Ordering keyword: ASC or DESC"
 	OrderBy                       "ORDER BY clause"
 	OrReplace                     "or replace"
@@ -3446,29 +3448,57 @@ DropTableGroupStmt:
  *
  *******************************************************************/
 CreateTableStmt:
-	"CREATE" OptTabPartition "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt AsOpt CreateTableSelectOpt
+	"CREATE" OptTemporaryPartition "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt AsOpt CreateTableSelectOpt OnCommitOpt
 	{
 		stmt := $6.(*ast.CreateTableStmt)
 		stmt.Table = $5.(*ast.TableName)
 		stmt.IfNotExists = $4.(bool)
-		stmt.TabPartitionKeyword = $2.(ast.TabPartitionKeyword)
+		stmt.TemporaryOrPartitionKeyword = $2.(ast.TemporaryOrPartitionKeyword)
 		stmt.Options = $7.([]*ast.TableOption)
 		if $8 != nil {
 			stmt.Partition = $8.(*ast.PartitionOptions)
 		}
 		stmt.OnDuplicate = $9.(ast.OnDuplicateKeyHandlingType)
 		stmt.Select = $11.(*ast.CreateTableStmt).Select
+		if ($12 != nil && stmt.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $12 == nil) {
+			yylex.AppendError(yylex.Errorf("GLOBAL TEMPORARY and ON COMMIT DELETE|PRESERVE ROWS must appear together"))
+		} else {
+			if stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal {
+				stmt.OnCommitDelete = $12.(bool)
+			}
+		}
 		$$ = stmt
 	}
-|	"CREATE" OptTabPartition "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen
+|	"CREATE" OptTemporaryPartition "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen OnCommitOpt
 	{
-		$$ = &ast.CreateTableStmt{
+		tmp := &ast.CreateTableStmt{
 			Table:       $5.(*ast.TableName),
 			ReferTable:  $6.(*ast.TableName),
 			IfNotExists: $4.(bool),
-			TabPartitionKeyword: $2.(ast.TabPartitionKeyword),
+			TemporaryOrPartitionKeyword: $2.(ast.TemporaryOrPartitionKeyword),
 		}
+		if ($7 != nil && tmp.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (tmp.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $7 == nil) {
+			yylex.AppendError(yylex.Errorf("GLOBAL TEMPORARY and ON COMMIT DELETE|PRESERVE ROWS must appear together"))
+		} else {
+			if tmp.TemporaryOrPartitionKeyword == ast.TemporaryGlobal {
+				tmp.OnCommitDelete = $7.(bool)
+			}
+		}
+		$$ = tmp
 	}
+
+OnCommitOpt:
+	{
+		$$ = nil
+	}
+|	"ON" "COMMIT" "DELETE" "ROWS"
+	{
+		$$ = true
+	}
+|	"ON" "COMMIT" "PRESERVE" "ROWS"
+	{
+		$$ = false
+ 	}
 
 DefaultKwdOpt:
 	{}
@@ -4279,23 +4309,32 @@ DropIndexStmt:
 	}
 
 DropTableStmt:
-	"DROP" OptTabPartition TableOrTables TableNameList RestrictOrCascadeOpt
+	"DROP" OptTemporaryPartition TableOrTables TableNameList RestrictOrCascadeOpt
 	{
-		$$ = &ast.DropTableStmt{Tables: $4.([]*ast.TableName),TabPartitionKeyword: $2.(ast.TabPartitionKeyword)}
+		$$ = &ast.DropTableStmt{Tables: $4.([]*ast.TableName),TemporaryOrPartitionKeyword: $2.(ast.TemporaryOrPartitionKeyword)}
 	}
-|	"DROP" OptTabPartition TableOrTables "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
+|	"DROP" OptTemporaryPartition TableOrTables "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
 	{
-		$$ = &ast.DropTableStmt{IfExists: true, Tables: $6.([]*ast.TableName),TabPartitionKeyword: $2.(ast.TabPartitionKeyword)}
+		$$ = &ast.DropTableStmt{IfExists: true, Tables: $6.([]*ast.TableName),TemporaryOrPartitionKeyword: $2.(ast.TemporaryOrPartitionKeyword)}
 	}
 
-OptTabPartition:
-	/* empty */
-	{
-		$$ = ast.TabPartitionNone
-	}
+
+OptTemporaryPartition:
+    /* empty */
+    {
+        $$ = ast.TemporaryNone
+    }
+|   "TEMPORARY"
+    {
+        $$ = ast.TemporaryLocal
+    }
+|   "GLOBAL" "TEMPORARY"
+    {
+        $$ = ast.TemporaryGlobal
+    }
 |	"PARTITION"
 	{
-		$$ = ast.TabPartitionLocal
+		$$ = ast.TablePartition
 	}
 
 
@@ -5134,6 +5173,7 @@ UnReservedKeyword:
 |	"PARSER"
 |	"PASSWORD" %prec lowerThanEq
 |	"PREPARE"
+|	"PRESERVE"
 |	"PRE_SPLIT_REGIONS"
 |	"QUICK"
 |	"REDUNDANT"

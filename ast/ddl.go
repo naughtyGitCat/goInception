@@ -901,11 +901,13 @@ func (n *ColumnDef) Validate() bool {
 	return !(generatedCol && illegalOpt4gc)
 }
 
-type TabPartitionKeyword int
+type TemporaryOrPartitionKeyword int
 
 const (
-	TabPartitionNone TabPartitionKeyword = iota
-	TabPartitionLocal
+	TemporaryNone TemporaryOrPartitionKeyword = iota
+	TemporaryGlobal
+	TemporaryLocal
+	TablePartition
 )
 
 // CreateTableStmt is a statement to create a table.
@@ -914,24 +916,28 @@ type CreateTableStmt struct {
 	ddlNode
 
 	IfNotExists bool
-	IsTemporary bool
-	TabPartitionKeyword
-	Table       *TableName
-	ReferTable  *TableName
-	Cols        []*ColumnDef
-	Constraints []*Constraint
-	Options     []*TableOption
-	Partition   *PartitionOptions
-	OnDuplicate OnDuplicateKeyHandlingType
-	Select      ResultSetNode
+	TemporaryOrPartitionKeyword
+	OnCommitDelete bool
+	Table          *TableName
+	ReferTable     *TableName
+	Cols           []*ColumnDef
+	Constraints    []*Constraint
+	Options        []*TableOption
+	Partition      *PartitionOptions
+	OnDuplicate    OnDuplicateKeyHandlingType
+	Select         ResultSetNode
 }
 
 // Restore implements Node interface.
 func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
-	switch n.TabPartitionKeyword {
-	case TabPartitionNone:
+	switch n.TemporaryOrPartitionKeyword {
+	case TemporaryNone:
 		ctx.WriteKeyWord("CREATE TABLE ")
-	case TabPartitionLocal:
+	case TemporaryGlobal:
+		ctx.WriteKeyWord("CREATE GLOBAL TEMPORARY TABLE ")
+	case TemporaryLocal:
+		ctx.WriteKeyWord("CREATE TEMPORARY TABLE ")
+	case TablePartition:
 		ctx.WriteKeyWord("CREATE PARTITION TABLE ")
 	}
 	if n.IfNotExists {
@@ -998,7 +1004,13 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing CreateTableStmt Select")
 		}
 	}
-
+	if n.TemporaryOrPartitionKeyword == TemporaryGlobal {
+		if n.OnCommitDelete {
+			ctx.WriteKeyWord(" ON COMMIT DELETE ROWS")
+		} else {
+			ctx.WriteKeyWord(" ON COMMIT PRESERVE ROWS")
+		}
+	}
 	return nil
 }
 
@@ -1272,11 +1284,10 @@ func (n *TableGroupPartitionOption) Accept(v Visitor) (Node, bool) {
 type DropTableStmt struct {
 	ddlNode
 
-	IfExists bool
-	TabPartitionKeyword
-	Tables      []*TableName
-	IsView      bool
-	IsTemporary bool // make sense ONLY if/when IsView == false
+	IfExists                    bool
+	Tables                      []*TableName
+	IsView                      bool
+	TemporaryOrPartitionKeyword // make sense ONLY if/when IsView == false
 }
 
 // Restore implements Node interface.
@@ -1284,10 +1295,14 @@ func (n *DropTableStmt) Restore(ctx *RestoreCtx) error {
 	if n.IsView {
 		ctx.WriteKeyWord("DROP VIEW ")
 	}
-	switch n.TabPartitionKeyword {
-	case TabPartitionNone:
+	switch n.TemporaryOrPartitionKeyword {
+	case TemporaryNone:
 		ctx.WriteKeyWord("DROP TABLE ")
-	case TabPartitionLocal:
+	case TemporaryGlobal:
+		ctx.WriteKeyWord("DROP GLOBAL TEMPORARY TABLE ")
+	case TemporaryLocal:
+		ctx.WriteKeyWord("DROP TEMPORARY TABLE ")
+	case TablePartition:
 		ctx.WriteKeyWord("DROP PARTITION TABLE ")
 	}
 	if n.IfExists {

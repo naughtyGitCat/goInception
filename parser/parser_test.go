@@ -1690,6 +1690,20 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE foo (a, b.c);", false, ""},
 		{"CREATE TABLE (name CHAR(50) BINARY)", false, ""},
 
+		//for create temporary table
+		{"CREATE TEMPORARY TABLE t (a varchar(50), b int);", true, "CREATE TEMPORARY TABLE `t` (`a` VARCHAR(50),`b` INT)"},
+		{"CREATE TEMPORARY TABLE t LIKE t1", true, "CREATE TEMPORARY TABLE `t` LIKE `t1`"},
+		{"DROP TEMPORARY TABLE t", true, "DROP TEMPORARY TABLE `t`"},
+		{"create global temporary table t (a int, b varchar(255)) on commit delete rows", true, "CREATE GLOBAL TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255)) ON COMMIT DELETE ROWS"},
+		{"create temporary table t (a int, b varchar(255))", true, "CREATE TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255))"},
+		{"create global temporary table t (a int, b varchar(255))", false, ""}, // missing on commit delete rows
+		{"create temporary table t (a int, b varchar(255)) on commit delete rows", false, ""},
+		{"create table t (a int, b varchar(255)) on commit delete rows", false, ""},
+		{"create global temporary table t (a int, b varchar(255)) partition by hash(a) partitions 10 on commit delete rows", true, "CREATE GLOBAL TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255)) PARTITION BY HASH (`a`) PARTITIONS 10 ON COMMIT DELETE ROWS"},
+		{"create global temporary table t (a int, b varchar(255)) on commit preserve rows", true, "CREATE GLOBAL TEMPORARY TABLE `t` (`a` INT,`b` VARCHAR(255)) ON COMMIT PRESERVE ROWS"},
+		{"drop global temporary table t", true, "DROP GLOBAL TEMPORARY TABLE `t`"},
+		{"drop temporary table t", true, "DROP TEMPORARY TABLE `t`"},
+		//
 		{"CREATE TABLE foo (a varchar(50), b int) SINGLE;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) SINGLE"},
 		{"CREATE TABLE foo (a varchar(50), b int) BROADCAST;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) BROADCAST"},
 		// for create partition table

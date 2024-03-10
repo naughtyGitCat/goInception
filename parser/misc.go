@@ -456,6 +456,7 @@ var tokenMap = map[string]int{
 	"POSITION":                 position,
 	"PRE_SPLIT_REGIONS":        preSplitRegions,
 	"PRECISION":                precisionType,
+	"PRESERVE":                 preserve,
 	"PRECEDING":                preceding,
 	"PREPARE":                  prepare,
 	"PRIMARY":                  primary,
