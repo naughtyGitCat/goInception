@@ -7026,21 +7026,23 @@ RepeatableOpt:
 
 
 SelectStmt:
-	SelectStmtBasic WhereClauseOptional OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	SelectStmtBasic WhereClauseOptional SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt
 	{
 		st := $1.(*ast.SelectStmt)
-		if $5 != nil {
-			st.LockInfo = $5.(*ast.SelectLockInfo)
+		if $6 != nil {
+			st.LockInfo = $6.(*ast.SelectLockInfo)
 		}
 		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
 		if lastField.Expr != nil && lastField.AsName.O == "" {
 			src := parser.src
 			var lastEnd int
 			if $2 != nil {
+				lastEnd = yyS[yypt-4].offset - 1
+			} else if $3 != nil {
 				lastEnd = yyS[yypt-3].offset - 1
-			} else if $3 != nil {
+			} else if $4 != nil {
 				lastEnd = yyS[yypt-2].offset - 1
-			} else if $3 != nil {
+			} else if $5 != nil {
 				lastEnd = yyS[yypt-1].offset - 1
 			} else if st.LockInfo != nil && st.LockInfo.LockType != ast.SelectLockNone {
 				lastEnd = yyS[yypt].offset - 1
@@ -7052,8 +7054,22 @@ SelectStmt:
 			}
 			lastField.SetText(src[lastField.Offset:lastEnd])
 		}
+		if $3 != nil {
+			st.GroupBy = $3.(*ast.GroupByClause)
+		}
+		if $4 != nil {
+			st.OrderBy = $4.(*ast.OrderByClause)
+		}
+		if $5 != nil {
+			st.Limit = $5.(*ast.Limit)
+		}
+		$$ = st
+	}
+|	SelectStmtFromDualTable SelectStmtGroup OrderByOptional SelectStmtLimitOpt SelectLockOpt
+	{
+		st := $1.(*ast.SelectStmt)
 		if $2 != nil {
-			st.Where = $2.(ast.ExprNode)
+			st.GroupBy = $2.(*ast.GroupByClause)
 		}
 		if $3 != nil {
 			st.OrderBy = $3.(*ast.OrderByClause)
@@ -7061,19 +7077,8 @@ SelectStmt:
 		if $4 != nil {
 			st.Limit = $4.(*ast.Limit)
 		}
-		$$ = st
-	}
-|	SelectStmtFromDualTable OrderByOptional SelectStmtLimitOpt SelectLockOpt
-	{
-		st := $1.(*ast.SelectStmt)
-		if $2 != nil {
-			st.OrderBy = $2.(*ast.OrderByClause)
-		}
-		if $3 != nil {
-			st.Limit = $3.(*ast.Limit)
-		}
-		if $4 != nil {
-			st.LockInfo = $4.(*ast.SelectLockInfo)
+		if $5 != nil {
+			st.LockInfo = $5.(*ast.SelectLockInfo)
 		}
 		$$ = st
 	}
