@@ -1154,7 +1154,6 @@ import (
 	GetFormatSelector "{DATE|DATETIME|TIME|TIMESTAMP}"
 
 %type	<ident>
-	ODBCDateTimeType                "ODBC type keywords for date and time literals"
 	Identifier                      "identifier or unreserved keyword"
 	NotKeywordToken                 "Tokens not mysql keyword but treated specially"
 	UnReservedKeyword               "MySQL unreserved keywords"
@@ -4793,16 +4792,6 @@ Field:
 		asName := $2.(string)
 		$$ = &ast.SelectField{Expr: expr, AsName: model.NewCIStr(asName)}
 	}
-|	'{' Identifier Expression '}' FieldAsNameOpt
-	{
-		/*
-		 * ODBC escape syntax.
-		 * See https://dev.mysql.com/doc/refman/5.7/en/expressions.html
-		 */
-		expr := $3
-		asName := $5.(string)
-		$$ = &ast.SelectField{Expr: expr, AsName: model.NewCIStr(asName)}
-	}
 
 FieldAsNameOpt:
 	/* EMPTY */
@@ -5547,19 +5536,6 @@ ReplaceIntoStmt:
 		$$ = x
 	}
 
-ODBCDateTimeType:
-	"d"
-	{
-		$$ = ast.DateLiteral
-	}
-|	"t"
-	{
-		$$ = ast.TimeLiteral
-	}
-|	"ts"
-	{
-		$$ = ast.TimestampLiteral
-	}
 
 Literal:
 	"FALSE"
@@ -5864,6 +5840,30 @@ SimpleExpr:
 		sq.Exists = true
 		$$ = &ast.ExistsSubqueryExpr{Sel: sq}
 	}
+|	'{' Identifier Expression '}'
+	{
+		/*
+		 * ODBC escape syntax.
+		 * See https://dev.mysql.com/doc/refman/5.7/en/expressions.html
+		 */
+		tp := $3.GetType()
+		switch $2 {
+		case "d":
+			tp.Charset = ""
+			tp.Collate = ""
+			$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.DateLiteral), Args: []ast.ExprNode{$3}}
+		case "t":
+			tp.Charset = ""
+			tp.Collate = ""
+			$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.TimeLiteral), Args: []ast.ExprNode{$3}}
+		case "ts":
+			tp.Charset = ""
+			tp.Collate = ""
+			$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.TimestampLiteral), Args: []ast.ExprNode{$3}}
+		default:
+			$$ = $3
+		}
+	}
 |	"BINARY" SimpleExpr %prec neg
 	{
 		// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#operator_binary
@@ -6101,13 +6101,6 @@ FunctionCallKeyword:
 |	"PASSWORD" '(' ExpressionListOpt ')'
 	{
 		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.PasswordFunc), Args: $3.([]ast.ExprNode)}
-	}
-|	'{' ODBCDateTimeType stringLit '}'
-	{
-		// This is ODBC syntax for date and time literals.
-		// See: https://dev.mysql.com/doc/refman/5.7/en/date-and-time-literals.html
-		expr := ast.NewValueExpr($3)
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr($2), Args: []ast.ExprNode{expr}}
 	}
 
 FunctionCallNonKeyword:
