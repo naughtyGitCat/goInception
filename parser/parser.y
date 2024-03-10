@@ -760,8 +760,7 @@ import (
 	ProcedureIterate           "The iterate statement in procedure, expressed by `iterate ...`"
 	ProcedureLeave             "The leave statement in procedure, expressed by `leave ...`"
 	CreateViewSelectOpt        "Select/Union statement in CREATE VIEW ... AS SELECT"
-	SelectStmtNoWith           "Select statement with CTE clause"
-	UpdateStmtNoWith           "Update statement with CTE clause"
+	UpdateStmtNoWith           "Update statement without CTE clause"
 
 %type	<item>
 	AdminShowSlow                 "Admin Show Slow statement"
@@ -7027,15 +7026,6 @@ RepeatableOpt:
 
 
 SelectStmt:
-	SelectStmtNoWith
-|	WithClause SelectStmtNoWith
-	{
-		st := $2.(*ast.SelectStmt)
-		st.With = $1.(*ast.WithClause)
-		$$ = st
-	}
-
-SelectStmtNoWith:
 	SelectStmtBasic WhereClauseOptional OrderByOptional SelectStmtLimitOpt SelectLockOpt
 	{
 		st := $1.(*ast.SelectStmt)
@@ -8007,6 +7997,33 @@ SetOprStmt1:
 		}
 	}
 |	SetOprStmt
+|	WithClause SetOprClauseList %prec lowerThanParenthese
+	{
+		setOpr := &ast.SetOprStmt{SelectList: &ast.SetOprSelectList{Selects: $2.([]ast.Node)}}
+		lastSelect := setOpr.SelectList.Selects[len(setOpr.SelectList.Selects)-1]
+		if sel, isSelect := lastSelect.(*ast.SelectStmt); isSelect && len(setOpr.SelectList.Selects) == 1 {
+			sel.With = $1.(*ast.WithClause)
+			if sel.IsInBraces {
+				sel.WithBeforeBraces = true
+			}
+			$$ = sel
+		} else {
+			if sel, isSelect := lastSelect.(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+				setOpr.OrderBy = sel.OrderBy
+				setOpr.Limit = sel.Limit
+				sel.OrderBy = nil
+				sel.Limit = nil
+			}
+			setOpr.With = $1.(*ast.WithClause)
+			$$ = setOpr
+		}
+	}
+|	WithClause SetOprStmt
+	{
+		setOpr := $2.(*ast.SetOprStmt)
+		setOpr.With = $1.(*ast.WithClause)
+		$$ = setOpr
+	}
 
 SetOprStmt2:
 	SetOprClauseList %prec higherThanParenthese
@@ -8026,6 +8043,35 @@ SetOprStmt2:
 		}
 	}
 |	SetOprStmt
+|	WithClause SetOprClauseList %prec higherThanParenthese
+	{
+		setOpr := &ast.SetOprStmt{SelectList: &ast.SetOprSelectList{Selects: $2.([]ast.Node)}}
+		lastSelect := setOpr.SelectList.Selects[len(setOpr.SelectList.Selects)-1]
+		if sel, isSelect := lastSelect.(*ast.SelectStmt); isSelect && len(setOpr.SelectList.Selects) == 1 {
+			sel.With = $1.(*ast.WithClause)
+			if sel.IsInBraces {
+				sel.WithBeforeBraces = true
+			}
+			$$ = sel
+		} else {
+			if sel, isSelect := lastSelect.(*ast.SelectStmt); isSelect && !sel.IsInBraces {
+				setOpr.OrderBy = sel.OrderBy
+				setOpr.Limit = sel.Limit
+				sel.OrderBy = nil
+				sel.Limit = nil
+			}
+			setOpr.With = $1.(*ast.WithClause)
+			$$ = setOpr
+		}
+	}
+|	WithClause SetOprStmt
+	{
+		setOpr := $2.(*ast.SetOprStmt)
+		setOpr.With = $1.(*ast.WithClause)
+		$$ = setOpr
+	}
+
+
 
 SetOprStmt:
 	SetOprClauseList SetOpr '(' SetOprClauseList ')' OrderBy
@@ -8142,6 +8188,21 @@ SetOprClause:
 			sel.IsInBraces = true
 		} else {
 			setList = []ast.Node{&ast.SetOprSelectList{Selects: $2.([]ast.Node)}}
+		}
+		$$ = setList
+	}
+|	'(' WithClause SetOprClauseList ')'
+	{
+		setList := $3.([]ast.Node)
+		if sel, isSelect := setList[0].(*ast.SelectStmt); isSelect && len(setList) == 1 {
+			endOffset := parser.endOffset(&yyS[yypt])
+			parser.setLastSelectFieldText(sel, endOffset)
+			sel.IsInBraces = true
+			sel.With = $2.(*ast.WithClause)
+		} else {
+			set := &ast.SetOprSelectList{Selects: $3.([]ast.Node)}
+			set.With = $2.(*ast.WithClause)
+			setList = []ast.Node{set}
 		}
 		$$ = setList
 	}
