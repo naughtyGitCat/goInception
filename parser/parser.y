@@ -608,6 +608,7 @@ import (
 	builtinSubstring
 	builtinSum
 	builtinSysDate
+	builtinTranslate
 	builtinTrim
 	builtinUser
 	builtinVarPop
@@ -831,6 +832,7 @@ import (
 	FieldAsNameOpt                "Field alias name opt"
 	FieldList                     "field expression list"
 	FlushOption                   "Flush option"
+	ForceOpt                      "Force opt"
 	FulltextSearchModifierOpt	  "Fulltext modifier"
 	TableRefsClause               "Table references clause"
 	FuncDatetimePrec              "Function datetime precision"
@@ -1075,7 +1077,6 @@ import (
 	LengthNum                     "Field length num(uint64)"
 	TableOptimizerHints           "Table level optimizer hints"
 	TableOptimizerHintsOpt        "Table level optimizer hints option"
-	AttributesOpt                 "Attributes options"
 	SpOptInout                    "Optional procedure param type"
 	OptSpPdparams                 "Optional procedure param list"
 	SpPdparams                    "Procedure params"
@@ -1115,6 +1116,7 @@ import (
 	ProcedureFetchList            "Procedure fetch into variables"
 	Match                         "[MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]"
 	MatchOpt                      "optional MATCH clause"
+	AttributesOpt                 "Attributes options"
 
 %type	<ident>
 	AsOpt             "AS or EmptyString"
@@ -1624,6 +1626,13 @@ AlterTableSpec:
 	{
 		$$ = &ast.AlterTableSpec{
 			Tp: ast.AlterTableDropTableGroup,
+		}
+	}
+|	AttributesOpt
+	{
+		$$ = &ast.AlterTableSpec{
+			Tp:             ast.AlterTableAttributes,
+			AttributesSpec: $1.(*ast.AttributesSpec),
 		}
 	}
 
@@ -4476,7 +4485,7 @@ Expression:
 	{
 		expr, ok := $2.(*ast.ExistsSubqueryExpr)
 		if ok {
-			expr.Not = true
+			expr.Not = !expr.Not
 			$$ = $2
 		} else {
 			$$ = &ast.UnaryOperationExpr{Op: opcode.Not, V: $2}
@@ -6237,6 +6246,13 @@ FunctionCallNonKeyword:
 			Args:   []ast.ExprNode{$6, $4, direction},
 		}
 	}
+|	builtinTranslate '(' Expression ',' Expression ',' Expression ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+			Args:   []ast.ExprNode{$3, $5, $7},
+		}
+	}
 
 GetFormatSelector:
 	"DATE"
@@ -6674,6 +6690,14 @@ CastType:
 		x.Flag |= mysql.BinaryFlag
 		$$ = x
 	}
+|   "YEAR"
+    {
+        x := types.NewFieldType(mysql.TypeYear)
+        x.Charset = charset.CharsetBin
+        x.Collate = charset.CollationBin
+        x.Flag |= mysql.BinaryFlag
+        $$ = x
+    }
 |	"DATETIME" OptFieldLen
 	{
 		x := types.NewFieldType(mysql.TypeDatetime)
@@ -9264,9 +9288,9 @@ TableOption:
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: $4.(string)}
 	}
-|	"AUTO_INCREMENT" EqOpt LengthNum
+|	ForceOpt "AUTO_INCREMENT" EqOpt LengthNum
 	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionAutoIncrement, UintValue: $3.(uint64)}
+		$$ = &ast.TableOption{Tp: ast.TableOptionAutoIncrement, UintValue: $4.(uint64), BoolValue: $1.(bool)}
 	}
 |	"COMMENT" EqOpt stringLit
 	{
@@ -9329,9 +9353,9 @@ TableOption:
 		// Parse it but will ignore it.
 		$$ = &ast.TableOption{Tp: ast.TableOptionPackKeys}
 	}
-|	"AUTO_RANDOM_BASE" EqOpt LengthNum
+|	ForceOpt "AUTO_RANDOM_BASE" EqOpt LengthNum
 	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionAutoRandomBase, UintValue: $3.(uint64)}
+		$$ = &ast.TableOption{Tp: ast.TableOptionAutoRandomBase, UintValue: $4.(uint64), BoolValue: $1.(bool)}
 	}
 |	SetOpt "TABLEGROUP" EqOpt StringName
 	{
@@ -9345,6 +9369,18 @@ TableOption:
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionBroadcast}
 	}
+
+ForceOpt:
+	/* empty */
+	{
+		$$ = false
+	}
+|	"FORCE"
+	{
+		$$ = true
+	}
+
+	
 StatsPersistentVal:
 	"DEFAULT"
 	{}

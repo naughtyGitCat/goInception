@@ -372,6 +372,8 @@ func (ft *FieldType) RestoreAsCastType(ctx *format.RestoreCtx) {
 		}
 	case mysql.TypeJSON:
 		ctx.WriteKeyWord("JSON")
+	case mysql.TypeYear:
+		ctx.WriteKeyWord("YEAR")
 	}
 }
 
