@@ -1529,7 +1529,7 @@ func (s *SetOprType) String() string {
 type SetOprStmt struct {
 	dmlNode
 	resultSetNode
-
+	IsInBraces bool
 	SelectList *SetOprSelectList
 	OrderBy    *OrderByClause
 	Limit      *Limit
@@ -1542,6 +1542,12 @@ func (n *SetOprStmt) Restore(ctx *RestoreCtx) error {
 		if err := n.With.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore UnionStmt.With")
 		}
+	}
+	if n.IsInBraces {
+		ctx.WritePlain("(")
+		defer func() {
+			ctx.WritePlain(")")
+		}()
 	}
 	if err := n.SelectList.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore SetOprStmt.SelectList")
