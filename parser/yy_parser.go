@@ -120,6 +120,7 @@ func New() *Parser {
 		cache: make([]yySymType, 200),
 	}
 	p.SetStrictDoubleTypeCheck(true)
+	p.EnableWindowFunc(true)
 	return p
 }
 
