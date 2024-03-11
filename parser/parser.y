@@ -7013,13 +7013,19 @@ RollbackStmt:
 	}
 
 SelectStmtBasic:
-	"SELECT" SelectStmtOpts SelectStmtFieldList
+	"SELECT" SelectStmtOpts SelectStmtFieldList HavingClause
 	{
 		st := &ast.SelectStmt{
 			SelectStmtOpts: $2.(*ast.SelectStmtOpts),
 			Distinct:       $2.(*ast.SelectStmtOpts).Distinct,
 			Fields:         $3.(*ast.FieldList),
 			Kind:           ast.SelectStmtKindSelect,
+		}
+		if st.SelectStmtOpts.TableHints != nil {
+			st.TableHints = st.SelectStmtOpts.TableHints
+		}
+		if $4 != nil {
+			st.Having = $4.(*ast.HavingClause)
 		}
 		$$ = st
 	}
@@ -7043,12 +7049,9 @@ SelectStmtFromTable:
 	{
 		st := $1.(*ast.SelectStmt)
 		st.From = $3.(*ast.TableRefsClause)
-		if st.SelectStmtOpts.TableHints != nil {
-			st.TableHints = st.SelectStmtOpts.TableHints
-		}
 		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
 		if lastField.Expr != nil && lastField.AsName.O == "" {
-			lastEnd := parser.endOffset(&yyS[yypt-4])
+			lastEnd := parser.endOffset(&yyS[yypt-5])
 			lastField.SetText(parser.src[lastField.Offset:lastEnd])
 		}
 		if $4 != nil {
@@ -7147,27 +7150,8 @@ SelectStmt:
 		if $6 != nil {
 			st.LockInfo = $6.(*ast.SelectLockInfo)
 		}
-		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
-		if lastField.Expr != nil && lastField.AsName.O == "" {
-			src := parser.src
-			var lastEnd int
-			if $2 != nil {
-				lastEnd = yyS[yypt-4].offset - 1
-			} else if $3 != nil {
-				lastEnd = yyS[yypt-3].offset - 1
-			} else if $4 != nil {
-				lastEnd = yyS[yypt-2].offset - 1
-			} else if $5 != nil {
-				lastEnd = yyS[yypt-1].offset - 1
-			} else if st.LockInfo != nil && st.LockInfo.LockType != ast.SelectLockNone {
-				lastEnd = yyS[yypt].offset - 1
-			} else {
-				lastEnd = len(src)
-				if src[lastEnd-1] == ';' {
-					lastEnd--
-				}
-			}
-			lastField.SetText(src[lastField.Offset:lastEnd])
+		if $2 != nil {
+			st.Where = $2.(ast.ExprNode)
 		}
 		if $3 != nil {
 			st.GroupBy = $3.(*ast.GroupByClause)
@@ -8073,13 +8057,19 @@ SubSelect:
 	}
 |	'(' SelectStmtWithClause ')'
 	{
-		rs := $2.(*ast.SelectStmt)
-		endOffset := parser.endOffset(&yyS[yypt])
-		parser.setLastSelectFieldText(rs, endOffset)
-		src := parser.src
-		// See the implementation of yyParse function
-		rs.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
-		$$ = &ast.SubqueryExpr{Query: rs}
+		switch rs := $2.(type) {
+		case *ast.SelectStmt:
+			endOffset := parser.endOffset(&yyS[yypt])
+			parser.setLastSelectFieldText(rs, endOffset)
+			src := parser.src
+			// See the implementation of yyParse function
+			rs.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
+			$$ = &ast.SubqueryExpr{Query: rs}
+		case *ast.SetOprStmt:
+			src := parser.src
+			rs.SetText(src[yyS[yypt-1].offset:yyS[yypt].offset])
+			$$ = &ast.SubqueryExpr{Query: rs}
+		}
 	}
 |	'(' SubSelect ')'
 	{
@@ -8225,6 +8215,8 @@ SetOprStmtWoutLimitOrderBy:
 		}
 		var setOprList2 []ast.Node
 		var with2 *ast.WithClause
+		var limit2 *ast.Limit
+		var orderBy2 *ast.OrderByClause
 		switch x := $3.(*ast.SubqueryExpr).Query.(type) {
 			case *ast.SelectStmt:
 				setOprList2 = []ast.Node{x}
@@ -8232,8 +8224,10 @@ SetOprStmtWoutLimitOrderBy:
 			case *ast.SetOprStmt:
 				setOprList2 = x.SelectList.Selects
 				with2 = x.With
+				limit2 = x.Limit
+				orderBy2 = x.OrderBy
 		}
-		nextSetOprList := &ast.SetOprSelectList{Selects: setOprList2, With: with2}
+		nextSetOprList := &ast.SetOprSelectList{Selects: setOprList2, With: with2, Limit: limit2, OrderBy: orderBy2}
 		nextSetOprList.AfterSetOperator = $2.(*ast.SetOprType)
 		setOprList := append(setOprList1, nextSetOprList)
 		setOpr := &ast.SetOprStmt{SelectList: &ast.SetOprSelectList{Selects: setOprList}}
