@@ -31,6 +31,7 @@ import (
 	"github.com/hanchuanchuan/goInception/types"
 	"github.com/hanchuanchuan/goInception/util/charset"
 	"github.com/pingcap/errors"
+	"github.com/siddontang/go-log/log"
 )
 
 const (
@@ -165,13 +166,16 @@ func (s *session) checkAutoIncrementOp(colDef *ast.ColumnDef, num int) (bool, er
 }
 
 func (s *session) checkDuplicateColumnName(indexColNames []*ast.IndexPartSpecification) {
+	log.Debug("checkDuplicateColumnName")
 	colNames := make(map[string]struct{}, len(indexColNames))
 	for _, indexColName := range indexColNames {
-		name := indexColName.Column.Name
-		if _, ok := colNames[name.L]; ok {
-			s.appendErrorNo(ER_DUP_FIELDNAME, name)
+		if indexColName.Expr == nil {
+			name := indexColName.Column.Name
+			if _, ok := colNames[name.L]; ok {
+				s.appendErrorNo(ER_DUP_FIELDNAME, name)
+			}
+			colNames[name.L] = struct{}{}
 		}
-		colNames[name.L] = struct{}{}
 	}
 }
 

@@ -132,6 +132,7 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 }
 
 func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
+	log.Debug("executeInc")
 	sqlList := strings.Split(sql, "\n")
 
 	// tidb执行的SQL关闭general日志
@@ -691,7 +692,10 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 
 	case *ast.SetStmt:
 		s.checkSetStmt(node)
-	case *ast.DropProcedureStmt, *ast.ProcedureInfo:
+	case *ast.DropProcedureStmt:
+		s.checkDropProcedure(node)
+	case *ast.ProcedureInfo:
+		s.checkCreateProcedure(node)
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
@@ -2053,7 +2057,7 @@ func (s *session) isReadOnly() bool {
 }
 
 func (s *session) parseOptions(sql string) {
-
+	log.Debug("parseOptions")
 	firsts := regParseOption.FindStringSubmatch(sql)
 	if len(firsts) < 2 {
 		log.Warning(sql)
@@ -2436,6 +2440,82 @@ func (s *session) checkDropTableGroup(node *ast.DropTableGroupStmt, sql string) 
 	if !s.checkTableGroupExists(node.TableGroup.Name.O, false) && !node.IfExists {
 		s.appendErrorNo(ER_TABLE_GROUP_NOT_EXISTED_ERROR, node.TableGroup.Name.O)
 	}
+}
+
+func (s *session) checkCreateProcedure(node *ast.ProcedureInfo) {
+	log.Debug("checkCreateProcedure")
+
+	s.checkKeyWords(node.ProcedureName.Schema.O)
+	if s.myRecord.ErrLevel == 2 {
+		return
+	}
+
+	if node.ProcedureName.Schema.O == "" {
+		node.ProcedureName.Schema = model.NewCIStr(s.dbName)
+	}
+
+	if s.checkProcedureExists(node.ProcedureName.Schema.O, node.ProcedureName.Name.O, false) {
+		if !node.IfNotExists {
+			s.appendErrorNo(ER_PROCEDURE_EXISTS_ERROR, node.ProcedureName.Name.O)
+			return
+		}
+	}
+
+	if !s.hasError() && s.opt.Execute {
+		s.myRecord.DDLRollback = fmt.Sprintf("DROP PROCEDURE %s`;", node.ProcedureName.Name.O)
+	}
+}
+
+func (s *session) checkDropProcedure(node *ast.DropProcedureStmt) {
+	log.Debug("checkDropProcedure")
+
+	s.checkKeyWords(node.ProcedureName.Name.O)
+	if s.myRecord.ErrLevel == 2 {
+		return
+	}
+
+	if node.ProcedureName.Schema.O == "" {
+		node.ProcedureName.Schema = model.NewCIStr(s.dbName)
+	}
+
+	if !s.checkProcedureExists(node.ProcedureName.Schema.O, node.ProcedureName.Name.O, false) && !node.IfExists {
+		s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, node.ProcedureName.Name.O)
+	}
+}
+
+func (s *session) checkProcedureExists(dbName string, procname string, reportNotExists bool) bool {
+	var db string
+	var name string
+
+	sql := fmt.Sprintf(`SELECT DB, NAME FROM MYSQL.PROC
+	WHERE DB='%s' AND NAME='%s' and TYPE = 'PROCEDURE';`, dbName, procname)
+
+	rows, err := s.raw(sql)
+	if rows != nil {
+		defer rows.Close()
+	}
+
+	if err != nil {
+		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	} else if rows != nil {
+		for rows.Next() {
+			rows.Scan(&db, &name)
+		}
+	}
+
+	found := false
+	if strings.ToLower(dbName) == db && strings.ToLower(procname) == name {
+		found = true
+	}
+	if !found && reportNotExists {
+		s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, procname)
+	}
+	return found
 }
 
 // mysqlShowTableStatus 获取表估计的受影响行数
@@ -4564,6 +4644,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 
 func (s *session) checkIndexAttr(tp ast.ConstraintType, name string,
 	keys []*ast.IndexPartSpecification, table *TableInfo) {
+	log.Debug("checkIndexAttr")
 
 	if tp == ast.ConstraintPrimaryKey {
 
@@ -4648,14 +4729,17 @@ func (s *session) checkIndexAttr(tp ast.ConstraintType, name string,
 	if s.inc.MaxKeyParts > 0 && len(keys) > int(s.inc.MaxKeyParts) {
 		s.appendErrorNo(ER_TOO_MANY_KEY_PARTS, name, table.Name, s.inc.MaxKeyParts)
 	}
-
 }
 
 /* 检查当前索引是否与已存在的索引存在字段重复, 比如(a,b) 与 (a)是存在重复的 */
 func (s *session) checkDupColumnIndex(t *TableInfo, name string, keys []*ast.IndexPartSpecification) {
+	log.Debug("checkDupColumnIndex")
 	columns := ""
 	for _, c := range keys {
-		columns += c.Column.Name.String() + ","
+		if c.Expr == nil {
+			columns += c.Column.Name.String() + ","
+		}
+
 	}
 	idxMap := make(map[string]string)
 	for _, idx := range t.Indexes {
@@ -5158,108 +5242,109 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 	isBlobColumn := false
 	isOverflowIndexLength := false
 	for _, col := range IndexColNames {
-		found := false
-		var foundField FieldInfo
+		if col.Expr == nil {
+			found := false
+			var foundField FieldInfo
 
-		for _, field := range t.Fields {
-			if strings.EqualFold(field.Field, col.Column.Name.O) {
-				found = true
-				foundField = field
-				break
-			}
-		}
-		if !found {
-			s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, col.Column.Name.O))
-		} else {
-
-			if strings.ToLower(foundField.Type) == "json" {
-				s.appendErrorMsg(
-					fmt.Sprintf("JSON column '%-.192s' cannot be used in key specification.", foundField.Field))
-			}
-
-			if strings.Contains(strings.ToLower(foundField.Type), "blob") {
-				isBlobColumn = true
-				s.appendErrorNo(ER_BLOB_USED_AS_KEY, foundField.Field)
-			}
-
-			columnIndexLength := foundField.getDataBytes(s.dbVersion, s.databaseCharset)
-
-			// Length must be specified for BLOB and TEXT column indexes.
-			// if types.IsTypeBlob(col.FieldType.Tp) && ic.Length == types.UnspecifiedLength {
-			// 	return nil, errors.Trace(errBlobKeyWithoutLength)
-			// }
-
-			if col.Length != types.UnspecifiedLength {
-				if !strings.Contains(strings.ToLower(foundField.Type), "blob") &&
-					!strings.Contains(strings.ToLower(foundField.Type), "char") &&
-					!strings.Contains(strings.ToLower(foundField.Type), "text") {
-					s.appendErrorNo(ER_WRONG_SUB_KEY)
-					col.Length = types.UnspecifiedLength
-				}
-
-				if (strings.Contains(strings.ToLower(foundField.Type), "blob") ||
-					strings.Contains(strings.ToLower(foundField.Type), "char") ||
-					strings.Contains(strings.ToLower(foundField.Type), "text")) &&
-					col.Length > columnIndexLength {
-					s.appendErrorNo(ER_WRONG_SUB_KEY)
-					col.Length = columnIndexLength
+			for _, field := range t.Fields {
+				if strings.EqualFold(field.Field, col.Column.Name.O) {
+					found = true
+					foundField = field
+					break
 				}
 			}
-
-			if col.Length == types.UnspecifiedLength {
-				keyMaxLen += columnIndexLength
+			if !found {
+				s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, col.Column.Name.O))
 			} else {
-				tmpField := &FieldInfo{
-					Field:     foundField.Field,
-					Type:      fmt.Sprintf("%s(%d)", GetDataTypeBase(foundField.Type), col.Length),
-					Collation: foundField.Collation,
+
+				if strings.ToLower(foundField.Type) == "json" {
+					s.appendErrorMsg(
+						fmt.Sprintf("JSON column '%-.192s' cannot be used in key specification.", foundField.Field))
 				}
 
-				columnIndexLength = tmpField.getDataLength(s.dbVersion, s.databaseCharset)
-				keyMaxLen += columnIndexLength
+				if strings.Contains(strings.ToLower(foundField.Type), "blob") {
+					isBlobColumn = true
+					s.appendErrorNo(ER_BLOB_USED_AS_KEY, foundField.Field)
+				}
 
-				// bysPerChar := 3
-				// charset := s.Inc.DefaultCharset
-				// if foundField.Collation != "" {
-				// 	charset = strings.SplitN(foundField.Collation, "_", 2)[0]
+				columnIndexLength := foundField.getDataBytes(s.dbVersion, s.databaseCharset)
+
+				// Length must be specified for BLOB and TEXT column indexes.
+				// if types.IsTypeBlob(col.FieldType.Tp) && ic.Length == types.UnspecifiedLength {
+				// 	return nil, errors.Trace(errBlobKeyWithoutLength)
 				// }
-				// if _, ok := charSets[strings.ToLower(charset)]; ok {
-				// 	bysPerChar = charSets[strings.ToLower(charset)]
-				// }
-				// keyMaxLen += col.Length * bysPerChar
 
-				// if foundField.Collation == "" || strings.HasPrefix(foundField.Collation, "utf8mb4") {
-				// 	keyMaxLen += col.Length * 4
-				// } else {
-				// 	keyMaxLen += col.Length * 3
-				// }
-			}
+				if col.Length != types.UnspecifiedLength {
+					if !strings.Contains(strings.ToLower(foundField.Type), "blob") &&
+						!strings.Contains(strings.ToLower(foundField.Type), "char") &&
+						!strings.Contains(strings.ToLower(foundField.Type), "text") {
+						s.appendErrorNo(ER_WRONG_SUB_KEY)
+						col.Length = types.UnspecifiedLength
+					}
 
-			if !s.innodbLargePrefix && !isOverflowIndexLength &&
-				!isBlobColumn &&
-				columnIndexLength > maxKeyLength {
-				s.appendErrorNo(ER_TOO_LONG_KEY, IndexName, maxKeyLength)
-				isOverflowIndexLength = true
-			}
-
-			if tp == ast.ConstraintPrimaryKey {
-				fieldType := GetDataTypeBase(strings.ToLower(foundField.Type))
-
-				// if !strings.Contains(strings.ToLower(foundField.Type), "int") {
-				if fieldType != "mediumint" && fieldType != "int" &&
-					fieldType != "bigint" {
-					s.appendErrorNo(ER_PK_COLS_NOT_INT, foundField.Field, t.Schema, t.Name)
+					if (strings.Contains(strings.ToLower(foundField.Type), "blob") ||
+						strings.Contains(strings.ToLower(foundField.Type), "char") ||
+						strings.Contains(strings.ToLower(foundField.Type), "text")) &&
+						col.Length > columnIndexLength {
+						s.appendErrorNo(ER_WRONG_SUB_KEY)
+						col.Length = columnIndexLength
+					}
 				}
 
-				if foundField.Null == "YES" {
-					s.appendErrorNo(ER_PRIMARY_CANT_HAVE_NULL)
+				if col.Length == types.UnspecifiedLength {
+					keyMaxLen += columnIndexLength
+				} else {
+					tmpField := &FieldInfo{
+						Field:     foundField.Field,
+						Type:      fmt.Sprintf("%s(%d)", GetDataTypeBase(foundField.Type), col.Length),
+						Collation: foundField.Collation,
+					}
+
+					columnIndexLength = tmpField.getDataLength(s.dbVersion, s.databaseCharset)
+					keyMaxLen += columnIndexLength
+
+					// bysPerChar := 3
+					// charset := s.Inc.DefaultCharset
+					// if foundField.Collation != "" {
+					// 	charset = strings.SplitN(foundField.Collation, "_", 2)[0]
+					// }
+					// if _, ok := charSets[strings.ToLower(charset)]; ok {
+					// 	bysPerChar = charSets[strings.ToLower(charset)]
+					// }
+					// keyMaxLen += col.Length * bysPerChar
+
+					// if foundField.Collation == "" || strings.HasPrefix(foundField.Collation, "utf8mb4") {
+					// 	keyMaxLen += col.Length * 4
+					// } else {
+					// 	keyMaxLen += col.Length * 3
+					// }
 				}
-			} else if tp == ast.ConstraintSpatial {
-				if foundField.Null == "YES" {
-					s.appendErrorMsg("All parts of a SPATIAL index must be NOT NULL")
+
+				if !s.innodbLargePrefix && !isOverflowIndexLength &&
+					!isBlobColumn &&
+					columnIndexLength > maxKeyLength {
+					s.appendErrorNo(ER_TOO_LONG_KEY, IndexName, maxKeyLength)
+					isOverflowIndexLength = true
+				}
+
+				if tp == ast.ConstraintPrimaryKey {
+					fieldType := GetDataTypeBase(strings.ToLower(foundField.Type))
+
+					// if !strings.Contains(strings.ToLower(foundField.Type), "int") {
+					if fieldType != "mediumint" && fieldType != "int" &&
+						fieldType != "bigint" {
+						s.appendErrorNo(ER_PK_COLS_NOT_INT, foundField.Field, t.Schema, t.Name)
+					}
+
+					if foundField.Null == "YES" {
+						s.appendErrorNo(ER_PRIMARY_CANT_HAVE_NULL)
+					}
+				} else if tp == ast.ConstraintSpatial {
+					if foundField.Null == "YES" {
+						s.appendErrorMsg("All parts of a SPATIAL index must be NOT NULL")
+					}
 				}
 			}
-
 		}
 	}
 
@@ -5343,24 +5428,27 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 	}
 	// cache new index
 	for i, col := range IndexColNames {
-		index := &IndexInfo{
-			Table: t.Name,
-			// NonUnique:  unique  ,
-			IndexName:  IndexName,
-			Seq:        i + 1,
-			ColumnName: col.Column.Name.O,
-			IndexType:  indexType,
+		if col.Expr == nil {
+			index := &IndexInfo{
+				Table: t.Name,
+				// NonUnique:  unique  ,
+				IndexName:  IndexName,
+				Seq:        i + 1,
+				ColumnName: col.Column.Name.O,
+				IndexType:  indexType,
+			}
+
+			if !unique && (tp == ast.ConstraintPrimaryKey || tp == ast.ConstraintUniq ||
+				tp == ast.ConstraintUniqIndex || tp == ast.ConstraintUniqKey) {
+				unique = true
+			}
+			if unique {
+				index.NonUnique = 0
+			} else {
+				index.NonUnique = 1
+			}
+			t.Indexes = append(t.Indexes, index)
 		}
-		if !unique && (tp == ast.ConstraintPrimaryKey || tp == ast.ConstraintUniq ||
-			tp == ast.ConstraintUniqIndex || tp == ast.ConstraintUniqKey) {
-			unique = true
-		}
-		if unique {
-			index.NonUnique = 0
-		} else {
-			index.NonUnique = 1
-		}
-		t.Indexes = append(t.Indexes, index)
 	}
 
 	if s.opt.Execute {

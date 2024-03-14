@@ -53,6 +53,7 @@ import (
 	/*yy:token "%c"     */
 	identifier "identifier"
 	asof       "AS OF"
+	memberof    "MEMBER OF"
 	/*yy:token "_%c"    */
 	underscoreCS "UNDERSCORE_CHARSET"
 
@@ -78,6 +79,7 @@ import (
 	alter             "ALTER"
 	analyze           "ANALYZE"
 	and               "AND"
+	array             "ARRAY"
 	as                "AS"
 	asc               "ASC"
 	between           "BETWEEN"
@@ -432,6 +434,7 @@ import (
 	maxQueriesPerHour      "MAX_QUERIES_PER_HOUR"
 	maxUpdatesPerHour      "MAX_UPDATES_PER_HOUR"
 	maxUserConnections     "MAX_USER_CONNECTIONS"
+	member                 "MEMBER"
 	merge                  "MERGE"
 	minRows                "MIN_ROWS"
 	names                  "NAMES"
@@ -476,6 +479,7 @@ import (
 	replication            "REPLICATION"
 	reverse                "REVERSE"
 	rollback               "ROLLBACK"
+	rollup                 "ROLLUP"
 	routine                "ROUTINE"
 	row                    "ROW"
 	rowCount               "ROW_COUNT"
@@ -776,6 +780,7 @@ import (
 	AlterTableSpec                "Alter table specification"
 	AlterTableSpecList            "Alter table specification list"
 	AlterTableSpecListOpt         "Alter table specification list optional"
+	ArrayKwdOpt	  		          "Array options"
 	AnyOrAll                      "Any or All for subquery"
 	Assignment                    "assignment"
 	AssignmentList                "assignment list"
@@ -1049,6 +1054,7 @@ import (
 	WindowNameOrSpec              "WINDOW name or spec"
 	WindowSpec                    "WINDOW spec"
 	WindowSpecDetails             "WINDOW spec details"
+	WithRollupClause              "With rollup clause"
 	BetweenOrNotOp                "Between predicate"
 	IsOrNotOp                     "Is predicate"
 	InOrNotOp                     "In predicate"
@@ -1176,6 +1182,8 @@ import (
 %precedence sqlBigResult
 %precedence sqlSmallResult
 %precedence sqlCache sqlNoCache
+%precedence lowerThanWith
+%precedence with
 %precedence lowerThanStringLitToken
 %precedence stringLit
 %precedence lowerThanSetKeyword
@@ -4815,6 +4823,10 @@ PredicateExpr:
 	{
 		$$ = &ast.PatternRegexpExpr{Expr: $1, Pattern: $3, Not: !$2.(bool)}
 	}
+|	BitExpr memberof '(' SimpleExpr ')'
+	{
+		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.JSONMemberOf), Args: []ast.ExprNode{$1, $4}}
+	}
 |	BitExpr
 
 RegexpSym:
@@ -4901,10 +4913,20 @@ FieldList:
 		$$ = append(fl, newField)
 	}
 
-GroupByClause:
-	"GROUP" "BY" ByList
+WithRollupClause:
+	%prec lowerThanWith
 	{
-		$$ = &ast.GroupByClause{Items: $3.([]*ast.ByItem)}
+		$$ = false
+	}
+|	"WITH" "ROLLUP"
+	{
+		$$ = true
+	}
+
+GroupByClause:
+	"GROUP" "BY" ByList WithRollupClause
+	{
+		$$ = &ast.GroupByClause{Items: $3.([]*ast.ByItem), Rollup: $4.(bool)}
 	}
 
 HavingClause:
@@ -5227,6 +5249,7 @@ UnReservedKeyword:
 |	"REDUNDANT"
 |	"REORGANIZE"
 |	"ROLLBACK"
+|	"ROLLUP"
 |	"SESSION"
 |	"SIGNED"
 |	"PARTIAL"
@@ -5354,6 +5377,7 @@ UnReservedKeyword:
 |	"DEFINER"
 |	"INVOKER"
 |	"MERGE"
+|	"MEMBER"
 |	"TEMPTABLE"
 |	"UNDEFINED"
 |	"SECURITY"
@@ -5983,7 +6007,7 @@ SimpleExpr:
 			FunctionType: ast.CastBinaryOperator,
 		}
 	}
-|	builtinCast '(' Expression "AS" CastType ')'
+|	builtinCast '(' Expression "AS" CastType ArrayKwdOpt ')'
 	{
 		/* See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_cast */
 		tp := $5.(*types.FieldType)
@@ -6055,6 +6079,15 @@ SimpleExpr:
 		expr := ast.NewValueExpr($3)
 		extract := &ast.FuncCallExpr{FnName: model.NewCIStr(ast.JSONExtract), Args: []ast.ExprNode{$1, expr}}
 		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr(ast.JSONUnquote), Args: []ast.ExprNode{extract}}
+	}
+
+ArrayKwdOpt:
+	{
+		$$ = false
+	}
+|	"ARRAY"
+	{
+		$$ = true
 	}
 
 DistinctKwd:
@@ -11413,7 +11446,7 @@ ProcedureProcStmt:
  *  Valid SQL routine statement
  ********************************************************************************************/
 CreateProcedureStmt:
-		"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureProcStmt
+	"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureProcStmt
 	{
 		x := &ast.ProcedureInfo{
 			IfNotExists:    $3.(bool),

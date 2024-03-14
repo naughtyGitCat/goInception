@@ -228,6 +228,8 @@ const (
 	ER_ERROR_LAST
 	ErrNotAllowedTypeInPartition
 	ErrUniqueKeyNeedAllFieldsInPf
+	ER_PROCEDURE_NOT_EXISTED_ERROR
+	ER_PROCEDURE_EXISTS_ERROR
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -423,6 +425,8 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_ERROR_LAST:                  "TheLastError,ByeBye",
 	ErrNotAllowedTypeInPartition:   "Field '%-.192s' is of a not allowed type for this type of partitioning",
 	ErrUniqueKeyNeedAllFieldsInPf:  "A %-.192s must include all columns in the table's partitioning function",
+	ER_PROCEDURE_NOT_EXISTED_ERROR: "Procedure '%-.64s' does not exist",
+	ER_PROCEDURE_EXISTS_ERROR:      "Procedure'%s' already exists.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -609,6 +613,8 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrMaxColumnCount:                      "表'%s'列数过多(上限:%d,当前:%d)",
 	ErrNotAllowedTypeInPartition:           "分区不允许此数据类型'%-.192s'",
 	ErrUniqueKeyNeedAllFieldsInPf:          "主键唯一键必需包含所有分区键'%-.192s'",
+	ER_PROCEDURE_NOT_EXISTED_ERROR:         "存储过程 '%s' 不存在.",
+	ER_PROCEDURE_EXISTS_ERROR:              "存储过程 '%s' 已存在.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -1151,6 +1157,10 @@ func (e ErrorCode) String() string {
 		return "errnotallowedtypeinpartition"
 	case ErrUniqueKeyNeedAllFieldsInPf:
 		return "erruniquekeyneedallfieldsinpf"
+	case ER_PROCEDURE_NOT_EXISTED_ERROR:
+		return "er_procedure_not_existed_error"
+	case ER_PROCEDURE_EXISTS_ERROR:
+		return "er_procedure_exists_error"
 	}
 	return ""
 }

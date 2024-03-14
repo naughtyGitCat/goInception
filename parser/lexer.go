@@ -169,13 +169,17 @@ func (s *Scanner) Lex(v *yySymType) int {
 		return not2
 	}
 
-	if tok == as && s.getNextToken() == of {
+	if (tok == as || tok == member) && s.getNextToken() == of {
 		_, pos, lit = s.scan()
 		v.ident = fmt.Sprintf("%s %s", v.ident, lit)
-		s.lastKeyword = asof
 		s.lastScanOffset = pos.Offset
 		v.offset = pos.Offset
-		return asof
+		if tok == as {
+			s.lastKeyword = asof
+			return asof
+		}
+		s.lastKeyword = memberof
+		return memberof
 	}
 
 	switch tok {

@@ -309,6 +309,7 @@ const (
 	JSONReplace       = "json_replace"
 	JSONRemove        = "json_remove"
 	JSONContains      = "json_contains"
+	JSONMemberOf      = "json_memberof"
 	JSONContainsPath  = "json_contains_path"
 	JSONValid         = "json_valid"
 	JSONArrayAppend   = "json_array_append"
