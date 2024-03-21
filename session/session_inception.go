@@ -1264,47 +1264,76 @@ func (s *session) sqlStatisticsIncrement(record *Record) {
 	switch node := record.Type.(type) {
 	case *ast.InsertStmt:
 		s.statistics.insert += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.DeleteStmt:
 		s.statistics.deleting += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.UpdateStmt:
 		s.statistics.update += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 
 	case *ast.UseStmt:
 		s.statistics.usedb += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 
 	case *ast.CreateDatabaseStmt:
 		s.statistics.createdb += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 
 	// case *ast.DropDatabaseStmt:
 	// 	s.statistics.dropdb += 1
 
 	case *ast.CreateTableStmt:
 		s.statistics.createtable += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
+	case *ast.CreateViewStmt:
+		s.statistics.createview += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.AlterTableStmt:
 		s.statistics.altertable += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 
 		for _, alter := range node.Specs {
 			switch alter.Tp {
 			case ast.AlterTableOption:
 				s.statistics.alteroption += 1
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			case ast.AlterTableAddColumns:
 				s.statistics.addcolumn += 1
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			case ast.AlterTableDropColumn:
 				s.statistics.dropcolumn += 1
-
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			case ast.AlterTableAddConstraint:
 				s.statistics.createindex += 1
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			case ast.AlterTableDropPrimaryKey, ast.AlterTableDropIndex:
 				s.statistics.dropindex += 1
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 
 			// case ast.AlterTableDropForeignKey:
 
 			case ast.AlterTableModifyColumn, ast.AlterTableChangeColumn:
 				s.statistics.changecolumn += 1
-
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			case ast.AlterTableRenameTable:
 				s.statistics.rename += 1
-
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			case ast.AlterTableAlterColumn:
 				for _, nc := range alter.NewColumns {
 					// if nc.Options != nil {
@@ -1314,6 +1343,8 @@ func (s *session) sqlStatisticsIncrement(record *Record) {
 						if nc.Tp.Charset != "" || nc.Tp.Collate != "" {
 							if nc.Tp.Charset != "binary" {
 								s.statistics.alterconvert += 1
+								s.statistics.host = s.opt.Host
+								s.statistics.port = s.opt.Port
 							}
 						}
 					}
@@ -1323,24 +1354,36 @@ func (s *session) sqlStatisticsIncrement(record *Record) {
 				ast.AlterTableAlgorithm,
 				ast.AlterTableForce:
 				s.statistics.alteroption += 1
+				s.statistics.host = s.opt.Host
+				s.statistics.port = s.opt.Port
 			}
 
 		}
 
 	case *ast.DropTableStmt:
 		s.statistics.droptable += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.RenameTableStmt:
 		s.statistics.rename += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.TruncateTableStmt:
 		s.statistics.truncate += 1
-
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.CreateIndexStmt:
 		s.statistics.createindex += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.DropIndexStmt:
 		s.statistics.dropindex += 1
-
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	case *ast.SelectStmt:
 		s.statistics.selects += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 
 	}
 }
@@ -1357,11 +1400,12 @@ func (s *session) sqlStatisticsSave() {
 	INSERT INTO inception.statistic ( usedb, deleting, inserting, updating,
 		selecting, altertable, renaming, createindex, dropindex, addcolumn,
 		dropcolumn, changecolumn, alteroption, alterconvert,
-		createtable, droptable, CREATEDB, truncating)
+		createtable, createview, droptable, createdb, truncating, host, port)
 	VALUES(?, ?, ?, ?, ?,
 	       ?, ?, ?, ?, ?,
 	       ?, ?, ?, ?, ?,
-	       ?, ?, ?);`
+	       ?, ?, ?, ?, ?,
+		   ?);`
 
 	values := []interface{}{
 		s.statistics.usedb,
@@ -1379,11 +1423,14 @@ func (s *session) sqlStatisticsSave() {
 		s.statistics.alteroption,
 		s.statistics.alterconvert,
 		s.statistics.createtable,
+		s.statistics.createview,
 		s.statistics.droptable,
 		s.statistics.createdb,
 		s.statistics.truncate,
 		// s.statistics.changedefault,
 		// s.statistics.dropdb,
+		s.statistics.host,
+		s.statistics.port,
 	}
 
 	if err := s.backupdb.Exec(sql, values...).Error; err != nil {
@@ -1444,11 +1491,14 @@ func statisticsTableSQL() string {
 	buf.WriteString("alteroption int not null default 0, ")
 	buf.WriteString("alterconvert int not null default 0, ")
 	buf.WriteString("createtable int not null default 0, ")
+	buf.WriteString("createview int not null default 0, ")
 	buf.WriteString("droptable int not null default 0, ")
 	buf.WriteString("createdb int not null default 0, ")
-	buf.WriteString("truncating int not null default 0 ")
+	buf.WriteString("truncating int not null default 0, ")
+	buf.WriteString("host varchar(60) not null, ")
+	buf.WriteString("port int not null ")
 
-	buf.WriteString(")ENGINE INNODB DEFAULT CHARSET UTF8;")
+	buf.WriteString(")ENGINE INNODB DEFAULT CHARSET UTF8MB4;")
 
 	return buf.String()
 }
@@ -3609,7 +3659,10 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 
 		case ast.AlterTableLock,
 			ast.AlterTableAlgorithm,
-			ast.AlterTableForce:
+			ast.AlterTableForce,
+			ast.AlterTableAddLastPartition,
+			ast.AlterTableDropFirstPartition,
+			ast.AlterTableSetInterval:
 			// 不做校验,允许这些参数
 
 		case ast.AlterTableIndexInvisible:

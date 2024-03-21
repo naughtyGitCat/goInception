@@ -181,6 +181,8 @@ func (s *session) mysqlExecuteBackupInfoInsertSql(record *Record, longDataType b
 		typeStr = "CREATEDB"
 	case *ast.CreateTableStmt:
 		typeStr = "CREATETABLE"
+	case *ast.CreateViewStmt:
+		typeStr = "CREATEVIEW"
 	case *ast.AlterTableStmt:
 		typeStr = "ALTERTABLE"
 	case *ast.DropTableStmt:

@@ -771,6 +771,7 @@ func validRangePartitionType(col *ast.ColumnDef) bool {
 
 // checkRangePartitioningKeysConstraints checks that the range partitioning key is included in the table constraint.
 func (s *session) checkRangePartitioningKeysConstraints(table *ast.CreateTableStmt) {
+	log.Debug("checkRangePartitioningKeysConstraints")
 	// Returns directly if there is no constraint in the partition table.
 	if len(table.Constraints) == 0 {
 		return
@@ -824,10 +825,37 @@ func extractConstraintsColumnNames(cons []*ast.Constraint) []map[string]struct{}
 // checkConstraintIncludePartKey checks that the partitioning key is included in the constraint.
 func checkConstraintIncludePartKey(partkeys []string, constraints map[string]struct{}) bool {
 	for _, pk := range partkeys {
-		name := strings.Replace(pk, "`", "", -1)
-		if _, ok := constraints[name]; !ok {
-			return false
+		contents, _ := extractParenthesesContent(pk)
+		for _, content := range contents {
+			name := strings.Replace(content, "`", "", -1)
+			if _, ok := constraints[name]; !ok {
+				return false
+			}
 		}
 	}
 	return true
+}
+
+// extractParenthesesContent 从字符串中提取圆括号中的内容
+func extractParenthesesContent(s string) ([]string, error) {
+	var results []string
+	start := -1
+	for i, c := range s {
+		if c == '(' {
+			if start != -1 {
+				return nil, fmt.Errorf("unbalanced parentheses")
+			}
+			start = i
+		} else if c == ')' {
+			if start == -1 {
+				return nil, fmt.Errorf("unbalanced parentheses")
+			}
+			results = append(results, s[start+1:i])
+			start = -1
+		}
+	}
+	if start != -1 {
+		return nil, fmt.Errorf("unbalanced parentheses")
+	}
+	return results, nil
 }

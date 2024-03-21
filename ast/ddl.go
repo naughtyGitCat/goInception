@@ -2411,6 +2411,7 @@ const (
 	AlterTableAddLastPartition
 	AlterTableCache
 	AlterTableNoCache
+	AlterTableSetInterval
 
 	// TODO: Add more actions
 )
@@ -2840,6 +2841,12 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 		if n.NoWriteToBinlog {
 			ctx.WriteKeyWord(" NO_WRITE_TO_BINLOG")
 		}
+	case AlterTableSetInterval:
+		ctx.WriteKeyWord("SET INTERVAL (")
+		if err := n.Partition.PartitionMethod.Expr.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore AlterTableSetInterval Exprs")
+		}
+		ctx.WriteKeyWord(")")
 	case AlterTableAlterPartition:
 		if len(n.PartitionNames) != 1 {
 			return errors.Errorf("Maybe partition options are combined.")
@@ -3831,26 +3838,36 @@ func (n *PartitionMethod) Restore(ctx *RestoreCtx) error {
 
 	if n.Interval != nil {
 		ctx.WritePlain(" INTERVAL (")
-		n.Interval.IntervalExpr.Expr.Restore(ctx)
-		if n.Interval.IntervalExpr.Expr != nil {
-			ctx.WritePlain(" ")
-		}
-		ctx.WritePlain(")")
-		if n.Interval.FirstRangeEnd != nil {
-			ctx.WritePlain(" FIRST PARTITION LESS THAN (")
-			(*n.Interval.FirstRangeEnd).Restore(ctx)
+		if n.Interval.FirstRangeEnd != nil && n.Interval.LastRangeEnd != nil {
+			n.Interval.IntervalExpr.Expr.Restore(ctx)
+			if n.Interval.IntervalExpr.Expr != nil {
+				ctx.WritePlain(" ")
+				ctx.WriteKeyWord(n.Interval.IntervalExpr.TimeUnit)
+			}
 			ctx.WritePlain(")")
-		}
-		if n.Interval.LastRangeEnd != nil {
-			ctx.WritePlain(" LAST PARTITION LESS THAN (")
-			(*n.Interval.LastRangeEnd).Restore(ctx)
+			if n.Interval.FirstRangeEnd != nil {
+				ctx.WritePlain(" FIRST PARTITION LESS THAN (")
+				(*n.Interval.FirstRangeEnd).Restore(ctx)
+				ctx.WritePlain(")")
+			}
+			if n.Interval.LastRangeEnd != nil {
+				ctx.WritePlain(" LAST PARTITION LESS THAN (")
+				(*n.Interval.LastRangeEnd).Restore(ctx)
+				ctx.WritePlain(")")
+			}
+			if n.Interval.NullPart {
+				ctx.WritePlain(" NULL PARTITION")
+			}
+			if n.Interval.MaxValPart {
+				ctx.WritePlain(" MAXVALUE PARTITION")
+			}
+		} else {
+			if n.Interval.IntervalExpr.Expr != nil {
+				ctx.WriteKeyWord(n.Interval.IntervalExpr.TimeUnit)
+				ctx.WritePlain(",")
+				n.Interval.IntervalExpr.Expr.Restore(ctx)
+			}
 			ctx.WritePlain(")")
-		}
-		if n.Interval.NullPart {
-			ctx.WritePlain(" NULL PARTITION")
-		}
-		if n.Interval.MaxValPart {
-			ctx.WritePlain(" MAXVALUE PARTITION")
 		}
 	}
 	return nil

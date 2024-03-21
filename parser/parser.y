@@ -1429,6 +1429,12 @@ AlterTableSpec:
 			Partition: &ast.PartitionOptions{PartitionMethod: partitionMethod},
 		}
 	}
+|	"SET" "INTERVAL" '(' IntervalExpr ')'
+	{	
+		$$ = &ast.AlterTableSpec{
+			Tp:             ast.AlterTableSetInterval,
+		}
+	}
 |	"EXCHANGE" "PARTITION" Identifier "WITH" "TABLE" TableName WithValidationOpt
 	{
 		$$ = &ast.AlterTableSpec{
@@ -3787,6 +3793,11 @@ IntervalExpr:
 	{
 		$$ = ast.PartitionIntervalExpr{Expr: $1, TimeUnit: $2}
 	}
+|	TimeUnit ',' BitExpr
+	{
+		$$ = ast.PartitionIntervalExpr{Expr: $3, TimeUnit: $1}
+	}
+
 NullPartOpt:
 	{
 		$$ = false

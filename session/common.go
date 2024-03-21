@@ -99,11 +99,14 @@ type statisticsInfo struct {
 	alteroption  int
 	alterconvert int
 	createtable  int
+	createview   int
 	droptable    int
 	createdb     int
 	truncate     int
 	// changedefault int
 	// dropdb        int
+	host string
+	port int
 }
 
 // type SourceOptions = sourceOptions
