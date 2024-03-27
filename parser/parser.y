@@ -234,6 +234,9 @@ import (
 	references        "REFERENCES"
 	regexpKwd         "REGEXP"
 	rename            "RENAME"
+	returns           "RETURNS"
+	returnKwd         "RETURN"
+	deterministic     "DETERMINISTIC"
 	repeat            "REPEAT"
 	replace           "REPLACE"
 	restrict          "RESTRICT"
@@ -245,6 +248,7 @@ import (
 	rows              "ROWS"
 	secondMicrosecond "SECOND_MICROSECOND"
 	selectKwd         "SELECT"
+	sequence          "SEQUENCE"
 	set               "SET"
 	show              "SHOW"
 	get               "GET"
@@ -351,6 +355,7 @@ import (
 	connection             "CONNECTION"
 	consistent             "CONSISTENT"
 	current                "CURRENT"
+	cycle           	   "CYCLE"
 	clustered              "CLUSTERED"
 	day                    "DAY"
 	data                   "DATA"
@@ -410,6 +415,7 @@ import (
 	importKwd              "IMPORT"
 	imports                "IMPORTS"
 	isolation              "ISOLATION"
+	increment              "INCREMENT"
 	indexes                "INDEXES"
 	invisible              "INVISIBLE"
 	invoker                "INVOKER"
@@ -437,14 +443,19 @@ import (
 	member                 "MEMBER"
 	merge                  "MERGE"
 	minRows                "MIN_ROWS"
+	minValue        	   "MINVALUE"
 	names                  "NAMES"
 	next                   "NEXT"
 	national               "NATIONAL"
 	no                     "NO"
+	nocycle        	       "NOCYCLE"
 	nocache                "NOCACHE"
 	nodegroup              "NODEGROUP"
+	nomaxvalue      	   "NOMAXVALUE"
+	nominvalue      	   "NOMINVALUE"
 	nonclustered           "NONCLUSTERED"
 	none                   "NONE"
+	noorder         	   "NOORDER"
 	nowait                 "NOWAIT"
 	offset                 "OFFSET"
 	only                   "ONLY"
@@ -469,6 +480,7 @@ import (
 	queries                "QUERIES"
 	quick                  "QUICK"
 	respect                "RESPECT"
+	restart                "RESTART"
 	recover                "RECOVER"
 	redundant              "REDUNDANT"
 	reload                 "RELOAD"
@@ -684,6 +696,7 @@ import (
 	AlterTableStmt       "Alter table statement"
 	AlterTableGroupStmt  "Alter table group statement"
 	AlterUserStmt        "Alter user statement"
+	AlterSequenceStmt    "Alter sequence statement"
 	AnalyzeTableStmt     "Analyze table statement"
 	BeginTransactionStmt "BEGIN TRANSACTION statement"
 	BinlogStmt           "Binlog base64 statement"
@@ -698,13 +711,17 @@ import (
 	CreateDatabaseStmt   "Create Database Statement"
 	AlterDatabaseStmt    "Alter Database Statement"
 	CreateIndexStmt      "CREATE INDEX statement"
+	CreateSequenceStmt   "CREATE SEQUENCE statement"
 	CreateProcedureStmt  "CREATE PROCEDURE statement"
+	CreateFunctionStmt   "CREATE FUNCTION statement"
 	DoStmt               "Do statement"
 	DropDatabaseStmt     "DROP DATABASE statement"
 	DropIndexStmt        "DROP INDEX statement"
 	DropProcedureStmt    "DROP PROCEDURE statement"
+	DropFunctionStmt     "DROP FUNCTION statement"
 	DropStatsStmt        "DROP STATS statement"
 	DropTableStmt        "DROP TABLE statement"
+	DropSequenceStmt     "DROP SEQUENCE statement"
 	DropTableGroupStmt   "DROP TABLEGROUP statement"
 	DropUserStmt         "DROP USER"
 	DropViewStmt         "DROP VIEW statement"
@@ -724,6 +741,7 @@ import (
 	LoadStatsStmt        "Load statistic statement"
 	LockTablesStmt       "Lock tables statement"
 	PreparedStmt         "PreparedStmt"
+	FunctionProcStmt    "The entrance of function"
 	ProcedureProcStmt    "The entrance of procedure statements which contains all kinds of statements in procedure"
 	ProcedureStatementStmt     "The normal statements in procedure, such as dml, select, set ..."
 	SelectStmt           "SELECT statement"
@@ -768,8 +786,11 @@ import (
 	ProcedureLeave             "The leave statement in procedure, expressed by `leave ...`"
 	CreateViewSelectOpt        "Select/Union statement in CREATE VIEW ... AS SELECT"
 	UpdateStmtNoWith           "Update statement without CTE clause"
+	ReturnStatement			   "The return statement in function"
+	ReturnStatements		   "The return statements in function"
 
 %type	<item>
+	
 	AdminShowSlow                 "Admin Show Slow statement"
 	AllOrPartitionNameList        "All or partition name list"
 	AlgorithmClause               "Alter table algorithm"
@@ -780,6 +801,8 @@ import (
 	AlterTableSpec                "Alter table specification"
 	AlterTableSpecList            "Alter table specification list"
 	AlterTableSpecListOpt         "Alter table specification list optional"
+	AlterSequenceOption           "Alter sequence option"
+	AlterSequenceOptionList       "Alter sequence option list"
 	ArrayKwdOpt	  		          "Array options"
 	AnyOrAll                      "Any or All for subquery"
 	Assignment                    "assignment"
@@ -812,6 +835,7 @@ import (
 	ConstraintElem                "table constraint element"
 	ConstraintElemInner           "table constraint element inner"
 	ConstraintKeywordOpt          "Constraint Keyword or empty"
+	CreateSequenceOptionListOpt   "create sequence list opt"
 	CreateTableOptionListOpt      "create table option list opt"
 	CreateTableSelectOpt          "Select/Union statement in CREATE TABLE ... SELECT"
 	DatabaseOption                "CREATE Database specification"
@@ -939,19 +963,22 @@ import (
 	SelectLockOpt                 "SELECT lock options"
 	SelectStmtSQLCache            "SELECT statement optional SQL_CAHCE/SQL_NO_CACHE"
 	SelectStmtFieldList           "SELECT statement field list"
-	SelectStmtLimit                        "SELECT statement LIMIT clause"
-	SelectStmtLimitOpt                     "SELECT statement optional LIMIT clause"
-	SelectStmtOpt                          "Select statement option"
+	SelectStmtLimit               "SELECT statement LIMIT clause"
+	SelectStmtLimitOpt            "SELECT statement optional LIMIT clause"
+	SelectStmtOpt                 "Select statement option"
 	SelectStmtOpts                "Select statement options"
-	SelectStmtOptsList                     "Select statement options list"
+	SelectStmtOptsList            "Select statement options list"
 	SelectStmtBasic               "SELECT statement from constant value"
-	SelectStmtFromDualTable            "SELECT statement from dual"
+	SelectStmtFromDualTable       "SELECT statement from dual"
 	SelectStmtFromTable           "SELECT statement from table"
 	SelectStmtGroup               "SELECT statement optional GROUP BY clause"
+	SequenceOption                "create sequence option"
+	SequenceOptionList            "create sequence option list"
+	SelectStmtIntoList            "SELECT statement into clause list"
 	SetOpt                        "SET or empty"
-	SetOpr                                 "Set operator contain UNION, EXCEPT and INTERSECT"
-	SetOprClause                           "Union/Except/Intersect select clause"
-	SetOprClauseList                       "Union/Except/Intersect select clause list"
+	SetOpr                        "Set operator contain UNION, EXCEPT and INTERSECT"
+	SetOprClause                  "Union/Except/Intersect select clause"
+	SetOprClauseList              "Union/Except/Intersect select clause list"
 	ShowTargetFilterable          "Show target that can be filtered by WHERE or LIKE"
 	ShowDatabaseNameOpt           "Show tables/columns statement database name option"
 	ShowTableAliasOpt             "Show table alias option"
@@ -1029,6 +1056,7 @@ import (
 	WithGrantOptionOpt            "With Grant Option opt"
 	WithValidation                "with validation"
 	WithValidationOpt             "optional with validation"
+	
 	ElseOpt                       "Optional else clause"
 	Type                          "Types"
 	OptExistingWindowName         "Optional existing WINDOW name"
@@ -1084,6 +1112,7 @@ import (
 	NUM                           "A number"
 	NumList                       "Some numbers"
 	LengthNum                     "Field length num(uint64)"
+	SignedNum              		  "Signed num(int64)"
 	TableOptimizerHints           "Table level optimizer hints"
 	TableOptimizerHintsOpt        "Table level optimizer hints option"
 	SpOptInout                    "Optional procedure param type"
@@ -4157,6 +4186,7 @@ CreateViewStmt:
 	}
 
 OrReplace:
+	/* EMPTY */
 	{
 		$$ = false
 	}
@@ -5431,6 +5461,14 @@ UnReservedKeyword:
 |	"LOCKED"
 |	"CACHE"
 |	"NOCACHE"
+| 	"INCREMENT"
+|	"MINVALUE"
+|	"NOMAXVALUE"
+|	"NOMINVALUE"
+|	"CYCLE"
+|	"NOCYCLE"
+|	"NOORDER"
+|	"RESTART"
 
 TiDBKeyword:
 	"ADMIN"
@@ -7057,7 +7095,7 @@ RollbackStmt:
 	}
 
 SelectStmtBasic:
-	"SELECT" SelectStmtOpts SelectStmtFieldList HavingClause
+	"SELECT" SelectStmtOpts SelectStmtFieldList HavingClause SelectStmtIntoList
 	{
 		st := &ast.SelectStmt{
 			SelectStmtOpts: $2.(*ast.SelectStmtOpts),
@@ -8079,6 +8117,15 @@ SelectStmtGroup:
 	}
 |	GroupByClause
 
+SelectStmtIntoList:
+	{
+		$$ = nil
+	}
+|	"INTO" ExpressionList
+	{
+		$$ = nil
+	}
+
 // See https://dev.mysql.com/doc/refman/5.7/en/subqueries.html
 SubSelect:
 	'(' SelectStmt ')'
@@ -9051,6 +9098,13 @@ ShowStmt:
 			Procedure: $4.(*ast.TableName),
 		}
 	}
+|	"SHOW" "CREATE" "FUNCTION" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:        ast.ShowCreateFunction,
+			Function: $4.(*ast.TableName),
+		}
+	}
 
 ShowIndexKwd:
 	"INDEX"
@@ -9323,6 +9377,7 @@ Statement:
 |	AlterTableStmt
 |	AlterTableGroupStmt
 |	AlterUserStmt
+|	AlterSequenceStmt
 |	AnalyzeTableStmt
 |	BeginTransactionStmt
 |	BinlogStmt
@@ -9342,11 +9397,15 @@ Statement:
 |	CreateViewStmt
 |	CreateUserStmt
 |	CreateProcedureStmt
+|	CreateFunctionStmt
+|	CreateSequenceStmt
 |	DoStmt
 |	DropDatabaseStmt
 |	DropIndexStmt
 |	DropTableStmt
+|	DropSequenceStmt
 |	DropProcedureStmt
+|	DropFunctionStmt
 |	DropTableGroupStmt
 |	DropViewStmt
 |	DropUserStmt
@@ -9713,6 +9772,7 @@ Type:
 	{
 		$$ = $1
 	}
+
 
 NumericType:
 	IntegerType OptFieldLen FieldOpts
@@ -10930,6 +10990,7 @@ SpPdparam:
 		$$ = x
 	}
 
+
 SpOptInout:
 	/* Empty */
 	{
@@ -11212,8 +11273,15 @@ ProcedureProcStmt1s:
 		$$ = l
 	}
 
+ReturnStatements:
+	/* Empty */
+	{
+		$$ = nil
+	}
+|	ReturnStatements ReturnStatement ';'
+
 ProcedureBlockContent:
-	"BEGIN" ProcedureDeclsOpt ProcedureProcStmts "END"
+	"BEGIN" ProcedureDeclsOpt ProcedureProcStmts ReturnStatements "END"
 	{
 		x := &ast.ProcedureBlock{
 			ProcedureVars:      $2.([]ast.DeclNode),
@@ -11424,9 +11492,24 @@ ProcedureLeave:
 		}
 	}
 
+
+
 ProcedureProcStmt:
 	ProcedureStatementStmt
 |	ProcedureUnlabeledBlock
+|	ProcedureIfstmt
+|	ProcedureCaseStmt
+|	ProcedureUnlabelLoopBlock
+|	ProcedureOpenCur
+|	ProcedureCloseCur
+|	ProcedureFetchInto
+|	ProcedureLabeledBlock
+|	ProcedurelabeledLoopStmt
+|	ProcedureIterate
+|	ProcedureLeave
+
+FunctionProcStmt:
+	ProcedureUnlabeledBlock
 |	ProcedureIfstmt
 |	ProcedureCaseStmt
 |	ProcedureUnlabelLoopBlock
@@ -11486,5 +11569,255 @@ DropProcedureStmt:
 			IfExists:      $3.(bool),
 			ProcedureName: $4.(*ast.TableName),
 		}
+	}
+
+
+ReturnStatement:
+	"RETURN" Expression
+	{
+		$$ = &ast.FunctionReturn{
+			Expr: $2,
+		}
+	}
+
+
+/********************************************************************************************
+ *
+ *  Create Function Statement
+ *
+ *  Example:
+ *	CREATE
+ *  [DEFINER = user]
+ *  FUNCTION [IF NOT EXISTS] sp_name ([func_parameter[,...]])
+ *  routine_body
+ *  func_parameter:
+ *  param_name type
+ *  type:
+ *  Any valid MySQL data type
+ * routine_body:
+ *  Valid SQL routine statement
+ ********************************************************************************************/
+
+CreateFunctionStmt:
+	"CREATE" "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type FunctionProcStmt
+	{
+		x := &ast.FunctionInfo{
+			IfNotExists:    $3.(bool),
+			FunctionName:  $4.(*ast.TableName),
+			FunctionParam: $6.([]*ast.StoreParameter),
+			FunctionBody:  $10,
+		}
+		startOffset := parser.startOffset(&yyS[yypt])
+		originStmt := $10
+		originStmt.SetText(strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
+		startOffset = parser.startOffset(&yyS[yypt-3])
+		if parser.src[startOffset] == '(' {
+			startOffset++
+		}
+		endOffset := parser.startOffset(&yyS[yypt-1])
+		x.FunctionParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
+		$$ = x
+	}
+
+/********************************************************************************************
+*  DROP FUNCTION  [IF EXISTS] sp_name
+********************************************************************************************/
+DropFunctionStmt:
+	"DROP" "FUNCTION" IfExists TableName
+	{
+		$$ = &ast.DropFunctionStmt{
+			IfExists:      $3.(bool),
+			FunctionName: $4.(*ast.TableName),
+		}
+	}
+/********************************************************************************************
+ *
+ *  Create Sequence Statement
+ *
+ *  Example:
+ *	CREATE SEQUENCE [IF NOT EXISTS] sequence_name
+ *	[ INCREMENT [ BY | = ] increment ]
+ *	[ MINVALUE [=] minvalue | NO MINVALUE | NOMINVALUE ]
+ *	[ MAXVALUE [=] maxvalue | NO MAXVALUE | NOMAXVALUE ]
+ *	[ START [ WITH | = ] start ]
+ *	[ CACHE [=] cache | NOCACHE | NO CACHE]
+ *	[ CYCLE | NOCYCLE | NO CYCLE]
+ *	[ ORDER | NOORDER | NO ORDER]
+ *	[table_options]
+ ********************************************************************************************/
+ CreateSequenceStmt:
+	"CREATE" "SEQUENCE" IfNotExists TableName CreateSequenceOptionListOpt CreateTableOptionListOpt
+	{
+		$$ = &ast.CreateSequenceStmt{
+			IfNotExists: $3.(bool),
+			Name: $4.(*ast.TableName),
+			SeqOptions: $5.([]*ast.SequenceOption),
+			TblOptions: $6.([]*ast.TableOption),
+		}
+	}
+
+CreateSequenceOptionListOpt:
+	{
+		$$ = []*ast.SequenceOption{}
+	}
+|	SequenceOptionList
+
+SequenceOptionList:
+	SequenceOption
+	{
+		$$ = []*ast.SequenceOption{$1.(*ast.SequenceOption)}
+	}
+|	SequenceOptionList SequenceOption
+	{
+		$$ = append($1.([]*ast.SequenceOption), $2.(*ast.SequenceOption))
+	}
+
+SequenceOption:
+	"INCREMENT" EqOpt SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceOptionIncrementBy, IntValue: $3.(int64),}
+	}
+|	"INCREMENT" "BY" SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceOptionIncrementBy, IntValue: $3.(int64),}
+	}
+|	"START" EqOpt SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceStartWith, IntValue: $3.(int64),}
+	}
+|	"START" "WITH" SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceStartWith, IntValue: $3.(int64),}
+	}
+|	"MINVALUE" EqOpt SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceMinValue, IntValue: $3.(int64),}
+	}
+|	"NOMINVALUE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoMinValue,}
+	}
+|	"NO" "MINVALUE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoMinValue,}
+	}
+| 	"MAXVALUE" EqOpt SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceMaxValue, IntValue: $3.(int64),}
+	}
+|	"NOMAXVALUE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoMaxValue,}
+	}
+|	"NO" "MAXVALUE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoMaxValue,}
+	}
+|	"CACHE" EqOpt SignedNum
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceCache, IntValue: $3.(int64),}
+	}
+|	"NOCACHE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoCache,}
+	}
+|	"NO" "CACHE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoCache,}
+	}
+| 	"CYCLE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceCycle,}
+	}
+|	"NOCYCLE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoCycle,}
+	}
+|	"NO" "CYCLE"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoCycle,}
+	}
+|	"ORDER"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceOrder,}
+	}
+|	"NOORDER"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoOrder,}
+	}
+|	"NO" "ORDER"
+	{
+		$$ = &ast.SequenceOption{ Tp:ast.SequenceNoOrder,}
+	}
+
+SignedNum:
+	NUM
+	{
+		$$ = $1.(int64)
+	}
+|	'+' NUM
+	{
+		$$ = $2.(int64)
+	}
+|	'-' NUM
+	{
+		$$ = -$2.(int64)
+	}
+
+DropSequenceStmt:
+	"DROP" "SEQUENCE" IfExists TableNameList
+	{
+		$$ = &ast.DropSequenceStmt{
+			IfExists: $3.(bool),
+			Sequences: $4.([]*ast.TableName),
+		}
+	}
+/********************************************************************************************
+ *
+ *  Alter Sequence Statement
+ *
+ *  Example:
+ *	ALTER SEQUENCE [IF EXISTS] sequence_name
+ *	[ INCREMENT [ BY | = ] increment ]
+ *	[ MINVALUE [=] minvalue | NO MINVALUE | NOMINVALUE ]
+ *	[ MAXVALUE [=] maxvalue | NO MAXVALUE | NOMAXVALUE ]
+ *	[ START [ WITH | = ] start ]
+ *	[ CACHE [=] cache | NOCACHE | NO CACHE]
+ *	[ CYCLE | NOCYCLE | NO CYCLE]
+ *	[ RESTART [WITH | = ] restart ]
+ ********************************************************************************************/
+AlterSequenceStmt:
+	"ALTER" "SEQUENCE" IfExists TableName AlterSequenceOptionList
+	{
+		$$ = &ast.AlterSequenceStmt{
+			IfExists:   $3.(bool),
+			Name:       $4.(*ast.TableName),
+			SeqOptions: $5.([]*ast.SequenceOption),
+		}
+	}
+
+AlterSequenceOptionList:
+	AlterSequenceOption
+	{
+		$$ = []*ast.SequenceOption{$1.(*ast.SequenceOption)}
+	}
+|	AlterSequenceOptionList AlterSequenceOption
+	{
+		$$ = append($1.([]*ast.SequenceOption), $2.(*ast.SequenceOption))
+	}
+
+AlterSequenceOption:
+	SequenceOption
+|	"RESTART"
+	{
+		$$ = &ast.SequenceOption{Tp: ast.SequenceRestart}
+	}
+|	"RESTART" EqOpt SignedNum
+	{
+		$$ = &ast.SequenceOption{Tp: ast.SequenceRestartWith, IntValue: $3.(int64)}
+	}
+|	"RESTART" "WITH" SignedNum
+	{
+		$$ = &ast.SequenceOption{Tp: ast.SequenceRestartWith, IntValue: $3.(int64)}
 	}
 %%

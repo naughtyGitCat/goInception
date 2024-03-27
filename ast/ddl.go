@@ -29,15 +29,18 @@ import (
 
 var (
 	_ DDLNode = &AlterTableStmt{}
+	_ DDLNode = &AlterSequenceStmt{}
 	_ DDLNode = &AlterTableGroupStmt{}
 	_ DDLNode = &CreateDatabaseStmt{}
 	_ DDLNode = &CreateIndexStmt{}
 	_ DDLNode = &CreateTableStmt{}
 	_ DDLNode = &CreateTableGroupStmt{}
 	_ DDLNode = &CreateViewStmt{}
+	_ DDLNode = &CreateSequenceStmt{}
 	_ DDLNode = &DropDatabaseStmt{}
 	_ DDLNode = &DropIndexStmt{}
 	_ DDLNode = &DropTableStmt{}
+	_ DDLNode = &DropSequenceStmt{}
 	_ DDLNode = &DropTableGroupStmt{}
 	_ DDLNode = &RenameTableStmt{}
 	_ DDLNode = &TruncateTableStmt{}
@@ -1338,6 +1341,49 @@ func (n *DropTableStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
+// DropSequenceStmt is a statement to drop a Sequence.
+type DropSequenceStmt struct {
+	ddlNode
+
+	IfExists  bool
+	Sequences []*TableName
+}
+
+// Restore implements Node interface.
+func (n *DropSequenceStmt) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("DROP SEQUENCE ")
+	if n.IfExists {
+		ctx.WriteKeyWord("IF EXISTS ")
+	}
+	for i, sequence := range n.Sequences {
+		if i != 0 {
+			ctx.WritePlain(", ")
+		}
+		if err := sequence.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore DropSequenceStmt.Sequences[%d]", i)
+		}
+	}
+
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *DropSequenceStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*DropSequenceStmt)
+	for i, val := range n.Sequences {
+		node, ok := val.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Sequences[i] = node.(*TableName)
+	}
+	return v.Leave(n)
+}
+
 // DropTableGroupStmt is a statement to drop one table group.
 type DropTableGroupStmt struct {
 	ddlNode
@@ -1559,6 +1605,61 @@ func (n *CreateViewStmt) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Select = selnode.(StmtNode)
+	return v.Leave(n)
+}
+
+// CreateSequenceStmt is a statement to create a Sequence.
+type CreateSequenceStmt struct {
+	ddlNode
+
+	// TODO : support or replace if need : care for it will conflict on temporaryOpt.
+	OrReplace   bool
+	IfNotExists bool
+	Name        *TableName
+	SeqOptions  []*SequenceOption
+	TblOptions  []*TableOption
+}
+
+// Restore implements Node interface.
+func (n *CreateSequenceStmt) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("CREATE ")
+	if n.OrReplace {
+		ctx.WriteKeyWord("OR REPLACE ")
+	}
+	ctx.WriteKeyWord("SEQUENCE ")
+	if n.IfNotExists {
+		ctx.WriteKeyWord("IF NOT EXISTS ")
+	}
+	if err := n.Name.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while create CreateSequenceStmt.Name")
+	}
+	for i, option := range n.SeqOptions {
+		ctx.WritePlain(" ")
+		if err := option.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while splicing CreateSequenceStmt SequenceOption: [%v]", i)
+		}
+	}
+	for i, option := range n.TblOptions {
+		ctx.WritePlain(" ")
+		if err := option.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while splicing CreateSequenceStmt TableOption: [%v]", i)
+		}
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *CreateSequenceStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*CreateSequenceStmt)
+	node, ok := n.Name.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.Name = node.(*TableName)
 	return v.Leave(n)
 }
 
@@ -2290,6 +2391,77 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("BROADCAST")
 	default:
 		return errors.Errorf("invalid TableOption: %d", n.Tp)
+	}
+	return nil
+}
+
+// SequenceOptionType is the type for SequenceOption
+type SequenceOptionType int
+
+// SequenceOption types.
+const (
+	SequenceOptionNone SequenceOptionType = iota
+	SequenceOptionIncrementBy
+	SequenceStartWith
+	SequenceNoMinValue
+	SequenceMinValue
+	SequenceNoMaxValue
+	SequenceMaxValue
+	SequenceNoCache
+	SequenceCache
+	SequenceNoCycle
+	SequenceCycle
+	SequenceNoOrder
+	SequenceOrder
+	// SequenceRestart is only used in alter sequence statement.
+	SequenceRestart
+	SequenceRestartWith
+)
+
+// SequenceOption is used for parsing sequence option from SQL.
+type SequenceOption struct {
+	Tp       SequenceOptionType
+	IntValue int64
+}
+
+func (n *SequenceOption) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case SequenceOptionIncrementBy:
+		ctx.WriteKeyWord("INCREMENT BY ")
+		ctx.WritePlainf("%d", n.IntValue)
+	case SequenceStartWith:
+		ctx.WriteKeyWord("START WITH ")
+		ctx.WritePlainf("%d", n.IntValue)
+	case SequenceNoMinValue:
+		ctx.WriteKeyWord("NO MINVALUE")
+	case SequenceMinValue:
+		ctx.WriteKeyWord("MINVALUE ")
+		ctx.WritePlainf("%d", n.IntValue)
+	case SequenceNoMaxValue:
+		ctx.WriteKeyWord("NO MAXVALUE")
+	case SequenceMaxValue:
+		ctx.WriteKeyWord("MAXVALUE ")
+		ctx.WritePlainf("%d", n.IntValue)
+	case SequenceNoCache:
+		ctx.WriteKeyWord("NOCACHE")
+	case SequenceCache:
+		ctx.WriteKeyWord("CACHE ")
+		ctx.WritePlainf("%d", n.IntValue)
+	case SequenceNoCycle:
+		ctx.WriteKeyWord("NOCYCLE")
+	case SequenceCycle:
+		ctx.WriteKeyWord("CYCLE")
+	case SequenceNoOrder:
+		ctx.WriteKeyWord("NOORDER")
+	case SequenceOrder:
+		ctx.WriteKeyWord("ORDER")
+	case SequenceRestart:
+		ctx.WriteKeyWord("RESTART")
+	case SequenceRestartWith:
+		ctx.WriteKeyWord("RESTART WITH ")
+		ctx.WritePlainf("%d", n.IntValue)
+	default:
+		return errors.Errorf("invalid SequenceOption: %d", n.Tp)
 	}
 	return nil
 }
@@ -3248,6 +3420,48 @@ func (n *AlterTableStmt) Accept(v Visitor) (Node, bool) {
 		}
 		n.Specs[i] = node.(*AlterTableSpec)
 	}
+	return v.Leave(n)
+}
+
+// AlterSequenceStmt is a statement to alter sequence option.
+type AlterSequenceStmt struct {
+	ddlNode
+
+	// sequence name
+	Name *TableName
+
+	IfExists   bool
+	SeqOptions []*SequenceOption
+}
+
+func (n *AlterSequenceStmt) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("ALTER SEQUENCE ")
+	if n.IfExists {
+		ctx.WriteKeyWord("IF EXISTS ")
+	}
+	if err := n.Name.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while restore AlterSequenceStmt.Table")
+	}
+	for i, option := range n.SeqOptions {
+		ctx.WritePlain(" ")
+		if err := option.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while splicing AlterSequenceStmt SequenceOption: [%v]", i)
+		}
+	}
+	return nil
+}
+
+func (n *AlterSequenceStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*AlterSequenceStmt)
+	node, ok := n.Name.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.Name = node.(*TableName)
 	return v.Leave(n)
 }
 

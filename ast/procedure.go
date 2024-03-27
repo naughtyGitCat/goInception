@@ -27,7 +27,9 @@ var (
 
 	_ StmtNode = &ProcedureBlock{}
 	_ StmtNode = &ProcedureInfo{}
+	_ StmtNode = &FunctionInfo{}
 	_ StmtNode = &DropProcedureStmt{}
+	_ StmtNode = &DropFunctionStmt{}
 	_ StmtNode = &ProcedureElseIfBlock{}
 	_ StmtNode = &ProcedureElseBlock{}
 	_ StmtNode = &ProcedureIfBlock{}
@@ -36,6 +38,7 @@ var (
 	_ StmtNode = &ProcedureLabelBlock{}
 	_ StmtNode = &ProcedureLabelLoop{}
 	_ StmtNode = &ProcedureJump{}
+	_ StmtNode = &FunctionReturn{}
 
 	_ DeclNode = &ProcedureErrorControl{}
 	_ DeclNode = &ProcedureCursor{}
@@ -317,6 +320,37 @@ func (n *DropProcedureStmt) Accept(v Visitor) (Node, bool) {
 		return v.Leave(newNode)
 	}
 	n = newNode.(*DropProcedureStmt)
+	return v.Leave(n)
+}
+
+// DropFunctionStmt represents the ast of `drop function`
+type DropFunctionStmt struct {
+	stmtNode
+
+	IfExists     bool
+	FunctionName *TableName
+}
+
+// Restore implements DropProcedureStmt interface.
+func (n *DropFunctionStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("DROP FUNCTION ")
+	if n.IfExists {
+		ctx.WriteKeyWord("IF EXISTS ")
+	}
+	err := n.FunctionName.Restore(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Accept implements Node interface.
+func (n *DropFunctionStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*DropFunctionStmt)
 	return v.Leave(n)
 }
 
@@ -1172,5 +1206,88 @@ func (n *ProcedureJump) Accept(v Visitor) (Node, bool) {
 		return v.Leave(newNode)
 	}
 	n = newNode.(*ProcedureJump)
+	return v.Leave(n)
+}
+
+// FunctionReturn stores the return statements  in function.
+type FunctionReturn struct {
+	stmtNode
+	Name string
+	Expr ExprNode
+}
+
+// Restore implements FunctionReturn interface.
+func (n *FunctionReturn) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteString(n.Name)
+	return nil
+}
+
+// Accept implements FunctionReturn Accept interface.
+func (n *FunctionReturn) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*FunctionReturn)
+	return v.Leave(n)
+}
+
+// FunctionInfo stores all function information.
+type FunctionInfo struct {
+	stmtNode
+	IfNotExists      bool
+	FunctionName     *TableName
+	FunctionParam    []*StoreParameter //procedure param
+	FunctionBody     StmtNode          //procedure body statement
+	FunctionParamStr string            //procedure parameter string
+}
+
+// Restore implements Node interface.
+func (n *FunctionInfo) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("CREATE FUNCTION ")
+	if n.IfNotExists {
+		ctx.WriteKeyWord("IF NOT EXISTS ")
+	}
+	err := n.FunctionName.Restore(ctx)
+	if err != nil {
+		return err
+	}
+	ctx.WritePlain("(")
+	for i, FunctionParam := range n.FunctionParam {
+		if i > 0 {
+			ctx.WritePlain(",")
+		}
+		err := FunctionParam.Restore(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	ctx.WritePlain(") ")
+	err = (n.FunctionBody).Restore(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *FunctionInfo) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*FunctionInfo)
+	for i, ProcedureParam := range n.FunctionParam {
+		node, ok := ProcedureParam.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.FunctionParam[i] = node.(*StoreParameter)
+	}
+	node, ok := n.FunctionBody.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.FunctionBody = node.(StmtNode)
 	return v.Leave(n)
 }

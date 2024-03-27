@@ -52,6 +52,9 @@ const (
 	ActionDropTablePartition ActionType = 20
 	ActionAddPrimaryKey      ActionType = 21
 	ActionDropPrimaryKey     ActionType = 22
+	ActionCreateSequence     ActionType = 23
+	ActionAlterSequence      ActionType = 24
+	ActionDropSequence       ActionType = 25
 )
 
 // AddIndexStr is a string related to the operation of "add index".
@@ -84,6 +87,9 @@ var actionMap = map[ActionType]string{
 	ActionDropTablePartition: "drop table partition",
 	ActionAddPrimaryKey:      AddPrimaryKeyStr,
 	ActionDropPrimaryKey:     "drop primary key",
+	ActionCreateSequence:     "create sequence",
+	ActionAlterSequence:      "alter sequence",
+	ActionDropSequence:       "drop sequence",
 }
 
 // String return current ddl action in string

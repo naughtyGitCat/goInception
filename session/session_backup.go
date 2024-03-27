@@ -47,7 +47,7 @@ func (s *session) processChanBackup(wg *sync.WaitGroup) {
 }
 
 func (s *session) runBackup(ctx context.Context) {
-
+	log.Debug("runBackup")
 	var wg sync.WaitGroup
 	wg.Add(1)
 	s.chBackupRecord = make(chan *chanBackup, 50)
@@ -70,6 +70,7 @@ func (s *session) runBackup(ctx context.Context) {
 			// } else {
 			// 	log.Errorf("mysqlCreateBackupTable: record: %v, %v,%v", record, longDataType, hostMaxLength)
 			// }
+
 			if record.TableInfo == nil {
 				s.appendErrorNo(ErrNotFoundTableInfo)
 			} else {

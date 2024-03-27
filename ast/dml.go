@@ -2546,6 +2546,7 @@ const (
 	ShowRegions
 	ShowTableGroups
 	ShowCreateProcedure
+	ShowCreateFunction
 )
 
 const (
@@ -2571,6 +2572,7 @@ type ShowStmt struct {
 	DBName      string
 	Table       *TableName // Used for showing columns.
 	Procedure   *TableName
+	Function    *TableName
 	Column      *ColumnName // Used for `desc table column`.
 	IndexName   model.CIStr
 	Flag        int // Some flag parsed from sql, such as FULL.
@@ -2637,6 +2639,11 @@ func (n *ShowStmt) Restore(ctx *RestoreCtx) error {
 	case ShowCreateProcedure:
 		ctx.WriteKeyWord("CREATE PROCEDURE ")
 		if err := n.Procedure.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ShowStmt.Procedure")
+		}
+	case ShowCreateFunction:
+		ctx.WriteKeyWord("CREATE FUNCTION ")
+		if err := n.Function.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore ShowStmt.Procedure")
 		}
 	case ShowCreateView:

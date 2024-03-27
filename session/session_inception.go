@@ -74,7 +74,7 @@ const (
 )
 
 func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
-
+	log.Debug("ExecuteInc")
 	// 跳过mysql客户端发送的sql
 	// 跳过tidb测试时发送的sql
 
@@ -134,7 +134,6 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
 	log.Debug("executeInc")
 	sqlList := strings.Split(sql, "\n")
-
 	// tidb执行的SQL关闭general日志
 	logging := s.inc.GeneralLog
 
@@ -196,14 +195,13 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 			quotaIsDouble = !quotaIsDouble
 		}
 
-		if ((strings.HasSuffix(sql_line, ";") || strings.HasSuffix(sql_line, ";\r")) &&
+		if (strings.HasSuffix(sql_line, "END;") || strings.HasSuffix(sql_line, "END;\r")) && ((strings.HasSuffix(sql_line, ";") || strings.HasSuffix(sql_line, ";\r")) &&
 			quotaIsDouble) || i == lineCount {
 			// batchSize = 1
 			buf = append(buf, sql_line)
 			s1 := strings.Join(buf, "\n")
 
 			s1 = strings.TrimRight(s1, ";")
-
 			stmtNodes, err := s.ParseSQL(ctx, s1, charsetInfo, collation)
 
 			if err == nil && len(stmtNodes) == 0 {
@@ -696,6 +694,13 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 		s.checkDropProcedure(node)
 	case *ast.ProcedureInfo:
 		s.checkCreateProcedure(node)
+	case *ast.DropFunctionStmt:
+		s.checkDropFunction(node)
+	case *ast.FunctionInfo:
+		s.checkCreateFunction(node)
+	case *ast.CreateSequenceStmt:
+	case *ast.AlterSequenceStmt:
+	case *ast.DropSequenceStmt:
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
@@ -1238,7 +1243,11 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.SetStmt,
 		*ast.DropIndexStmt,
 
-		*ast.CreateViewStmt:
+		*ast.CreateViewStmt,
+		*ast.ProcedureInfo,
+		*ast.DropProcedureStmt,
+		*ast.FunctionInfo,
+		*ast.DropFunctionStmt:
 
 		s.executeRemoteStatement(record, isTran)
 
@@ -1384,7 +1393,22 @@ func (s *session) sqlStatisticsIncrement(record *Record) {
 		s.statistics.selects += 1
 		s.statistics.host = s.opt.Host
 		s.statistics.port = s.opt.Port
-
+	case *ast.DropProcedureStmt:
+		s.statistics.dropproc += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
+	case *ast.DropFunctionStmt:
+		s.statistics.dropfunc += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
+	case *ast.ProcedureInfo:
+		s.statistics.createproc += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
+	case *ast.FunctionInfo:
+		s.statistics.createfunc += 1
+		s.statistics.host = s.opt.Host
+		s.statistics.port = s.opt.Port
 	}
 }
 
@@ -1400,12 +1424,13 @@ func (s *session) sqlStatisticsSave() {
 	INSERT INTO inception.statistic ( usedb, deleting, inserting, updating,
 		selecting, altertable, renaming, createindex, dropindex, addcolumn,
 		dropcolumn, changecolumn, alteroption, alterconvert,
-		createtable, createview, droptable, createdb, truncating, host, port)
+		createtable, createview, droptable, createdb, truncating, 
+		createproc, dropproc, createfunc, dropfunc, host, port)
 	VALUES(?, ?, ?, ?, ?,
 	       ?, ?, ?, ?, ?,
 	       ?, ?, ?, ?, ?,
 	       ?, ?, ?, ?, ?,
-		   ?);`
+		   ?, ?, ?, ?, ?);`
 
 	values := []interface{}{
 		s.statistics.usedb,
@@ -1427,6 +1452,10 @@ func (s *session) sqlStatisticsSave() {
 		s.statistics.droptable,
 		s.statistics.createdb,
 		s.statistics.truncate,
+		s.statistics.createproc,
+		s.statistics.dropproc,
+		s.statistics.createfunc,
+		s.statistics.dropfunc,
 		// s.statistics.changedefault,
 		// s.statistics.dropdb,
 		s.statistics.host,
@@ -2476,7 +2505,7 @@ func (s *session) checkAlterTableGroup(node *ast.AlterTableGroupStmt, sql string
 }
 
 func (s *session) checkDropTableGroup(node *ast.DropTableGroupStmt, sql string) {
-	log.Debug("checkAlterTableGroup")
+	log.Debug("checkDropTableGroup")
 
 	if !s.supportTableGroup() {
 		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
@@ -2494,7 +2523,9 @@ func (s *session) checkDropTableGroup(node *ast.DropTableGroupStmt, sql string) 
 
 func (s *session) checkCreateProcedure(node *ast.ProcedureInfo) {
 	log.Debug("checkCreateProcedure")
-
+	if !s.inc.EnableCreateProcedure {
+		s.appendErrorNo(ER_PROCEDURE_NOT_ALLOWED)
+	}
 	s.checkKeyWords(node.ProcedureName.Schema.O)
 	if s.myRecord.ErrLevel == 2 {
 		return
@@ -2518,7 +2549,10 @@ func (s *session) checkCreateProcedure(node *ast.ProcedureInfo) {
 
 func (s *session) checkDropProcedure(node *ast.DropProcedureStmt) {
 	log.Debug("checkDropProcedure")
-
+	if !s.inc.EnableDropProcedure {
+		s.appendErrorNo(ER_CANT_DROP_PROCEDURE, node.ProcedureName.Name.O)
+		return
+	}
 	s.checkKeyWords(node.ProcedureName.Name.O)
 	if s.myRecord.ErrLevel == 2 {
 		return
@@ -2537,8 +2571,8 @@ func (s *session) checkProcedureExists(dbName string, procname string, reportNot
 	var db string
 	var name string
 
-	sql := fmt.Sprintf(`SELECT DB, NAME FROM MYSQL.PROC
-	WHERE DB='%s' AND NAME='%s' and TYPE = 'PROCEDURE';`, dbName, procname)
+	sql := fmt.Sprintf(`SELECT ROUTINE_SCHEMA,ROUTINE_NAME FROM information_schema.ROUTINES
+	WHERE ROUTINE_SCHEMA='%s' AND ROUTINE_NAME='%s' and ROUTINE_TYPE = 'PROCEDURE';`, dbName, procname)
 
 	rows, err := s.raw(sql)
 	if rows != nil {
@@ -2559,11 +2593,92 @@ func (s *session) checkProcedureExists(dbName string, procname string, reportNot
 	}
 
 	found := false
-	if strings.ToLower(dbName) == db && strings.ToLower(procname) == name {
+	if strings.EqualFold(dbName, db) && strings.EqualFold(procname, name) {
 		found = true
 	}
 	if !found && reportNotExists {
 		s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, procname)
+	}
+	return found
+}
+
+func (s *session) checkCreateFunction(node *ast.FunctionInfo) {
+	log.Debug("checkCreateFunction")
+	if !s.inc.EnableCreateFunction {
+		s.appendErrorNo(ER_FUNCTION_NOT_ALLOWED)
+	}
+	s.checkKeyWords(node.FunctionName.Schema.O)
+	if s.myRecord.ErrLevel == 2 {
+		return
+	}
+
+	if node.FunctionName.Schema.O == "" {
+		node.FunctionName.Schema = model.NewCIStr(s.dbName)
+	}
+
+	if s.checkFunctionExists(node.FunctionName.Schema.O, node.FunctionName.Name.O, false) {
+		if !node.IfNotExists {
+			s.appendErrorNo(ER_FUNCTION_EXISTS_ERROR, node.FunctionName.Name.O)
+			return
+		}
+	}
+
+	if !s.hasError() && s.opt.Execute {
+		s.myRecord.DDLRollback = fmt.Sprintf("DROP FUNCTION %s`;", node.FunctionName.Name.O)
+	}
+}
+
+func (s *session) checkDropFunction(node *ast.DropFunctionStmt) {
+	log.Debug("checkDropFunction")
+	if !s.inc.EnableDropFunction {
+		s.appendErrorNo(ER_CANT_DROP_FUNCTION, node.FunctionName.Name.O)
+		return
+	}
+	s.checkKeyWords(node.FunctionName.Name.O)
+	if s.myRecord.ErrLevel == 2 {
+		return
+	}
+
+	if node.FunctionName.Schema.O == "" {
+		node.FunctionName.Schema = model.NewCIStr(s.dbName)
+	}
+
+	if !s.checkFunctionExists(node.FunctionName.Schema.O, node.FunctionName.Name.O, false) && !node.IfExists {
+		s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, node.FunctionName.Name.O)
+	}
+}
+
+func (s *session) checkFunctionExists(dbName string, funcname string, reportNotExists bool) bool {
+	var db string
+	var name string
+
+	sql := fmt.Sprintf(`SELECT ROUTINE_SCHEMA,ROUTINE_NAME FROM information_schema.ROUTINES
+	WHERE ROUTINE_SCHEMA='%s' AND ROUTINE_NAME='%s' and ROUTINE_TYPE = 'FUNCTION';`, dbName, funcname)
+
+	rows, err := s.raw(sql)
+	if rows != nil {
+		defer rows.Close()
+	}
+
+	if err != nil {
+		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	} else if rows != nil {
+		for rows.Next() {
+			rows.Scan(&db, &name)
+		}
+	}
+
+	found := false
+	if strings.EqualFold(dbName, db) && strings.EqualFold(funcname, name) {
+		found = true
+	}
+	if !found && reportNotExists {
+		s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, funcname)
 	}
 	return found
 }

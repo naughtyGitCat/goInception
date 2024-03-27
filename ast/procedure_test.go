@@ -123,11 +123,41 @@ func TestShowCreateProcedure(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestShowCreateFunction(t *testing.T) {
+	p := parser.New()
+	stmt, _, err := p.Parse("show create function proc_2", "", "")
+	require.NoError(t, err)
+	_, ok := stmt[0].(*ast.ShowStmt)
+	require.True(t, ok)
+	stmt, _, err = p.Parse("drop function proc_2", "", "")
+	require.NoError(t, err)
+	_, ok = stmt[0].(*ast.DropFunctionStmt)
+	require.True(t, ok)
+}
+
 func TestProcedureVisitor(t *testing.T) {
 	sqls := []string{
 		"create procedure proc_2(in id bigint,in id2 varchar(100),in id3 decimal(30,2)) begin declare s varchar(100) DEFAULT FROM_UNIXTIME(1447430881);select s;SELECT * FROM `t1`;SELECT * FROM `t2`;INSERT INTO `t1` VALUES (111);END;",
+		"create procedure proc_2(in id bigint) begin DECLARE value INTEGER;SET value = 0;SELECT current_value INTO value FROM t  WHERE name = seq_name; END;",
 		"show create procedure proc_2;",
 		"drop procedure proc_2;",
+	}
+	parse := parser.New()
+	for _, sql := range sqls {
+		stmts, _, err := parse.Parse(sql, "", "")
+		require.NoError(t, err)
+		for _, stmt := range stmts {
+			stmt.Accept(visitor{})
+			stmt.Accept(visitor1{})
+		}
+	}
+}
+
+func TestFunctionVisitor(t *testing.T) {
+	sqls := []string{
+		"create function proc_2(id bigint) RETURNS int(10)  begin select s;SELECT * FROM `t1`;SELECT * FROM `t2`;INSERT INTO `t1` VALUES (111);RETURN currval(seq_name);END;",
+		"show create function proc_2;",
+		"drop function proc_2;",
 	}
 	parse := parser.New()
 	for _, sql := range sqls {

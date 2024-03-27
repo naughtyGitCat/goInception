@@ -230,6 +230,12 @@ const (
 	ErrUniqueKeyNeedAllFieldsInPf
 	ER_PROCEDURE_NOT_EXISTED_ERROR
 	ER_PROCEDURE_EXISTS_ERROR
+	ER_FUNCTION_NOT_EXISTED_ERROR
+	ER_FUNCTION_EXISTS_ERROR
+	ER_CANT_DROP_FUNCTION
+	ER_CANT_DROP_PROCEDURE
+	ER_PROCEDURE_NOT_ALLOWED
+	ER_FUNCTION_NOT_ALLOWED
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -427,6 +433,12 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErrUniqueKeyNeedAllFieldsInPf:  "A %-.192s must include all columns in the table's partitioning function",
 	ER_PROCEDURE_NOT_EXISTED_ERROR: "Procedure '%-.64s' does not exist",
 	ER_PROCEDURE_EXISTS_ERROR:      "Procedure'%s' already exists.",
+	ER_FUNCTION_NOT_EXISTED_ERROR:  "Function '%-.64s' does not exist",
+	ER_FUNCTION_EXISTS_ERROR:       "Function'%s' already exists.",
+	ER_CANT_DROP_FUNCTION:          "Command is forbidden! Cannot drop function '%s'.",
+	ER_CANT_DROP_PROCEDURE:         "Command is forbidden! Cannot drop procedure '%s'.",
+	ER_PROCEDURE_NOT_ALLOWED:       "Procedure is not allowed.",
+	ER_FUNCTION_NOT_ALLOWED:        "Function is not allowed.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -615,6 +627,12 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrUniqueKeyNeedAllFieldsInPf:          "主键唯一键必需包含所有分区键'%-.192s'",
 	ER_PROCEDURE_NOT_EXISTED_ERROR:         "存储过程 '%s' 不存在.",
 	ER_PROCEDURE_EXISTS_ERROR:              "存储过程 '%s' 已存在.",
+	ER_FUNCTION_NOT_EXISTED_ERROR:          "函数 '%s' 不存在.",
+	ER_FUNCTION_EXISTS_ERROR:               "函数 '%s' 已存在.",
+	ER_CANT_DROP_FUNCTION:                  "命令禁止! 无法删除函数'%s'.",
+	ER_CANT_DROP_PROCEDURE:                 "命令禁止! 无法删除存储过程'%s'.",
+	ER_PROCEDURE_NOT_ALLOWED:               "不允许创建存储过程.",
+	ER_FUNCTION_NOT_ALLOWED:                "不允许创建函数.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -681,7 +699,9 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrImplicitTypeConversion,
 		ErrUseValueExpr,
 		ErrMaxColumnCount,
-		ER_WITH_INSERT_FIELD:
+		ER_WITH_INSERT_FIELD,
+		ER_PROCEDURE_NOT_ALLOWED,
+		ER_FUNCTION_NOT_ALLOWED:
 		return 1
 
 	case ER_CONFLICTING_DECLARATIONS,
@@ -742,7 +762,9 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ER_TOO_MUCH_AUTO_DATETIME_COLS,
 		ErrNotAllowedTypeInPartition,
 		ErrUniqueKeyNeedAllFieldsInPf,
-		ER_INCEPTION_EMPTY_QUERY:
+		ER_INCEPTION_EMPTY_QUERY,
+		ER_CANT_DROP_FUNCTION,
+		ER_CANT_DROP_PROCEDURE:
 		return 2
 
 	default:
@@ -1161,6 +1183,18 @@ func (e ErrorCode) String() string {
 		return "er_procedure_not_existed_error"
 	case ER_PROCEDURE_EXISTS_ERROR:
 		return "er_procedure_exists_error"
+	case ER_FUNCTION_NOT_EXISTED_ERROR:
+		return "er_function_not_existed_error"
+	case ER_FUNCTION_EXISTS_ERROR:
+		return "er_function_exists_error"
+	case ER_CANT_DROP_FUNCTION:
+		return "er_cant_drop_function"
+	case ER_CANT_DROP_PROCEDURE:
+		return "er_cant_drop_procedure"
+	case ER_PROCEDURE_NOT_ALLOWED:
+		return "er_procedure_not_allowed"
+	case ER_FUNCTION_NOT_ALLOWED:
+		return "er_function_not_allowed"
 	}
 	return ""
 }

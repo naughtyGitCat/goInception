@@ -463,3 +463,39 @@ func (ts *testDDLSuite) TestAlterTableSpecRestore(c *C) {
 	}
 	RunNodeRestoreTest(c, testCases, "ALTER TABLE t %s", extractNodeFunc)
 }
+
+func (ts *testDDLSuite) TestSequenceRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"create sequence seq", "CREATE SEQUENCE `seq`"},
+		{"create sequence if not exists seq", "CREATE SEQUENCE IF NOT EXISTS `seq`"},
+		{"create sequence if not exists seq increment 1", "CREATE SEQUENCE IF NOT EXISTS `seq` INCREMENT BY 1"},
+		{"create sequence if not exists seq increment = 1", "CREATE SEQUENCE IF NOT EXISTS `seq` INCREMENT BY 1"},
+		{"create sequence if not exists seq minvalue 1", "CREATE SEQUENCE IF NOT EXISTS `seq` MINVALUE 1"},
+		{"create sequence if not exists seq minvalue = 1", "CREATE SEQUENCE IF NOT EXISTS `seq` MINVALUE 1"},
+		{"create sequence if not exists seq nominvalue", "CREATE SEQUENCE IF NOT EXISTS `seq` NO MINVALUE"},
+		{"create sequence if not exists seq no minvalue", "CREATE SEQUENCE IF NOT EXISTS `seq` NO MINVALUE"},
+		{"create sequence if not exists seq maxvalue 1", "CREATE SEQUENCE IF NOT EXISTS `seq` MAXVALUE 1"},
+		{"create sequence if not exists seq maxvalue = 1", "CREATE SEQUENCE IF NOT EXISTS `seq` MAXVALUE 1"},
+		{"create sequence if not exists seq nomaxvalue", "CREATE SEQUENCE IF NOT EXISTS `seq` NO MAXVALUE"},
+		{"create sequence if not exists seq no maxvalue", "CREATE SEQUENCE IF NOT EXISTS `seq` NO MAXVALUE"},
+		{"create sequence if not exists seq start 1", "CREATE SEQUENCE IF NOT EXISTS `seq` START WITH 1"},
+		{"create sequence if not exists seq start with 1", "CREATE SEQUENCE IF NOT EXISTS `seq` START WITH 1"},
+		{"create sequence if not exists seq cache 1", "CREATE SEQUENCE IF NOT EXISTS `seq` CACHE 1"},
+		{"create sequence if not exists seq nocache", "CREATE SEQUENCE IF NOT EXISTS `seq` NOCACHE"},
+		{"create sequence if not exists seq no cache", "CREATE SEQUENCE IF NOT EXISTS `seq` NOCACHE"},
+		{"create sequence if not exists seq cycle", "CREATE SEQUENCE IF NOT EXISTS `seq` CYCLE"},
+		{"create sequence if not exists seq nocycle", "CREATE SEQUENCE IF NOT EXISTS `seq` NOCYCLE"},
+		{"create sequence if not exists seq no cycle", "CREATE SEQUENCE IF NOT EXISTS `seq` NOCYCLE"},
+		{"create sequence if not exists seq order", "CREATE SEQUENCE IF NOT EXISTS `seq` ORDER"},
+		{"create sequence if not exists seq noorder", "CREATE SEQUENCE IF NOT EXISTS `seq` NOORDER"},
+		{"create sequence if not exists seq no order", "CREATE SEQUENCE IF NOT EXISTS `seq` NOORDER"},
+		// test drop sequence
+		{"drop sequence seq", "DROP SEQUENCE `seq`"},
+		{"drop sequence seq, seq2", "DROP SEQUENCE `seq`, `seq2`"},
+		{"drop sequence if exists seq, seq2", "DROP SEQUENCE IF EXISTS `seq`, `seq2`"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node
+	}
+	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+}

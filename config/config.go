@@ -298,6 +298,10 @@ type Inc struct {
 	EnablePartitionTable   bool `toml:"enable_partition_table" json:"enable_partition_table"`
 	EnablePKColumnsOnlyInt bool `toml:"enable_pk_columns_only_int" json:"enable_pk_columns_only_int"`
 	EnableSelectStar       bool `toml:"enable_select_star" json:"enable_select_star"`
+	EnableCreateProcedure  bool `toml:"enable_create_procedure" json:"enable_create_procedure"`
+	EnableDropProcedure    bool `toml:"enable_drop_procedure" json:"enable_drop_procedure"`
+	EnableCreateFunction   bool `toml:"enable_create_function" json:"enable_create_function"`
+	EnableDropFunction     bool `toml:"enable_drop_function" json:"enable_drop_function"`
 
 	// 是否允许设置字符集和排序规则
 	EnableSetCharset   bool `toml:"enable_set_charset" json:"enable_set_charset"`

@@ -103,6 +103,10 @@ type statisticsInfo struct {
 	droptable    int
 	createdb     int
 	truncate     int
+	createproc   int
+	dropproc     int
+	createfunc   int
+	dropfunc     int
 	// changedefault int
 	// dropdb        int
 	host string
