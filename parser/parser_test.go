@@ -1826,6 +1826,16 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYDD_OPT(b) tbpartition by hash(c)"},
 		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD_OPT(b) tbpartition by UNI_HASH(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by UNI_HASH(b) tbpartition by hash(c)"},
 
+		//parallel option
+		{"CREATE TABLE foo (pump varchar(50), b int) parallel 10;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) PARALLEL 10"},
+		{"CREATE TABLE foo (pump varchar(50), b int) noparallel 1;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) NOPARALLEL 10"},
+		// index column group option
+		{"CREATE TABLE foo (pump varchar(50), b int, index i1 (b) with column group(each column));", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`B` INT, INDEX i1 (`B`) WITH COLUMN GROUP(each column))"},
+		{"CREATE TABLE foo (pump varchar(50), b int, index i1 (b) with column group(all columns, each column));", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`B` INT, INDEX i1 (`B`) WITH COLUMN GROUP(ALL COLUMNS, EACH COLUMN))"},
+		// table column group option
+		{"CREATE TABLE foo (pump varchar(50), b int) with column group(each column);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`B` INT) WITH COLUMN GROUP(each column)"},
+		// table column storing index
+		{"CREATE TABLE foo (pump varchar(50), b int, index i1 (b) storing (b) with column group(each column));", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT, INDEX i1 (`B`) STORING (`B`) WITH COLUMN GROUP(each column))"},
 		// test use key word as column name
 		{"CREATE TABLE foo (pump varchar(50), b int);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT)"},
 		{"CREATE TABLE foo (drainer varchar(50), b int);", true, "CREATE TABLE `foo` (`drainer` VARCHAR(50),`b` INT)"},

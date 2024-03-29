@@ -399,6 +399,8 @@ func (ts *testDDLSuite) TestAlterTableSpecRestore(c *C) {
 		{"ROW_FORMAT = compact", "ROW_FORMAT = COMPACT"},
 		{"ROW_FORMAT = redundant", "ROW_FORMAT = REDUNDANT"},
 		{"ROW_FORMAT = dynamic", "ROW_FORMAT = DYNAMIC"},
+		{"PARALLEL  1", "PARALLEL  1"},
+		{"NOPARALLEL  1", "NOPARALLEL  1"},
 
 		{"shard_row_id_bits 1", "SHARD_ROW_ID_BITS = 1"},
 		{"shard_row_id_bits = 1", "SHARD_ROW_ID_BITS = 1"},

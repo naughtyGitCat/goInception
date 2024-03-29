@@ -3004,11 +3004,13 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 					}
 				case ast.ConstraintUniq, ast.ConstraintUniqIndex, ast.ConstraintUniqKey:
 					for _, col := range ct.Keys {
-						for _, field := range node.Cols {
-							if field.Name.Name.L == col.Column.Name.L {
-								// 设置唯一键标志位
-								field.Tp.Flag |= mysql.UniqueKeyFlag
-								break
+						if col.Expr == nil {
+							for _, field := range node.Cols {
+								if field.Name.Name.L == col.Column.Name.L {
+									// 设置唯一键标志位
+									field.Tp.Flag |= mysql.UniqueKeyFlag
+									break
+								}
 							}
 						}
 					}
@@ -3259,9 +3261,9 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				case ast.ConstraintKey, ast.ConstraintUniq,
 					ast.ConstraintIndex, ast.ConstraintUniqKey,
 					ast.ConstraintUniqIndex:
-					if ct.Name == "" {
+					/*if ct.Name == "" {
 						ct.Name = ct.Keys[0].Column.Name.O
-					}
+					}*/
 					if _, ok := dupIndexes[strings.ToLower(ct.Name)]; ok {
 						s.appendErrorNo(ER_DUP_KEYNAME, ct.Name)
 					}

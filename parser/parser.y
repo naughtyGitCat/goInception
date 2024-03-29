@@ -127,6 +127,7 @@ import (
 	drop              "DROP"
 	dual              "DUAL"
 	denseRank         "DENSE_RANK"
+	each              "EACH"
 	elseKwd           "ELSE"
 	elseIfKwd         "ELSEIF"
 	enclosed          "ENCLOSED"
@@ -219,6 +220,8 @@ import (
 	out               "OUT"
 	outer             "OUTER"
 	over              "OVER"
+	parallel          "PARALLEL"
+	noparallel        "NOPARALLEL"
 	percentRank       "PERCENT_RANK"
 	packKeys          "PACK_KEYS"
 	partition         "PARTITION"
@@ -266,6 +269,7 @@ import (
 	tablegroup        "TABLEGROUP"
 	template          "TEMPLATE"
 	stored            "STORED"
+	storing           "STORING"
 	terminated        "TERMINATED"
 	then              "THEN"
 	tinyblobType      "TINYBLOB"
@@ -1001,6 +1005,9 @@ import (
 	TableElement                  "table definition element"
 	TableElementList              "table definition element list"
 	TableElementListOpt           "table definition element list optional"
+	ColumnGroupElement		      "column group element"
+	ColumnGroupList		          "column group element list"
+	WithColumnGroupOpt		      "with column group option"
 	TableFactor                   "table factor"
 	TableGroupOption              "table group option"
 	TableGroupOptionListOpt       "table group option list opt"
@@ -2458,7 +2465,7 @@ ConstraintElem:
 
 
 ConstraintElemInner:
-	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexPartSpecificationList ')'  PartitionIndexOptionList
+	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexPartSpecificationList ')'  PartitionIndexOptionList 
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintPrimaryKey,
@@ -3516,7 +3523,7 @@ DropTableGroupStmt:
  *
  *******************************************************************/
 CreateTableStmt:
-	"CREATE" OptTemporaryPartition "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt AsOpt CreateTableSelectOpt OnCommitOpt
+	"CREATE" OptTemporaryPartition "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt WithColumnGroupOpt AsOpt CreateTableSelectOpt OnCommitOpt 
 	{
 		stmt := $6.(*ast.CreateTableStmt)
 		stmt.Table = $5.(*ast.TableName)
@@ -3527,12 +3534,12 @@ CreateTableStmt:
 			stmt.Partition = $8.(*ast.PartitionOptions)
 		}
 		stmt.OnDuplicate = $9.(ast.OnDuplicateKeyHandlingType)
-		stmt.Select = $11.(*ast.CreateTableStmt).Select
-		if ($12 != nil && stmt.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $12 == nil) {
+		stmt.Select = $12.(*ast.CreateTableStmt).Select
+		if ($13 != nil && stmt.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $13 == nil) {
 			yylex.AppendError(yylex.Errorf("GLOBAL TEMPORARY and ON COMMIT DELETE ROWS must appear together"))
 		} else {
 			if stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal {
-				stmt.OnCommitDelete = $12.(bool)
+				stmt.OnCommitDelete = $13.(bool)
 			}
 		}
 		$$ = stmt
@@ -5100,6 +5107,10 @@ IndexOption:
 			PrimaryKeyTp: $1.(model.PrimaryKeyType),
 		}
 	}
+|	"STORING" '(' ColumnNameListOpt ')'
+	{
+		$$ = nil
+	}
 
 PartitionIndexOpt:
 	{
@@ -5121,7 +5132,7 @@ PartitionIndexOpt:
 	}
 
 PartitionIndexOptionList:
-	PartitionIndexOpt IndexOptionList
+	PartitionIndexOpt IndexOptionList WithColumnGroupOpt
 	{
 		if $1 == nil {
 			$$ = $2
@@ -9555,6 +9566,7 @@ TableElementList:
 		}
 	}
 
+
 TableElementListOpt:
 	/* empty */ %prec lowerThanCreateTableSelect
 	{
@@ -9583,6 +9595,38 @@ TableElementListOpt:
 			Constraints: constraints,
 		}
 	}
+
+ColumnGroupElement:
+	"ALL" "COLUMNS"
+	{
+		$$ = nil
+	}
+|	"EACH" "COLUMN"
+	{
+		$$ = nil
+	}
+
+ColumnGroupList:
+	ColumnGroupElement
+	{
+  		$$ = $1;
+	}
+|	ColumnGroupList ',' ColumnGroupElement
+	{
+		$$ = nil
+	}
+
+
+WithColumnGroupOpt:
+	%prec lowerThanWith
+	{
+		$$ = nil
+	}
+|	"WITH" "COLUMN" "GROUP" '(' ColumnGroupList ')'
+	{
+		$$ = $5
+	}
+
 
 TableOption:
 	"ENGINE" StringName
@@ -9682,6 +9726,14 @@ TableOption:
 |	"BROADCAST"
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionBroadcast}
+	}
+|	"PARALLEL" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionParallel, UintValue: $3.(uint64)}
+	}
+|	"NOPARALLEL" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionNoParallel, UintValue: $3.(uint64)}
 	}
 
 ForceOpt:
