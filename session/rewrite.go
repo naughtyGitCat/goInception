@@ -18,6 +18,7 @@ package session
 
 import (
 	"fmt"
+
 	"vitess.io/vitess/go/vt/sqlparser"
 )
 
@@ -29,7 +30,8 @@ type Rewrite struct {
 
 // NewRewrite 返回一个*Rewrite对象，如果SQL无法被正常解析，将错误输出到日志中，返回一个nil
 func NewRewrite(sql string) (*Rewrite, error) {
-	stmt, err := sqlparser.Parse(sql)
+	parser := sqlparser.NewTestParser()
+	stmt, err := parser.Parse(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +63,8 @@ func (rw *Rewrite) RewriteDML2Select() error {
 		rw.SQL = update2Select(stmt)
 	}
 	var err error
-	rw.Stmt, err = sqlparser.Parse(rw.SQL)
+	parser := sqlparser.NewTestParser()
+	rw.Stmt, err = parser.Parse(rw.SQL)
 	return err
 }
 
@@ -97,7 +100,7 @@ func update2Select(stmt *sqlparser.Update) string {
 func insert2Select(stmt *sqlparser.Insert) string {
 	switch row := stmt.Rows.(type) {
 	// 如果insert包含子查询，只需要explain该子树
-	case *sqlparser.Select, *sqlparser.Union, *sqlparser.ParenSelect:
+	case *sqlparser.Select, *sqlparser.Union:
 		return sqlparser.String(row)
 	}
 
@@ -117,7 +120,7 @@ func (rw *Rewrite) select2Count() string {
 
 	switch stmt := rw.Stmt.(type) {
 	case *sqlparser.Select:
-		if stmt.Distinct != "" || stmt.GroupBy != nil || stmt.Having != nil {
+		if stmt.Distinct || stmt.GroupBy != nil || stmt.Having != nil {
 			return fmt.Sprintf("SELECT COUNT(1) FROM (%s)t", rw.SQL)
 		}
 
@@ -125,7 +128,7 @@ func (rw *Rewrite) select2Count() string {
 			SelectExprs: []sqlparser.SelectExpr{
 				&sqlparser.AliasedExpr{
 					Expr: &sqlparser.FuncExpr{
-						Name: sqlparser.NewColIdent("count"),
+						Name: sqlparser.NewIdentifierCI("count"),
 						Exprs: []sqlparser.SelectExpr{
 							new(sqlparser.StarExpr),
 						},
