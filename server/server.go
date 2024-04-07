@@ -32,10 +32,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 
 	// For pprof
 	_ "net/http/pprof"
@@ -220,7 +220,7 @@ func (s *Server) loadTLSCertificates() {
 	clientAuthPolicy := tls.NoClientCert
 	var certPool *x509.CertPool
 	if len(s.cfg.Security.SSLCA) > 0 {
-		caCert, err := ioutil.ReadFile(s.cfg.Security.SSLCA)
+		caCert, err := os.ReadFile(s.cfg.Security.SSLCA)
 		if err != nil {
 			log.Warn(errors.ErrorStack(err))
 		} else {

@@ -16,10 +16,10 @@ package config
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"os"
 	"strings"
 
 	// "fmt"
-	"io/ioutil"
 
 	"github.com/BurntSushi/toml"
 	"github.com/hanchuanchuan/goInception/mysql"
@@ -127,7 +127,7 @@ func (s *Security) ToTLSConfig() (*tls.Config, error) {
 
 		// Create a certificate pool from the certificate authority
 		certPool := x509.NewCertPool()
-		ca, err := ioutil.ReadFile(s.ClusterSSLCA)
+		ca, err := os.ReadFile(s.ClusterSSLCA)
 		if err != nil {
 			return nil, errors.Errorf("could not read ca certificate: %s", err)
 		}

@@ -10,6 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//go:build !race
 // +build !race
 
 package server
@@ -21,7 +22,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"time"
@@ -148,7 +148,7 @@ func generateCert(sn int, commonName string, parentCert *x509.Certificate, paren
 // See https://godoc.org/github.com/go-sql-driver/mysql#RegisterTLSConfig for details.
 func registerTLSConfig(configName string, caCertPath string, clientCertPath string, clientKeyPath string, serverName string, verifyServer bool) error {
 	rootCertPool := x509.NewCertPool()
-	data, err := ioutil.ReadFile(caCertPath)
+	data, err := os.ReadFile(caCertPath)
 	if err != nil {
 		return err
 	}

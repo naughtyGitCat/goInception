@@ -360,13 +360,13 @@ release2:
 
 docker:
 	@if [ ! -f bin/percona-toolkit.tar.gz ];then \
-		wget -O bin/percona-toolkit.tar.gz https://www.percona.com/downloads/percona-toolkit/3.0.4/source/tarball/percona-toolkit-3.0.4.tar.gz; \
+		wget -O bin/percona-toolkit.tar.gz https://www.percona.com/downloads/percona-toolkit/3.5.7/source/tarball/percona-toolkit-3.5.7.tar.gz; \
 	fi
 	@if [ ! -f bin/pt-online-schema-change ];then \
 		wget -O bin/pt-online-schema-change percona.com/get/pt-online-schema-change; \
 	fi
 	@if [ ! -f bin/gh-ost ];then \
-		wget -O bin/gh-ost.tar.gz https://github.com/github/gh-ost/releases/download/v1.1.0/gh-ost-binary-linux-20200828140552.tar.gz; \
+		wget -O bin/gh-ost.tar.gz https://github.com/github/gh-ost/releases/download/v1.1.6/gh-ost-binary-linux-amd64-20231207144046.tar.gz; \
 		tar -zxvf bin/gh-ost.tar.gz -C bin/; \
 	fi
 	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '-s -w $(LDFLAGS)' -o bin/goInception tidb-server/main.go

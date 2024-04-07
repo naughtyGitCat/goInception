@@ -25,6 +25,8 @@ import (
 	"strings"
 
 	"flag"
+	"time"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/hanchuanchuan/goInception/ast"
 	"github.com/hanchuanchuan/goInception/session"
@@ -33,7 +35,6 @@ import (
 	"github.com/hanchuanchuan/goInception/util/mock"
 	"github.com/pingcap/errors"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 const dbName = "test"
@@ -158,7 +159,7 @@ LOOP:
 }
 
 func (t *tester) loadQueries() ([]query, error) {
-	data, err := ioutil.ReadFile(t.testFileName())
+	data, err := os.ReadFile(t.testFileName())
 	if err != nil {
 		return nil, err
 	}

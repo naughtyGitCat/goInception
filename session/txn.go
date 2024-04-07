@@ -289,7 +289,6 @@ func (s *session) StmtCommit() {
 // StmtRollback implements the sessionctx.Context interface.
 func (s *session) StmtRollback() {
 	s.txn.cleanup()
-	return
 }
 
 // StmtGetMutation implements the sessionctx.Context interface.

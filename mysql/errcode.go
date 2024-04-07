@@ -921,6 +921,7 @@ const (
 	ErrWarnMemoryQuotaOverflow          = 8063
 	ErrWarnOptimizerHintParseError      = 8064
 	ErrWarnOptimizerHintInvalidInteger  = 8065
+	ErrWarnOptimizerHintWrongPos        = 8066
 
 	// TiKV/PD errors.
 	ErrPDServerTimeout    = 9001

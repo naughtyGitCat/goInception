@@ -18,15 +18,14 @@ import (
 	"fmt"
 	gofmt "go/format"
 	"go/token"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
 
-	parser "github.com/cznic/parser/yacc"
 	"github.com/cznic/strutil"
 	"github.com/hanchuanchuan/goInception/format"
 	"github.com/pingcap/errors"
+	parser "modernc.org/parser/yacc"
 )
 
 func Format(inputFilename string, goldenFilename string) (err error) {
@@ -40,21 +39,21 @@ func Format(inputFilename string, goldenFilename string) (err error) {
 		return err
 	}
 	defer func() {
-		err = yFmt.Teardown()
+		teardownErr := yFmt.Teardown()
+		if err == nil {
+			err = teardownErr
+		}
 	}()
 
 	if err = printDefinitions(yFmt, spec.Defs); err != nil {
 		return err
 	}
 
-	if err = printRules(yFmt, spec.Rules); err != nil {
-		return err
-	}
-	return nil
+	return printRules(yFmt, spec.Rules)
 }
 
 func parseFileToSpec(inputFilename string) (*parser.Specification, error) {
-	src, err := ioutil.ReadFile(inputFilename)
+	src, err := os.ReadFile(inputFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -253,17 +252,16 @@ func printSingleName(f format.Formatter, name *parser.Name, maxCharLength int) e
 	if strLit != nil && strLit.Token != nil {
 		_, err := f.Format("%-*s %s\n", maxCharLength, name.Token.Val, strLit.Token.Val)
 		return err
-	} else {
-		_, err := f.Format("%s\n", name.Token.Val)
-		return err
 	}
+	_, err := f.Format("%s\n", name.Token.Val)
+	return err
 }
 
 type NameArr []*parser.Name
 
-func (ns NameArr) span(pred func(*parser.Name) bool) (NameArr, NameArr) {
-	first := ns.takeWhile(pred)
-	second := ns[len(first):]
+func (ns NameArr) span(pred func(*parser.Name) bool) (first NameArr, second NameArr) {
+	first = ns.takeWhile(pred)
+	second = ns[len(first):]
 	return first, second
 }
 
@@ -366,7 +364,7 @@ func printRuleBody(f format.Formatter, rule *parser.Rule) error {
 				return err
 			}
 		}
-		counter += 1
+		counter++
 	}
 	if err := checkInconsistencyInYaccParser(f, rule, counter); err != nil {
 		return err
@@ -483,7 +481,6 @@ func (s *SpecialActionValTransformer) restore(src string) string {
 
 type OutputFormatter struct {
 	file      *os.File
-	readBytes []byte
 	out       *bufio.Writer
 	formatter strutil.Formatter
 }
@@ -531,7 +528,7 @@ func (n *NotNilAssert) and(target interface{}) *NotNilAssert {
 	if target == nil {
 		n.err = errors.Errorf("encounter nil, index: %d", n.idx)
 	}
-	n.idx += 1
+	n.idx++
 	return n
 }
 

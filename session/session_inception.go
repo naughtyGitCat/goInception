@@ -8,7 +8,6 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -2286,7 +2285,7 @@ func (s *session) getTLSConfig() (string, error) {
 		tlsValue = strings.Replace(tlsValue, ".", "_", -1)
 
 		rootCertPool := x509.NewCertPool()
-		pem, err := ioutil.ReadFile(s.opt.sslCA)
+		pem, err := os.ReadFile(s.opt.sslCA)
 		if err != nil {
 			return "", fmt.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 		}
