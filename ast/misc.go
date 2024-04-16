@@ -495,12 +495,12 @@ const (
 // VariableAssignment is a variable assignment struct.
 type VariableAssignment struct {
 	node
-	Name     string
-	Value    ExprNode
-	IsGlobal bool
-	IsSystem bool
-	IsLevel  bool
-
+	Name      string
+	Value     ExprNode
+	IsGlobal  bool
+	IsSystem  bool
+	IsLevel   bool
+	IsPersist bool
 	// ExtendValue is a way to store extended info.
 	// VariableAssignment should be able to store information for SetCharset/SetPWD Stmt.
 	// For SetCharsetStmt, Value is charset, ExtendValue is collation.
@@ -516,6 +516,9 @@ func (n *VariableAssignment) Restore(ctx *RestoreCtx) error {
 			ctx.WriteKeyWord("GLOBAL")
 		} else {
 			ctx.WriteKeyWord("SESSION")
+		}
+		if n.IsPersist {
+			ctx.WriteKeyWord("PERSIST")
 		}
 		ctx.WritePlain(".")
 	} else if n.Name != SetNames {

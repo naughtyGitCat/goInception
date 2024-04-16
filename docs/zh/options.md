@@ -14,6 +14,10 @@ inception show variables;
 ```sql
 inception set check_dml_limit = true;
 ```
+- 2.通过```inception set persist```持久化设置
+```sql
+inception set persist check_dml_limit = true;
+```
 
 - 2.配置config.toml,并通过```-config=config.toml```指定配置文件启动
 

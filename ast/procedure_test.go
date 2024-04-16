@@ -139,6 +139,8 @@ func TestProcedureVisitor(t *testing.T) {
 	sqls := []string{
 		"create procedure proc_2(in id bigint,in id2 varchar(100),in id3 decimal(30,2)) begin declare s varchar(100) DEFAULT FROM_UNIXTIME(1447430881);select s;SELECT * FROM `t1`;SELECT * FROM `t2`;INSERT INTO `t1` VALUES (111);END;",
 		"create procedure proc_2(in id bigint) begin DECLARE value INTEGER;SET value = 0;SELECT current_value INTO value FROM t  WHERE name = seq_name; END;",
+		"create procedure proc_2(in id bigint) comment '123' begin select now();end;",
+		"create procedure proc_2(in id bigint) language sql begin select now();end;",
 		"show create procedure proc_2;",
 		"drop procedure proc_2;",
 	}
@@ -155,7 +157,10 @@ func TestProcedureVisitor(t *testing.T) {
 
 func TestFunctionVisitor(t *testing.T) {
 	sqls := []string{
-		"create function proc_2(id bigint) RETURNS int(10)  begin select s;SELECT * FROM `t1`;SELECT * FROM `t2`;INSERT INTO `t1` VALUES (111);RETURN currval(seq_name);END;",
+		"create function proc_2(id bigint) RETURNS int(10) begin select s;SELECT * FROM `t1`;SELECT * FROM `t2`;INSERT INTO `t1` VALUES (111);RETURN currval(seq_name);END;",
+		"create function proc_2(id bigint) RETURNS int(10) RETURN currval(seq_name);",
+		"create function proc_2(id bigint) RETURNS int(10) DETERMINISTIC RETURN currval(seq_name);",
+		"create function proc_2(id bigint) RETURNS int(10) NOT DETERMINISTIC RETURN currval(seq_name);",
 		"show create function proc_2;",
 		"drop function proc_2;",
 	}

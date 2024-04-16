@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -6417,7 +6418,7 @@ func (s *session) executeInceptionSet(node *ast.InceptionSetStmt, sql string) ([
 			if s.haveBegin || s.isAPI {
 				return nil, errors.New("暂不支持会话级的自定义审核级别")
 			}
-			err := s.setVariableValue(reflect.TypeOf(cnf.IncLevel), reflect.ValueOf(&cnf.IncLevel).Elem(), v.Name, value)
+			err := s.setVariableValue(reflect.TypeOf(cnf.IncLevel), reflect.ValueOf(&cnf.IncLevel).Elem(), v.Name, value, node.IsPersist, "")
 			if err != nil {
 				return nil, err
 			}
@@ -6441,7 +6442,7 @@ func (s *session) executeInceptionSet(node *ast.InceptionSetStmt, sql string) ([
 			} else {
 				object = &s.osc
 			}
-			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value)
+			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value, node.IsPersist, prefix)
 			if err != nil {
 				return nil, err
 			}
@@ -6453,7 +6454,7 @@ func (s *session) executeInceptionSet(node *ast.InceptionSetStmt, sql string) ([
 			} else {
 				object = &s.ghost
 			}
-			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value)
+			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value, node.IsPersist, prefix)
 			if err != nil {
 				return nil, err
 			}
@@ -6469,7 +6470,7 @@ func (s *session) executeInceptionSet(node *ast.InceptionSetStmt, sql string) ([
 			} else {
 				object = &s.inc
 			}
-			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value)
+			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value, node.IsPersist, prefix)
 			if err != nil {
 				return nil, err
 			}
@@ -6483,7 +6484,7 @@ func (s *session) executeInceptionSet(node *ast.InceptionSetStmt, sql string) ([
 }
 
 func (s *session) setVariableValue(t reflect.Type, values reflect.Value,
-	name string, value *ast.ValueExpr) error {
+	name string, value *ast.ValueExpr, IsPersist bool, prefix string) error {
 
 	found := false
 	for i := 0; i < values.NumField(); i++ {
@@ -6493,6 +6494,13 @@ func (s *session) setVariableValue(t reflect.Type, values reflect.Value,
 				err := s.setConfigValue(name, values.Field(i), &(value.Datum))
 				if err != nil {
 					return err
+				} else {
+					if IsPersist && len(prefix) != 0 {
+						err := s.setPersistVariables(name, value, prefix, values.Field(i), &(value.Datum))
+						if err != nil {
+							return err
+						}
+					}
 				}
 				found = true
 				break
@@ -6501,6 +6509,69 @@ func (s *session) setVariableValue(t reflect.Type, values reflect.Value,
 	}
 	if !found {
 		return errors.New("无效参数")
+	}
+	return nil
+}
+
+func (s *session) setPersistVariables(name string, value *ast.ValueExpr, prefix string, field reflect.Value, values *types.Datum) error {
+	cnf := config.GetGlobalConfig()
+	filename := filepath.Base(cnf.ConfigPath)
+	viper := viper.New()
+	viper.SetConfigType("toml")
+	viper.SetConfigName(strings.Split(filename, ".")[0])
+	viper.AddConfigPath(filepath.Dir(cnf.ConfigPath))
+	if err := viper.ReadInConfig(); err != nil {
+		log.Debug(err)
+	}
+
+	sVal := ""
+	if !value.IsNull() {
+		sVal, _ = values.ToString()
+	}
+	switch field.Type().String() {
+	case reflect.Bool.String():
+		if strings.EqualFold(sVal, "ON") || sVal == "1" ||
+			strings.EqualFold(sVal, "OFF") || sVal == "0" ||
+			strings.EqualFold(sVal, "TRUE") || strings.EqualFold(sVal, "FALSE") {
+			if strings.EqualFold(sVal, "ON") || sVal == "1" || strings.EqualFold(sVal, "TRUE") {
+				viper.Set(fmt.Sprintf("%s.%s", prefix, name), true)
+			} else {
+				viper.Set(fmt.Sprintf("%s.%s", prefix, name), false)
+			}
+		}
+	case reflect.String.String():
+		viper.Set(fmt.Sprintf("%s.%s", prefix, name), sVal)
+	case reflect.Uint.String(), reflect.Uint8.String(), reflect.Uint16.String(),
+		reflect.Uint32.String(), reflect.Uint64.String():
+		// field.SetUint(value.GetUint64())
+		v, err := s.checkUInt64SystemVar(name, sVal, 0, math.MaxUint64)
+		if err != nil {
+			return err
+		}
+
+		v1, _ := strconv.ParseUint(v, 10, 64)
+		viper.Set(fmt.Sprintf("%s.%s", prefix, name), v1)
+
+	case reflect.Int.String(), reflect.Int8.String(), reflect.Int16.String(),
+		reflect.Int32.String(), reflect.Int64.String():
+		v, err := s.checkInt64SystemVar(name, sVal, math.MinInt64, math.MaxInt64)
+		if err != nil {
+			return err
+		}
+
+		v1, _ := strconv.ParseInt(v, 10, 64)
+		viper.Set(fmt.Sprintf("%s.%s", prefix, name), v1)
+
+	case reflect.Float32.String(), reflect.Float64.String():
+		v, err := s.checkFloat64SystemVar(name, sVal, -math.MaxFloat64, math.MaxFloat64)
+		if err != nil {
+			return err
+		}
+		v1, _ := strconv.ParseFloat(v, 64)
+		viper.Set(fmt.Sprintf("%s.%s", prefix, name), v1)
+	}
+	if err := viper.WriteConfig(); err != nil {
+		log.Fatal(err)
 	}
 	return nil
 }

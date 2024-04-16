@@ -38,7 +38,7 @@ var (
 	_ StmtNode = &ProcedureLabelBlock{}
 	_ StmtNode = &ProcedureLabelLoop{}
 	_ StmtNode = &ProcedureJump{}
-	_ StmtNode = &FunctionReturn{}
+	_ StmtNode = &ProcedureReturn{}
 
 	_ DeclNode = &ProcedureErrorControl{}
 	_ DeclNode = &ProcedureCursor{}
@@ -240,6 +240,7 @@ type ProcedureInfo struct {
 	ProcedureParam    []*StoreParameter //procedure param
 	ProcedureBody     StmtNode          //procedure body statement
 	ProcedureParamStr string            //procedure parameter string
+	ProcedureOptions  []*RoutineOption
 }
 
 // Restore implements Node interface.
@@ -1210,25 +1211,25 @@ func (n *ProcedureJump) Accept(v Visitor) (Node, bool) {
 }
 
 // FunctionReturn stores the return statements  in function.
-type FunctionReturn struct {
+type ProcedureReturn struct {
 	stmtNode
 	Name string
 	Expr ExprNode
 }
 
 // Restore implements FunctionReturn interface.
-func (n *FunctionReturn) Restore(ctx *format.RestoreCtx) error {
+func (n *ProcedureReturn) Restore(ctx *format.RestoreCtx) error {
 	ctx.WriteString(n.Name)
 	return nil
 }
 
 // Accept implements FunctionReturn Accept interface.
-func (n *FunctionReturn) Accept(v Visitor) (Node, bool) {
+func (n *ProcedureReturn) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
 	if skipChildren {
 		return v.Leave(newNode)
 	}
-	n = newNode.(*FunctionReturn)
+	n = newNode.(*ProcedureReturn)
 	return v.Leave(n)
 }
 
@@ -1240,6 +1241,7 @@ type FunctionInfo struct {
 	FunctionParam    []*StoreParameter //procedure param
 	FunctionBody     StmtNode          //procedure body statement
 	FunctionParamStr string            //procedure parameter string
+	FunctionOptions  []*RoutineOption
 }
 
 // Restore implements Node interface.
@@ -1290,4 +1292,42 @@ func (n *FunctionInfo) Accept(v Visitor) (Node, bool) {
 	}
 	n.FunctionBody = node.(StmtNode)
 	return v.Leave(n)
+}
+
+// TableOptionType is the type for TableOption
+type RoutineOptionType int
+
+// TableOption types.
+const (
+	RoutineOptionNone RoutineOptionType = iota
+	RoutineOptionComment
+	RoutineOptionLanguageSql
+	RoutineOptionDeterministic
+	RoutineOptionNotDeterministic
+	RoutineOptionSqlSecurity
+)
+
+// RoutineOption is used for parsing procedure and function option from SQL.
+type RoutineOption struct {
+	Tp       RoutineOptionType
+	StrValue string
+}
+
+func (n *RoutineOption) Restore(ctx *format.RestoreCtx) error {
+	switch n.Tp {
+	case RoutineOptionComment:
+		ctx.WriteKeyWord("COMMENT ")
+		if n.StrValue != "" {
+			ctx.WritePlain(n.StrValue)
+		}
+	case RoutineOptionLanguageSql:
+		ctx.WriteKeyWord("LANGUAGE SQL")
+	case RoutineOptionDeterministic:
+		ctx.WriteKeyWord("DETERMINISTIC")
+	case RoutineOptionNotDeterministic:
+		ctx.WriteKeyWord("NOT DETERMINISTIC")
+	default:
+		return errors.Errorf("invalid RoutineOption: %d", n.Tp)
+	}
+	return nil
 }

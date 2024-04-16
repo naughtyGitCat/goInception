@@ -14,6 +14,11 @@ Modify in two ways:
 inception set osc_check_interval = 10;
 ```
 
+- two at ```inception set persist```
+```sql
+inception set persist osc_check_interval = 10;
+```
+
 - another one at config.toml, and start by ```-config=config.toml```
 
 

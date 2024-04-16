@@ -2271,6 +2271,7 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table t (a int, primary key using btree (a));", true, "CREATE TABLE `t` (`a` INT,PRIMARY KEY(`a`) USING BTREE)"},
 		{"create table t (a int, primary key (a) type btree);", true, "CREATE TABLE `t` (`a` INT,PRIMARY KEY(`a`) USING BTREE)"},
 		// For create index statement
+		{"CREATE INDEX idx ON t (a) STORING(a) WITH COLUMN GROUP(each column)", true, "CREATE INDEX `idx` ON `t` (`a`) STORING(`a`) WITH COLUMN GROUP(each column)"},
 		{"CREATE INDEX idx ON t (a)", true, "CREATE INDEX `idx` ON `t` (`a`)"},
 		{"CREATE UNIQUE INDEX idx ON t (a)", true, "CREATE UNIQUE INDEX `idx` ON `t` (`a`)"},
 		{"CREATE SPATIAL INDEX idx ON t (a)", true, "CREATE SPATIAL INDEX `idx` ON `t` (`a`)"},

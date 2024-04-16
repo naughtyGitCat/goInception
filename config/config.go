@@ -51,6 +51,7 @@ type Config struct {
 	Port             uint            `toml:"port" json:"port"`
 	Store            string          `toml:"store" json:"store"`
 	Path             string          `toml:"path" json:"path"`
+	ConfigPath       string          `toml:"config_path" json:"config_path"`
 	Socket           string          `toml:"socket" json:"socket"`
 	Lease            string          `toml:"lease" json:"lease"`
 	RunDDL           bool            `toml:"run-ddl" json:"run-ddl"`
@@ -802,12 +803,11 @@ func (c *Config) Load(confFile string) error {
 	if c.TokenLimit <= 0 {
 		c.TokenLimit = 1000
 	}
-
+	c.ConfigPath = confFile
 	// 将自定义关键字全部转为大写
 	for i, k := range c.Inc.CustomKeywords {
 		c.Inc.CustomKeywords[i] = strings.ToUpper(k)
 	}
-
 	return errors.Trace(err)
 }
 

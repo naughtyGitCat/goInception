@@ -351,6 +351,7 @@ import (
 	stop                   "STOP"
 	pause                  "PAUSE"
 	percent                "PERCENT"
+	persist                "PERSIST"
 	resume                 "RESUME"
 	committed              "COMMITTED"
 	compact                "COMPACT"
@@ -744,8 +745,9 @@ import (
 	LoadDataStmt         "Load data statement"
 	LoadStatsStmt        "Load statistic statement"
 	LockTablesStmt       "Lock tables statement"
+	CompoundProcStmt     "The compound of function"
 	PreparedStmt         "PreparedStmt"
-	FunctionProcStmt    "The entrance of function"
+	FunctionProcStmt     "The entrance of function"
 	ProcedureProcStmt    "The entrance of procedure statements which contains all kinds of statements in procedure"
 	ProcedureStatementStmt     "The normal statements in procedure, such as dml, select, set ..."
 	SelectStmt           "SELECT statement"
@@ -790,8 +792,8 @@ import (
 	ProcedureLeave             "The leave statement in procedure, expressed by `leave ...`"
 	CreateViewSelectOpt        "Select/Union statement in CREATE VIEW ... AS SELECT"
 	UpdateStmtNoWith           "Update statement without CTE clause"
-	ReturnStatement			   "The return statement in function"
-	ReturnStatements		   "The return statements in function"
+	ProcedureReturn			   "The return statement in function"
+	ProcedureReturns		   "The return statements in function"
 
 %type	<item>
 	
@@ -1034,7 +1036,10 @@ import (
 	TransactionChar               "Transaction characteristic"
 	TransactionChars              "Transaction characteristic list"
 	TrimDirection                 "Trim string direction"
-	SetOprOpt                              "Union/Except/Intersect Option(empty/ALL/DISTINCT)"
+	RoutineOpt                    "create routine option"
+	RoutineOptList                "create routine option list"
+	RoutineOptionListOpt		  "create routine option list option"
+	SetOprOpt                     "Union/Except/Intersect Option(empty/ALL/DISTINCT)"
 	Username                      "Username"
 	UsernameList                  "UsernameList"
 	UserSpec                      "Username and auth option"
@@ -1229,6 +1234,7 @@ import (
 %precedence lowerThanInsertValues
 %precedence insertValues
 %precedence lowerThanCreateTableSelect
+%precedence lowerThanCreateRoutine
 %precedence createTableSelect
 %precedence lowerThanKey
 %precedence key
@@ -2281,7 +2287,11 @@ InceptionStmt:
 	}
 |	"INCEPTION" "SET" VariableAssignmentList
 	{
-		$$ = &ast.InceptionSetStmt{Variables: $3.([]*ast.VariableAssignment)}
+		$$ = &ast.InceptionSetStmt{IsPersist: false, Variables: $3.([]*ast.VariableAssignment)}
+	}
+|	"INCEPTION" "SET" "PERSIST" VariableAssignmentList
+	{
+		$$ = &ast.InceptionSetStmt{IsPersist: true, Variables: $4.([]*ast.VariableAssignment)}
 	}
 |	"INCEPTION" "SET" "LEVEL" VariableAssignmentList
 	{
@@ -5109,7 +5119,7 @@ IndexOption:
 	}
 |	"STORING" '(' ColumnNameListOpt ')'
 	{
-		$$ = nil
+		$$ = &ast.IndexOption{Columns: $3.([]*ast.ColumnName)}
 	}
 
 PartitionIndexOpt:
@@ -5467,6 +5477,7 @@ UnReservedKeyword:
 |	"LANGUAGE"
 |	"BERNOULLI"
 |	"PERCENT"
+|	"PERSIST"
 |	"SYSTEM"
 |	"SKIP"
 |	"LOCKED"
@@ -11325,15 +11336,8 @@ ProcedureProcStmt1s:
 		$$ = l
 	}
 
-ReturnStatements:
-	/* Empty */
-	{
-		$$ = nil
-	}
-|	ReturnStatements ReturnStatement ';'
-
 ProcedureBlockContent:
-	"BEGIN" ProcedureDeclsOpt ProcedureProcStmts ReturnStatements "END"
+	"BEGIN" ProcedureDeclsOpt ProcedureProcStmts "END"
 	{
 		x := &ast.ProcedureBlock{
 			ProcedureVars:      $2.([]ast.DeclNode),
@@ -11544,23 +11548,64 @@ ProcedureLeave:
 		}
 	}
 
+ProcedureReturns:
+	/* Empty */
+	{
+		$$ = nil
+	}
+|	ProcedureReturns ProcedureReturn ';'
 
+ProcedureReturn:
+	"RETURN" Expression
+	{
+		$$ = &ast.ProcedureReturn{
+			Expr: $2,
+		}
+	}
+
+RoutineOptionListOpt:
+	/* empty */ %prec lowerThanCreateRoutine
+	{
+		$$ = []*ast.RoutineOption{}
+	}
+|	RoutineOptList %prec lowerThanComma
+
+RoutineOptList:
+	RoutineOpt
+	{
+		$$ = []*ast.RoutineOption{$1.(*ast.RoutineOption)}
+	}
+|	RoutineOptList RoutineOpt
+	{
+		$$ = append($1.([]*ast.RoutineOption), $2.(*ast.RoutineOption))
+	}
+
+RoutineOpt:
+	"COMMENT" StringName
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionComment, StrValue: $2.(string)}
+	}
+|	"LANGUAGE" "SQL"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionLanguageSql}
+	}
+|	"DETERMINISTIC"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionDeterministic}
+	}
+|	"NOT" "DETERMINISTIC"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionNotDeterministic}
+	}
 
 ProcedureProcStmt:
 	ProcedureStatementStmt
-|	ProcedureUnlabeledBlock
-|	ProcedureIfstmt
-|	ProcedureCaseStmt
-|	ProcedureUnlabelLoopBlock
-|	ProcedureOpenCur
-|	ProcedureCloseCur
-|	ProcedureFetchInto
-|	ProcedureLabeledBlock
-|	ProcedurelabeledLoopStmt
-|	ProcedureIterate
-|	ProcedureLeave
+|	CompoundProcStmt
 
 FunctionProcStmt:
+	CompoundProcStmt
+
+CompoundProcStmt:
 	ProcedureUnlabeledBlock
 |	ProcedureIfstmt
 |	ProcedureCaseStmt
@@ -11572,6 +11617,7 @@ FunctionProcStmt:
 |	ProcedurelabeledLoopStmt
 |	ProcedureIterate
 |	ProcedureLeave
+|	ProcedureReturn
 
 /********************************************************************************************
  *
@@ -11592,16 +11638,17 @@ FunctionProcStmt:
  *  Valid SQL routine statement
  ********************************************************************************************/
 CreateProcedureStmt:
-	"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' ProcedureProcStmt
+	"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' RoutineOptionListOpt ProcedureProcStmt
 	{
 		x := &ast.ProcedureInfo{
 			IfNotExists:    $3.(bool),
 			ProcedureName:  $4.(*ast.TableName),
 			ProcedureParam: $6.([]*ast.StoreParameter),
-			ProcedureBody:  $8,
+			ProcedureOptions: $8.([]*ast.RoutineOption),
+			ProcedureBody:  $9,
 		}
 		startOffset := parser.startOffset(&yyS[yypt])
-		originStmt := $8
+		originStmt := $9
 		originStmt.SetText(strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
 		startOffset = parser.startOffset(&yyS[yypt-3])
 		if parser.src[startOffset] == '(' {
@@ -11611,6 +11658,7 @@ CreateProcedureStmt:
 		x.ProcedureParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
 		$$ = x
 	}
+
 /********************************************************************************************
 *  DROP PROCEDURE  [IF EXISTS] sp_name
 ********************************************************************************************/
@@ -11622,16 +11670,6 @@ DropProcedureStmt:
 			ProcedureName: $4.(*ast.TableName),
 		}
 	}
-
-
-ReturnStatement:
-	"RETURN" Expression
-	{
-		$$ = &ast.FunctionReturn{
-			Expr: $2,
-		}
-	}
-
 
 /********************************************************************************************
  *
@@ -11651,16 +11689,17 @@ ReturnStatement:
  ********************************************************************************************/
 
 CreateFunctionStmt:
-	"CREATE" "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type FunctionProcStmt
+	"CREATE" "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type RoutineOptionListOpt FunctionProcStmt
 	{
 		x := &ast.FunctionInfo{
 			IfNotExists:    $3.(bool),
 			FunctionName:  $4.(*ast.TableName),
 			FunctionParam: $6.([]*ast.StoreParameter),
-			FunctionBody:  $10,
+			FunctionOptions: $10.([]*ast.RoutineOption),
+			FunctionBody:  $11,
 		}
 		startOffset := parser.startOffset(&yyS[yypt])
-		originStmt := $10
+		originStmt := $11
 		originStmt.SetText(strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
 		startOffset = parser.startOffset(&yyS[yypt-3])
 		if parser.src[startOffset] == '(' {
@@ -11682,6 +11721,7 @@ DropFunctionStmt:
 			FunctionName: $4.(*ast.TableName),
 		}
 	}
+	
 /********************************************************************************************
  *
  *  Create Sequence Statement

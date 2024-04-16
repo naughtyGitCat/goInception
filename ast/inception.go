@@ -72,11 +72,15 @@ func (n *ShowOscStmt) Accept(v Visitor) (Node, bool) {
 // InceptionSetStmt is the statement to set variables.
 type InceptionSetStmt struct {
 	stmtNode
+	IsPersist bool
 	// Variables is the list of variable assignment.
 	Variables []*VariableAssignment
 }
 
 func (n *InceptionSetStmt) Restore(ctx *RestoreCtx) error {
+	if n.IsPersist {
+		ctx.WriteKeyWord("PERSIST")
+	}
 	return nil
 }
 
