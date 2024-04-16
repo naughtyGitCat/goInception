@@ -6470,7 +6470,7 @@ func (s *session) executeInceptionSet(node *ast.InceptionSetStmt, sql string) ([
 			} else {
 				object = &s.inc
 			}
-			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value, node.IsPersist, prefix)
+			err = s.setVariableValue(reflect.TypeOf(*object), reflect.ValueOf(object).Elem(), v.Name, value, node.IsPersist, "inc")
 			if err != nil {
 				return nil, err
 			}
