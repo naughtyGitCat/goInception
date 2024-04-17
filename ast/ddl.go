@@ -728,9 +728,9 @@ type Constraint struct {
 
 	Refer *ReferenceDef // Used for foreign key.
 
-	Option *IndexOption // Index Options
-
-	Expr ExprNode // Used for Check
+	Option        *IndexOption         // Index Options
+	ColGropOption []*ColumnGroupOption // Column Group Option
+	Expr          ExprNode             // Used for Check
 
 	Enforced bool // Used for Check
 
@@ -809,6 +809,18 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing Constraint Option")
 		}
 	}
+	if len(n.ColGropOption) > 0 {
+		ctx.WritePlain("WITH COLUMN GROUP (")
+		for i, col := range n.ColGropOption {
+			if i > 0 {
+				ctx.WritePlain(",")
+			}
+			if err := col.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while splicing Constraint ColGropOption[%d]", i)
+			}
+		}
+		ctx.WritePlain(")")
+	}
 	return nil
 }
 
@@ -845,6 +857,7 @@ func (n *Constraint) Accept(v Visitor) (Node, bool) {
 		if !ok {
 			return n, false
 		}
+
 		n.Option = node.(*IndexOption)
 	}
 	return v.Leave(n)
@@ -940,6 +953,7 @@ type CreateTableStmt struct {
 	Cols           []*ColumnDef
 	Constraints    []*Constraint
 	Options        []*TableOption
+	ColGroupOption []*ColumnGroupOption
 	Partition      *PartitionOptions
 	OnDuplicate    OnDuplicateKeyHandlingType
 	Select         ResultSetNode
@@ -999,7 +1013,18 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 			return errors.Annotatef(err, "An error occurred while splicing CreateTableStmt TableOption: [%v]", i)
 		}
 	}
-
+	if len(n.ColGroupOption) > 0 {
+		ctx.WritePlain("WITH COLUMN GROUP (")
+		for i, col := range n.ColGroupOption {
+			if i > 0 {
+				ctx.WritePlain(",")
+			}
+			if err := col.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while splicing CreateTableStmt.ColGroupOption[%d]", i)
+			}
+		}
+		ctx.WritePlain(")")
+	}
 	if n.Partition != nil {
 		ctx.WritePlain(" ")
 		if err := n.Partition.Restore(ctx); err != nil {
@@ -1730,6 +1755,7 @@ type CreateIndexStmt struct {
 	KeyType                 IndexKeyType
 	LockAlg                 *IndexLockAndAlgorithm
 	Partition               *PartitionOptions
+	ColGroupOpt             []*ColumnGroupOption
 }
 
 // Restore implements Node interface.
@@ -1774,6 +1800,19 @@ func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 		if err := n.IndexOption.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore CreateIndexStmt.IndexOption")
 		}
+	}
+
+	if len(n.ColGroupOpt) > 0 {
+		ctx.WritePlain("WITH COLUMN GROUP (")
+		for i, col := range n.ColGroupOpt {
+			if i > 0 {
+				ctx.WritePlain(",")
+			}
+			if err := col.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while splicing CreateIndexStmt.ColGroupOpt[%d]", i)
+			}
+		}
+		ctx.WritePlain(")")
 	}
 
 	if n.Partition != nil {
@@ -2419,6 +2458,30 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 	return nil
 }
 
+type ColumnGroupOptionType int
+
+const (
+	ColumnGroupNone ColumnGroupOptionType = iota
+	ColumnGroupEachColumn
+	ColumnGroupAllColumn
+	ColumnGroupEachAllColumn
+)
+
+// TableOption is used for parsing table option from SQL.
+type ColumnGroupOption struct {
+	Tp ColumnGroupOptionType
+}
+
+func (n *ColumnGroupOption) Restore(ctx *format.RestoreCtx) error {
+	switch n.Tp {
+	case ColumnGroupEachColumn:
+		ctx.WriteKeyWord("EACH COLUMN")
+	case ColumnGroupAllColumn:
+		ctx.WriteKeyWord("ALL COLUMNS")
+	}
+	return nil
+}
+
 // SequenceOptionType is the type for SequenceOption
 type SequenceOptionType int
 
@@ -2608,6 +2671,7 @@ const (
 	AlterTableCache
 	AlterTableNoCache
 	AlterTableSetInterval
+	AlterTableAddColumnGroup
 
 	// TODO: Add more actions
 )
@@ -2722,6 +2786,7 @@ type AlterTableSpec struct {
 	NewConstraints  []*Constraint
 	OldColumnName   *ColumnName
 	NewColumnName   *ColumnName
+	ColGroupName    []*ColumnGroupOption
 	Position        *ColumnPosition
 	LockType        LockType
 	Algorithm       AlgorithmType
@@ -3292,6 +3357,19 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("CACHE")
 	case AlterTableNoCache:
 		ctx.WriteKeyWord("NOCACHE")
+	case AlterTableAddColumnGroup:
+		if len(n.ColGroupName) > 0 {
+			ctx.WritePlain("WITH COLUMN GROUP (")
+			for i, col := range n.ColGroupName {
+				if i > 0 {
+					ctx.WritePlain(",")
+				}
+				if err := col.Restore(ctx); err != nil {
+					return errors.Annotatef(err, "An error occurred while splicing AlterTableSpec.ColGroupName[%d]", i)
+				}
+			}
+			ctx.WritePlain(")")
+		}
 	default:
 		// TODO: not support
 		ctx.WritePlainf(" /* AlterTableType(%d) is not supported */ ", n.Tp)

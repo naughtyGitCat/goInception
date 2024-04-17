@@ -936,8 +936,6 @@ import (
 	PartitionDefinition           "Partition definition"
 	PartitionDefinitionList       "Partition definition list"
 	PartitionDefinitionListOpt    "Partition definition list option"
-	PartitionIndexOpt             "Partition Index option"
-	PartitionIndexOptionList      "Partition Index option list or empty"
 	PartitionKeyAlgorithmOpt      "ALGORITHM = n option for KEY partition"
 	PartitionMethod               "Partition method"
 	PartitionNameList             "Partition name list"
@@ -1400,6 +1398,13 @@ AlterTableSpec:
 		$$ = &ast.AlterTableSpec{
 			Tp:         ast.AlterTableAddColumns,
 			NewColumns: $4.([]*ast.ColumnDef),
+		}
+	}
+|	"ADD" "COLUMN" "GROUP" '(' ColumnGroupList ')'
+	{
+		$$ = &ast.AlterTableSpec{
+			Tp:         ast.AlterTableAddColumnGroup,
+			ColGroupName: $5.([]*ast.ColumnGroupOption),
 		}
 	}
 |	"ADD" Constraint
@@ -2475,7 +2480,7 @@ ConstraintElem:
 
 
 ConstraintElemInner:
-	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexPartSpecificationList ')'  PartitionIndexOptionList 
+	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexPartSpecificationList ')'  IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintPrimaryKey,
@@ -2485,6 +2490,9 @@ ConstraintElemInner:
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
 		}
+		if $8 != nil {
+			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+		}
 		if indexType := $3.([]interface{})[1]; indexType != nil {
 			if c.Option == nil {
 				c.Option = &ast.IndexOption{}
@@ -2493,7 +2501,7 @@ ConstraintElemInner:
 		}
 		$$ = c
 	}
-|	"FULLTEXT" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
+|	"FULLTEXT" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintFulltext,
@@ -2503,9 +2511,12 @@ ConstraintElemInner:
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
 		}
+		if $8 != nil {
+			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+		}
 		$$ = c
 	}
-|	"SPATIAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
+|	"SPATIAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintSpatial,
@@ -2515,10 +2526,13 @@ ConstraintElemInner:
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
 		}
+		if $8 != nil {
+			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+		}
 		$$ = c
 	}
 
-|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
+|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' IndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintGlobal,
@@ -2532,7 +2546,7 @@ ConstraintElemInner:
 		$$ = c
 	}
 
-|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' PartitionIndexOptionList
+|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' IndexOptionList
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintUniqueGlobal,
@@ -2545,7 +2559,7 @@ ConstraintElemInner:
 		$$ = c
 	}
 
-|	KeyOrIndex IfNotExists IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' PartitionIndexOptionList
+|	KeyOrIndex IfNotExists IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
 			IfNotExists: $2.(bool),
@@ -2554,6 +2568,9 @@ ConstraintElemInner:
 		}
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
+		}
+		if $8 != nil {
+			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
 		}
 		c.Name = $3.([]interface{})[0].(string)
 		if indexType := $3.([]interface{})[1]; indexType != nil {
@@ -2564,7 +2581,7 @@ ConstraintElemInner:
 		}
 		$$ = c
 	}
-|	"UNIQUE" KeyOrIndexOpt IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' PartitionIndexOptionList
+|	"UNIQUE" KeyOrIndexOpt IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
 			Tp:   ast.ConstraintUniq,
@@ -2572,6 +2589,9 @@ ConstraintElemInner:
 		}
 		if $7 != nil {
 			c.Option = $7.(*ast.IndexOption)
+		}
+		if $8 != nil {
+			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
 		}
 		c.Name = $3.([]interface{})[0].(string)
 		if indexType := $3.([]interface{})[1]; indexType != nil {
@@ -2785,7 +2805,7 @@ NumLiteral:
  *     LOCK [=] {DEFAULT | NONE | SHARED | EXCLUSIVE}
  *******************************************************************************************/
 CreateIndexStmt:
-	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' PartitionIndexOptionList IndexLockAndAlgorithmOpt PartitionOpt
+	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt IndexLockAndAlgorithmOpt PartitionOpt
 	{
 		var indexOption *ast.IndexOption
 		if $12 != nil {
@@ -2802,15 +2822,15 @@ CreateIndexStmt:
 			}
 		}
 		var indexLockAndAlgorithm *ast.IndexLockAndAlgorithm
-		if $13 != nil {
-			indexLockAndAlgorithm = $13.(*ast.IndexLockAndAlgorithm)
+		if $14 != nil {
+			indexLockAndAlgorithm = $14.(*ast.IndexLockAndAlgorithm)
 			if indexLockAndAlgorithm.LockTp == ast.LockTypeDefault && indexLockAndAlgorithm.AlgorithmTp == ast.AlgorithmTypeDefault {
 				indexLockAndAlgorithm = nil
 			}
 		}
 		var partitionOpt *ast.PartitionOptions
-		if $14 != nil {
-			partitionOpt = $14.(*ast.PartitionOptions)
+		if $15 != nil {
+			partitionOpt = $15.(*ast.PartitionOptions)
 		}
 		$$ = &ast.CreateIndexStmt{
 			IfNotExists:   $4.(bool),
@@ -2822,6 +2842,7 @@ CreateIndexStmt:
 			Unique:        $2.(ast.IndexKeyType) == ast.IndexKeyTypeUnique,
 			LockAlg:       indexLockAndAlgorithm,
 			Partition:     partitionOpt,
+			ColGroupOpt:   $13.([]*ast.ColumnGroupOption),
 		}
 	}
 
@@ -3544,6 +3565,7 @@ CreateTableStmt:
 			stmt.Partition = $8.(*ast.PartitionOptions)
 		}
 		stmt.OnDuplicate = $9.(ast.OnDuplicateKeyHandlingType)
+		stmt.ColGroupOption = $10.([]*ast.ColumnGroupOption)
 		stmt.Select = $12.(*ast.CreateTableStmt).Select
 		if ($13 != nil && stmt.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $13 == nil) {
 			yylex.AppendError(yylex.Errorf("GLOBAL TEMPORARY and ON COMMIT DELETE ROWS must appear together"))
@@ -5121,13 +5143,6 @@ IndexOption:
 	{
 		$$ = &ast.IndexOption{Columns: $3.([]*ast.ColumnName)}
 	}
-
-PartitionIndexOpt:
-	{
-		$$ = &ast.IndexOption{
-			PartitionIndexType: model.PartitionIndexTypeInvalid,
-		}
-	}
 |	"LOCAL"
 	{
 		$$ = &ast.IndexOption{
@@ -5141,20 +5156,6 @@ PartitionIndexOpt:
 		}
 	}
 
-PartitionIndexOptionList:
-	PartitionIndexOpt IndexOptionList WithColumnGroupOpt
-	{
-		if $1 == nil {
-			$$ = $2
-		} else if $2 == nil {
-			$$ = $1
-		} else {
-			opt1 := $1.(*ast.IndexOption)
-			opt2 := $2.(*ast.IndexOption)
-			opt2.PartitionIndexType = opt1.PartitionIndexType
-			$$ = opt2
-		}
-	}
 
 /*
   See: https://github.com/mysql/mysql-server/blob/8.0/sql/sql_yacc.yy#L7179
@@ -7506,7 +7507,10 @@ OptWindowFrameClause:
 	}
 |	WindowFrameUnits WindowFrameExtent
 	{
-		$$ = nil
+		$$ = &ast.FrameClause{
+			Type:   $1.(ast.FrameType),
+			Extent: $2.(ast.FrameExtent),
+		}
 	}
 
 WindowFrameUnits:
@@ -7526,55 +7530,58 @@ WindowFrameUnits:
 WindowFrameExtent:
 	WindowFrameStart
 	{
-		$$ = nil
+		$$ = ast.FrameExtent{
+			Start: $1.(ast.FrameBound),
+			End:   ast.FrameBound{Type: ast.CurrentRow},
+		}
 	}
 |	WindowFrameBetween
 
 WindowFrameStart:
 	"UNBOUNDED" "PRECEDING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Preceding, UnBounded: true}
 	}
 |	NumLiteral "PRECEDING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Preceding, Expr: ast.NewValueExpr($1)}
 	}
 |	paramMarker "PRECEDING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Preceding, Expr: ast.NewValueExpr(yyS[yypt].offset)}
 	}
 |	"INTERVAL" Expression TimeUnit "PRECEDING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Preceding, Expr: $2, Unit: ast.NewValueExpr($3)}
 	}
 |	"CURRENT" "ROW"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.CurrentRow}
 	}
 
 WindowFrameBetween:
 	"BETWEEN" WindowFrameBound "AND" WindowFrameBound
 	{
-		$$ = nil
+		$$ = ast.FrameExtent{Start: $2.(ast.FrameBound), End: $4.(ast.FrameBound)}
 	}
 
 WindowFrameBound:
 	WindowFrameStart
 |	"UNBOUNDED" "FOLLOWING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Following, UnBounded: true}
 	}
 |	NumLiteral "FOLLOWING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Following, Expr: ast.NewValueExpr($1)}
 	}
 |	paramMarker "FOLLOWING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Following, Expr: ast.NewValueExpr(yyS[yypt].offset)}
 	}
 |	"INTERVAL" Expression TimeUnit "FOLLOWING"
 	{
-		$$ = nil
+		$$ = ast.FrameBound{Type: ast.Following, Expr: $2, Unit: ast.NewValueExpr($3)}
 	}
 
 OptWindowingClause:
@@ -7669,7 +7676,11 @@ OptLeadLagInfo:
 |	',' paramMarker OptLLDefault
 	{
 		
-		$$ = nil
+		args := []ast.ExprNode{ast.NewValueExpr(yyS[yypt-1].offset)}
+		if $3 != nil {
+			args = append(args, $3.(ast.ExprNode))
+		}
+		$$ = args
 	}
 
 OptLLDefault:
@@ -9610,28 +9621,28 @@ TableElementListOpt:
 ColumnGroupElement:
 	"ALL" "COLUMNS"
 	{
-		$$ = nil
+		$$ = &ast.ColumnGroupOption{Tp: ast.ColumnGroupAllColumn}
 	}
 |	"EACH" "COLUMN"
 	{
-		$$ = nil
+		$$ = &ast.ColumnGroupOption{Tp: ast.ColumnGroupEachColumn}
 	}
 
 ColumnGroupList:
 	ColumnGroupElement
 	{
-  		$$ = $1;
+  		$$ = []*ast.ColumnGroupOption{$1.(*ast.ColumnGroupOption)}
 	}
 |	ColumnGroupList ',' ColumnGroupElement
 	{
-		$$ = nil
+		$$ = append($1.([]*ast.ColumnGroupOption), $3.(*ast.ColumnGroupOption))
 	}
 
 
 WithColumnGroupOpt:
 	%prec lowerThanWith
 	{
-		$$ = nil
+		$$ = make([]*ast.ColumnGroupOption, 0, 1)
 	}
 |	"WITH" "COLUMN" "GROUP" '(' ColumnGroupList ')'
 	{

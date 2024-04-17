@@ -50,6 +50,7 @@ var (
 	_ Node = &SetOprSelectList{}
 	_ Node = &WildCardField{}
 	_ Node = &WindowSpec{}
+	_ Node = &PartitionByClause{}
 	_ Node = &FrameClause{}
 	_ Node = &FrameBound{}
 )
