@@ -880,6 +880,17 @@ func (s *testParserSuite) TestDBAStmt(c *C) {
 		// for change statement
 		// {"change pump to node_state ='paused' for node_id '127.0.0.1:8250'", true, "CHANGE PUMP TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:8250'"},
 		// {"change drainer to node_state ='paused' for node_id '127.0.0.1:8249'", true, "CHANGE DRAINER TO NODE_STATE ='paused' FOR NODE_ID '127.0.0.1:8249'"},
+		// for call statement
+		{"call ", false, ""},
+		{"call test", true, "CALL `test`()"},
+		{"call test()", true, "CALL `test`()"},
+		{"call test(1, 'test', true)", true, "CALL `test`(1, _UTF8MB4'test', TRUE)"},
+		{"call x.y;", true, "CALL `x`.`y`()"},
+		{"call x.y();", true, "CALL `x`.`y`()"},
+		{"call x.y('p', 'q', 'r');", true, "CALL `x`.`y`(_UTF8MB4'p', _UTF8MB4'q', _UTF8MB4'r')"},
+		{"call `x`.`y`;", true, "CALL `x`.`y`()"},
+		{"call `x`.`y`();", true, "CALL `x`.`y`()"},
+		{"call `x`.`y`('p', 'q', 'r');", true, "CALL `x`.`y`(_UTF8MB4'p', _UTF8MB4'q', _UTF8MB4'r')"},
 	}
 	s.RunTest(c, table, false)
 }

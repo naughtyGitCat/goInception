@@ -728,9 +728,9 @@ type Constraint struct {
 
 	Refer *ReferenceDef // Used for foreign key.
 
-	Option        *IndexOption         // Index Options
-	ColGropOption []*ColumnGroupOption // Column Group Option
-	Expr          ExprNode             // Used for Check
+	Option         *IndexOption         // Index Options
+	ColGroupOption []*ColumnGroupOption // Column Group Option
+	Expr           ExprNode             // Used for Check
 
 	Enforced bool // Used for Check
 
@@ -809,14 +809,14 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing Constraint Option")
 		}
 	}
-	if len(n.ColGropOption) > 0 {
+	if len(n.ColGroupOption) > 0 {
 		ctx.WritePlain("WITH COLUMN GROUP (")
-		for i, col := range n.ColGropOption {
+		for i, col := range n.ColGroupOption {
 			if i > 0 {
 				ctx.WritePlain(",")
 			}
 			if err := col.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while splicing Constraint ColGropOption[%d]", i)
+				return errors.Annotatef(err, "An error occurred while splicing Constraint ColGroupOption[%d]", i)
 			}
 		}
 		ctx.WritePlain(")")
@@ -1755,7 +1755,7 @@ type CreateIndexStmt struct {
 	KeyType                 IndexKeyType
 	LockAlg                 *IndexLockAndAlgorithm
 	Partition               *PartitionOptions
-	ColGroupOpt             []*ColumnGroupOption
+	ColGroupOption          []*ColumnGroupOption
 }
 
 // Restore implements Node interface.
@@ -1802,14 +1802,14 @@ func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 		}
 	}
 
-	if len(n.ColGroupOpt) > 0 {
+	if len(n.ColGroupOption) > 0 {
 		ctx.WritePlain("WITH COLUMN GROUP (")
-		for i, col := range n.ColGroupOpt {
+		for i, col := range n.ColGroupOption {
 			if i > 0 {
 				ctx.WritePlain(",")
 			}
 			if err := col.Restore(ctx); err != nil {
-				return errors.Annotatef(err, "An error occurred while splicing CreateIndexStmt.ColGroupOpt[%d]", i)
+				return errors.Annotatef(err, "An error occurred while splicing CreateIndexStmt.ColGroupOption[%d]", i)
 			}
 		}
 		ctx.WritePlain(")")
@@ -2464,7 +2464,6 @@ const (
 	ColumnGroupNone ColumnGroupOptionType = iota
 	ColumnGroupEachColumn
 	ColumnGroupAllColumn
-	ColumnGroupEachAllColumn
 )
 
 // TableOption is used for parsing table option from SQL.

@@ -88,6 +88,7 @@ import (
 	blobType          "BLOB"
 	both              "BOTH"
 	by                "BY"
+	call              "CALL"
 	cascade           "CASCADE"
 	caseKwd           "CASE"
 	change            "CHANGE"
@@ -695,6 +696,7 @@ import (
 	NowSymOptionFraction   "NowSym with optional fraction part"
 	WindowFuncCall         "WINDOW function call"
 	RepeatableOpt          "Repeatable optional in sample clause"
+	ProcedureCall          "Procedure call with Identifier or identifier"
 
 %type	<statement>
 	AdminStmt            "Check table statement or show ddl statement"
@@ -741,6 +743,7 @@ import (
 	FlushStmt            "Flush statement"
 	GrantStmt            "Grant statement"
 	InsertIntoStmt       "INSERT INTO statement"
+	CallStmt             "CALL statement"
 	KillStmt             "Kill statement"
 	LoadDataStmt         "Load data statement"
 	LoadStatsStmt        "Load statistic statement"
@@ -2491,7 +2494,7 @@ ConstraintElemInner:
 			c.Option = $7.(*ast.IndexOption)
 		}
 		if $8 != nil {
-			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+			c.ColGroupOption = $8.([]*ast.ColumnGroupOption)
 		}
 		if indexType := $3.([]interface{})[1]; indexType != nil {
 			if c.Option == nil {
@@ -2512,7 +2515,7 @@ ConstraintElemInner:
 			c.Option = $7.(*ast.IndexOption)
 		}
 		if $8 != nil {
-			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+			c.ColGroupOption = $8.([]*ast.ColumnGroupOption)
 		}
 		$$ = c
 	}
@@ -2527,7 +2530,7 @@ ConstraintElemInner:
 			c.Option = $7.(*ast.IndexOption)
 		}
 		if $8 != nil {
-			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+			c.ColGroupOption = $8.([]*ast.ColumnGroupOption)
 		}
 		$$ = c
 	}
@@ -2570,7 +2573,7 @@ ConstraintElemInner:
 			c.Option = $7.(*ast.IndexOption)
 		}
 		if $8 != nil {
-			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+			c.ColGroupOption = $8.([]*ast.ColumnGroupOption)
 		}
 		c.Name = $3.([]interface{})[0].(string)
 		if indexType := $3.([]interface{})[1]; indexType != nil {
@@ -2591,7 +2594,7 @@ ConstraintElemInner:
 			c.Option = $7.(*ast.IndexOption)
 		}
 		if $8 != nil {
-			c.ColGropOption = $8.([]*ast.ColumnGroupOption)
+			c.ColGroupOption = $8.([]*ast.ColumnGroupOption)
 		}
 		c.Name = $3.([]interface{})[0].(string)
 		if indexType := $3.([]interface{})[1]; indexType != nil {
@@ -2842,7 +2845,7 @@ CreateIndexStmt:
 			Unique:        $2.(ast.IndexKeyType) == ast.IndexKeyTypeUnique,
 			LockAlg:       indexLockAndAlgorithm,
 			Partition:     partitionOpt,
-			ColGroupOpt:   $13.([]*ast.ColumnGroupOption),
+			ColGroupOption:   $13.([]*ast.ColumnGroupOption),
 		}
 	}
 
@@ -5543,6 +5546,55 @@ NotKeywordToken:
 |	"TRIM"
 |	"JSON_ARRAYAGG"
 |	"JSON_OBJECTAGG"
+
+/************************************************************************************
+ *
+ *  Call Statements
+ *
+ **********************************************************************************/
+CallStmt:
+	"CALL" ProcedureCall
+	{
+		$$ = &ast.CallStmt{
+			Procedure: $2.(*ast.FuncCallExpr),
+		}
+	}
+
+ProcedureCall:
+	identifier
+	{
+		$$ = &ast.FuncCallExpr{
+			Tp:     ast.FuncCallExprTypeGeneric,
+			FnName: model.NewCIStr($1),
+			Args:   []ast.ExprNode{},
+		}
+	}
+|	Identifier '.' Identifier
+	{
+		$$ = &ast.FuncCallExpr{
+			Tp:     ast.FuncCallExprTypeGeneric,
+			Schema: model.NewCIStr($1),
+			FnName: model.NewCIStr($3),
+			Args:   []ast.ExprNode{},
+		}
+	}
+|	identifier '(' ExpressionListOpt ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			Tp:     ast.FuncCallExprTypeGeneric,
+			FnName: model.NewCIStr($1),
+			Args:   $3.([]ast.ExprNode),
+		}
+	}
+|	Identifier '.' Identifier '(' ExpressionListOpt ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			Tp:     ast.FuncCallExprTypeGeneric,
+			Schema: model.NewCIStr($1),
+			FnName: model.NewCIStr($3),
+			Args:   $5.([]ast.ExprNode),
+		}
+	}
 
 /************************************************************************************
  *
@@ -9445,6 +9497,7 @@ Statement:
 |	DropStatsStmt
 |	FlushStmt
 |	GrantStmt
+|	CallStmt
 |	InsertIntoStmt
 |	KillStmt
 |	LoadDataStmt

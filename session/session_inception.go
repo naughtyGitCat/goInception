@@ -701,6 +701,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.CreateSequenceStmt:
 	case *ast.AlterSequenceStmt:
 	case *ast.DropSequenceStmt:
+	case *ast.CallStmt:
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
