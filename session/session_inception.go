@@ -1248,7 +1248,8 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.ProcedureInfo,
 		*ast.DropProcedureStmt,
 		*ast.FunctionInfo,
-		*ast.DropFunctionStmt:
+		*ast.DropFunctionStmt,
+		*ast.CallStmt:
 
 		s.executeRemoteStatement(record, isTran)
 
