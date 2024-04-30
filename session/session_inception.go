@@ -3303,8 +3303,11 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 }
 
 // checkTableOptions 审核表选项
-func (s *session) checkTableOptions(options []*ast.TableOption, table string, isCreate bool) {
+func (s *session) checkTableOptions(t *TableInfo, options []*ast.TableOption, table string, isCreate bool) {
 	var character, collation string
+	var chuintvalue uint64
+	chuboolvalue := false
+	couboolvalue := false
 	for _, opt := range options {
 		log.Errorf("opt: %#v", opt)
 		switch opt.Tp {
@@ -3316,22 +3319,27 @@ func (s *session) checkTableOptions(options []*ast.TableOption, table string, is
 			}
 		case ast.TableOptionCharset:
 			if s.inc.EnableSetCharset && s.dbType != DBTypeOceanBase {
-				s.checkCharset(opt.StrValue)
+				s.checkAlterCharset(t, opt.StrValue, opt.UintValue)
 			} else {
 				s.appendErrorNo(ER_TABLE_CHARSET_MUST_NULL, table)
 			}
 			character = opt.StrValue
+			chuintvalue = opt.UintValue
+			chuboolvalue = true
 		case ast.TableOptionCollate:
 			if s.inc.EnableSetCollation && s.dbType != DBTypeOceanBase {
-				s.checkCollation(opt.StrValue)
+				s.checkAlterCollation(t, opt.StrValue)
 			} else {
 				s.appendErrorNo(ErrTableCollationNotSupport, table)
 			}
 			collation = opt.StrValue
+			couboolvalue = true
 		case ast.TableOptionComment:
 			if len(opt.StrValue) > TABLE_COMMENT_MAXLEN {
 				s.appendErrorMsg(fmt.Sprintf("Comment for table '%s' is too long (max = %d)",
 					table, TABLE_COMMENT_MAXLEN))
+			} else {
+				s.checkComment(t, opt.StrValue)
 			}
 		case ast.TableOptionAutoIncrement:
 			if opt.UintValue > 1 && isCreate {
@@ -3349,7 +3357,9 @@ func (s *session) checkTableOptions(options []*ast.TableOption, table string, is
 			s.appendErrorNo(ER_NOT_SUPPORTED_ALTER_OPTION)
 		}
 	}
-	s.checkTableCharsetCollation(character, collation)
+	if chuboolvalue && couboolvalue {
+		s.checkTableCharsetCollation(t, chuintvalue, character, collation)
+	}
 }
 
 // checkMustHaveColumns 检查表是否包含有必须的字段
@@ -3458,16 +3468,18 @@ func (s *session) buildTableInfo(node *ast.CreateTableStmt) *TableInfo {
 	}
 
 	var character, collation string
+	var chuintvalue uint64
 	for _, opt := range node.Options {
 		switch opt.Tp {
 		case ast.TableOptionCharset:
 			character = opt.StrValue
+			chuintvalue = opt.UintValue
 		case ast.TableOptionCollate:
 			collation = opt.StrValue
 		}
 	}
 
-	s.checkTableCharsetCollation(character, collation)
+	s.checkTableCharsetCollation(table, chuintvalue, character, collation)
 
 	if collation != "" {
 		table.Collation = collation
@@ -3520,7 +3532,7 @@ func (s *session) buildPartitionInfo(def *ast.PartitionOptions,
 	return parts
 }
 
-func (s *session) checkTableCharsetCollation(character, collation string) {
+func (s *session) checkTableCharsetCollation(t *TableInfo, chuintvalue uint64, character, collation string) {
 	if character == "" {
 		return
 	}
@@ -3539,6 +3551,21 @@ func (s *session) checkTableCharsetCollation(character, collation string) {
 				if collationId >= 255 {
 					s.appendErrorMsg(fmt.Sprintf("Collation %s is only supported after mysql 8.0", collation))
 				}
+			}
+		}
+	}
+	if s.opt.Execute {
+		if chuintvalue == ast.TableOptionCharsetWithoutConvertTo {
+			for _, option := range t.Options {
+				char := strings.Split(option.Collation, "_")
+				s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+					fmt.Sprintf("DEFAULT CHARACTER SET %s COLLATE %s", char[0], option.Collation))
+			}
+		} else if chuintvalue == ast.TableOptionCharsetWithConvertTo {
+			for _, option := range t.Options {
+				char := strings.Split(option.Collation, "_")
+				s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+					fmt.Sprintf("CONVERT TO CHARACTER SET %s COLLATE %s", char[0], option.Collation))
 			}
 		}
 	}
@@ -3679,7 +3706,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 			if len(alter.Options) == 0 {
 				s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 			} else {
-				s.checkTableOptions(alter.Options, node.Table.Name.String(), false)
+				s.checkTableOptions(table, alter.Options, node.Table.Name.String(), false)
 			}
 
 		case ast.AlterTableAddColumns:
@@ -7245,6 +7272,38 @@ func (s *session) checkAlterDB(node *ast.AlterDatabaseStmt, sql string) {
 	}
 }
 
+func (s *session) checkAlterCharset(t *TableInfo, charset string, uintvalue uint64) bool {
+	log.Debug("checkAlterCharset")
+	if s.dbVersion < 80000 && strings.EqualFold(charset, "utf8mb3") {
+		s.appendErrorNo(ErrUnknownCharset, charset)
+	}
+	if s.inc.SupportCharset != "" {
+		for _, item := range strings.Split(s.inc.SupportCharset, ",") {
+			if strings.EqualFold(item, charset) {
+				if s.opt.Execute {
+					if uintvalue == ast.TableOptionCharsetWithoutConvertTo {
+						for _, option := range t.Options {
+							char := strings.Split(option.Collation, "_")
+							s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+								fmt.Sprintf("DEFAULT CHARACTER SET %s", char[0]))
+						}
+					} else if uintvalue == ast.TableOptionCharsetWithConvertTo {
+						for _, option := range t.Options {
+							char := strings.Split(option.Collation, "_")
+							s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+								fmt.Sprintf("CONVERT TO CHARACTER SET %s", char[0]))
+						}
+					}
+				}
+				return true
+			}
+		}
+		s.appendErrorNo(ErrCharsetNotSupport, s.inc.SupportCharset)
+		return false
+	}
+	return true
+}
+
 func (s *session) checkCharset(charset string) bool {
 	if s.dbVersion < 80000 && strings.EqualFold(charset, "utf8mb3") {
 		s.appendErrorNo(ErrUnknownCharset, charset)
@@ -7261,7 +7320,45 @@ func (s *session) checkCharset(charset string) bool {
 	return true
 }
 
+func (s *session) checkComment(t *TableInfo, comment string) bool {
+	for _, option := range t.Options {
+		if s.opt.Execute {
+			s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+				fmt.Sprintf("COMMENT '%s',", option.Comment))
+		}
+	}
+	return true
+}
+
+func (s *session) checkAlterCollation(t *TableInfo, collation string) bool {
+	log.Debug("checkAlterCollation")
+	if s.inc.SupportCollation != "" {
+		for _, item := range strings.Split(s.inc.SupportCollation, ",") {
+			if strings.EqualFold(item, collation) {
+				if s.opt.Execute {
+					for _, option := range t.Options {
+						s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+							fmt.Sprintf("DEFAULT COLLATE %s", option.Collation))
+					}
+				}
+				return true
+			}
+		}
+		s.appendErrorNo(ErrCollationNotSupport, s.inc.SupportCollation)
+		return false
+	} else {
+		if s.opt.Execute {
+			for _, option := range t.Options {
+				s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+					fmt.Sprintf("DEFAULT COLLATE %s", option.Collation))
+			}
+		}
+	}
+	return true
+}
+
 func (s *session) checkCollation(collation string) bool {
+	log.Debug("checkCollation")
 	if s.inc.SupportCollation != "" {
 		for _, item := range strings.Split(s.inc.SupportCollation, ",") {
 			if strings.EqualFold(item, collation) {
@@ -8203,6 +8300,30 @@ func (s *session) queryTableFromDB(db string, tableName string, reportNotExists 
 	return rows
 }
 
+func (s *session) queryTableOptionFromDB(db string, tableName string, reportNotExists bool) []*TableOptionInfo {
+	if db == "" {
+		db = s.dbName
+	}
+	var rows []*TableOptionInfo
+	sql := fmt.Sprintf("SHOW TABLE STATUS FROM `%s` WHERE NAME='%s'", db, tableName)
+	if err := s.rawScan(sql, &rows); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			if myErr.Number != 1049 {
+				log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+				s.appendErrorMsg(myErr.Message + ".")
+			} else if reportNotExists {
+				s.appendErrorMsg(myErr.Message + ".")
+				// s.AppendErrorNo(ER_TABLE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", db, tableName))
+			}
+
+		} else {
+			s.appendErrorMsg(err.Error() + ".")
+		}
+		return nil
+	}
+	return rows
+}
+
 func (s *session) fetchPartitionFromDB(t *TableInfo) error {
 	if t.IsNew || t.IsDeleted || len(t.Partitions) > 0 {
 		return nil
@@ -8566,6 +8687,9 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 		}
 		if rows := s.queryIndexFromDB(db, tableName, reportNotExists); rows != nil {
 			newT.Indexes = rows
+		}
+		if rows := s.queryTableOptionFromDB(db, tableName, reportNotExists); rows != nil {
+			newT.Options = rows
 		}
 		s.tableCacheList[key] = newT
 

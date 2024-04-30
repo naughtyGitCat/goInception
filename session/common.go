@@ -313,6 +313,7 @@ type TableInfo struct {
 
 	// used for masking
 	maskingFields []MaskingFieldInfo
+	Options       []*TableOptionInfo
 }
 
 // BackupTable 表$_$inception_backup_information$_$相关信息
@@ -335,6 +336,17 @@ type IndexInfo struct {
 	IndexType  string `gorm:"Column:Index_type"`
 
 	IsDeleted bool `gorm:"-"`
+}
+
+// TableOptionInfo 索引信息
+type TableOptionInfo struct {
+	gorm.Model
+
+	Name      string `gorm:"Column:Name"`
+	Engine    string `gorm:"Column:Engine"`
+	Rowformat string `gorm:"Column:Row_format"`
+	Collation string `gorm:"Column:Collation"`
+	Comment   string `gorm:"Column:Comment"`
 }
 
 // PartitionInfo 分区信息
