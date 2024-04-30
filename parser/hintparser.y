@@ -30,6 +30,7 @@ import (
 	hint    *ast.TableOptimizerHint
 	hints []*ast.TableOptimizerHint
 	table 	ast.HintTable
+	modelIdents []model.CIStr
 }
 
 %token	<number>
@@ -102,6 +103,7 @@ import (
 	/* Other keywords */
 	hintOLAP            "OLAP"
 	hintOLTP            "OLTP"
+	hintPartition       "PARTITION"
 	hintTiKV            "TIKV"
 	hintTiFlash         "TIFLASH"
 	hintFalse           "FALSE"
@@ -153,6 +155,9 @@ import (
 %type	<table>
 	HintTable "Table in optimizer hint"
 
+%type	<modelIdents>
+	PartitionList    "partition name list in optimizer hint"
+	PartitionListOpt "optional partition name list in optimizer hint"
 
 %start	Start
 
@@ -298,6 +303,27 @@ TableOptimizerHintOpt:
 			HintData: model.NewCIStr($4),
 		}
 	}
+|	hintIdentifier '(' QueryBlockOpt hintIntLit ')'
+	/* The hints below are pseudo hint. They are unsupported hints */
+	{
+		parser.warnUnsupportedHint($1)
+		$$ = nil
+	}
+|	hintIdentifier '(' PartitionList ')'
+	{
+		parser.warnUnsupportedHint($1)
+		$$ = nil
+	}
+|	hintIdentifier '(' PartitionList CommaOpt hintIntLit ')'
+	{
+		parser.warnUnsupportedHint($1)
+		$$ = nil
+	}
+|	hintIdentifier '(' Identifier '=' Value ')'
+	{
+		parser.warnUnsupportedHint($1)
+		$$ = nil
+	}
 
 StorageOptimizerHintOpt:
 	"READ_FROM_STORAGE" '(' QueryBlockOpt HintStorageTypeAndTableList ')'
@@ -342,6 +368,26 @@ CommaOpt:
 	{}
 |	','
 	{}
+
+PartitionListOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"PARTITION" '(' PartitionList ')'
+	{
+		$$ = $3
+	}
+
+PartitionList:
+	Identifier
+	{
+		$$ = []model.CIStr{model.NewCIStr($1)}
+	}
+|	PartitionList CommaOpt Identifier
+	{
+		$$ = append($1, model.NewCIStr($3))
+	}
 
 /**
  * HintTableListOpt:

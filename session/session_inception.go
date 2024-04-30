@@ -702,6 +702,8 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.AlterSequenceStmt:
 	case *ast.DropSequenceStmt:
 	case *ast.CallStmt:
+	case *ast.OptimizeTableStmt:
+		s.checkOptimizeTable(node)
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
@@ -1249,7 +1251,8 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.DropProcedureStmt,
 		*ast.FunctionInfo,
 		*ast.DropFunctionStmt,
-		*ast.CallStmt:
+		*ast.CallStmt,
+		*ast.OptimizeTableStmt:
 
 		s.executeRemoteStatement(record, isTran)
 
@@ -2891,8 +2894,27 @@ func Reverse(arr []string) []string {
 	return arr
 }
 
-func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
+func (s *session) checkOptimizeTable(node *ast.OptimizeTableStmt) {
+	log.Debug("checkOptimizeTable")
+	for _, t := range node.Tables {
+		if t.Schema.O == "" {
+			t.Schema = model.NewCIStr(s.dbName)
+		}
+		table := s.getTableFromCache(t.Schema.O, t.Name.O, false)
 
+		if !s.checkDBExists(t.Schema.O, true) {
+			return
+		}
+
+		if table == nil {
+			s.appendErrorNo(ER_TABLE_NOT_EXISTED_ERROR, t.Name.O)
+			s.myRecord.DBName = t.Schema.O
+			s.myRecord.TableName = t.Name.O
+		}
+	}
+}
+
+func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 	log.Debug("checkCreateTable")
 
 	// tidb暂不支持临时表 create temporary table t1

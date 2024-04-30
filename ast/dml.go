@@ -1563,10 +1563,12 @@ type SetOprSelectList struct {
 // Restore implements Node interface.
 func (n *SetOprSelectList) Restore(ctx *RestoreCtx) error {
 	if n.With != nil {
+		defer ctx.RestoreCTEFunc()() //nolint: all_revive
 		if err := n.With.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore SetOprSelectList.With")
 		}
 	}
+
 	for i, stmt := range n.Selects {
 		switch selectStmt := stmt.(type) {
 		case *SelectStmt:
@@ -1580,24 +1582,26 @@ func (n *SetOprSelectList) Restore(ctx *RestoreCtx) error {
 			if i != 0 {
 				ctx.WriteKeyWord(" " + selectStmt.AfterSetOperator.String() + " ")
 			}
+			ctx.WritePlain("(")
 			err := selectStmt.Restore(ctx)
 			if err != nil {
 				return err
 			}
 			ctx.WritePlain(")")
 		}
-		if n.OrderBy != nil {
-			ctx.WritePlain(" ")
-			if err := n.OrderBy.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore SetOprSelectList.OrderBy")
-			}
-		}
+	}
 
-		if n.Limit != nil {
-			ctx.WritePlain(" ")
-			if err := n.Limit.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore SetOprSelectList.Limit")
-			}
+	if n.OrderBy != nil {
+		ctx.WritePlain(" ")
+		if err := n.OrderBy.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore SetOprSelectList.OrderBy")
+		}
+	}
+
+	if n.Limit != nil {
+		ctx.WritePlain(" ")
+		if err := n.Limit.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore SetOprSelectList.Limit")
 		}
 	}
 	return nil

@@ -749,6 +749,7 @@ import (
 	LoadStatsStmt        "Load statistic statement"
 	LockTablesStmt       "Lock tables statement"
 	CompoundProcStmt     "The compound of function"
+	OptimizeTableStmt    "OPTIMIZE statement"
 	PreparedStmt         "PreparedStmt"
 	FunctionProcStmt     "The entrance of function"
 	ProcedureProcStmt    "The entrance of procedure statements which contains all kinds of statements in procedure"
@@ -7042,7 +7043,16 @@ TableName:
 	}
 |	Identifier '.' Identifier
 	{
-		$$ = &ast.TableName{Schema: model.NewCIStr($1), Name: model.NewCIStr($3)}
+		schema := $1
+		if isInCorrectIdentifierName(schema) {
+			yylex.AppendError(ErrWrongDBName.GenWithStackByArgs(schema))
+			return 1
+		}
+		$$ = &ast.TableName{Schema: model.NewCIStr(schema), Name: model.NewCIStr($3)}
+	}
+|	'*' '.' Identifier
+	{
+		$$ = &ast.TableName{Schema: model.NewCIStr("*"), Name: model.NewCIStr($3)}
 	}
 
 TableNameOptWild:
@@ -9531,6 +9541,7 @@ Statement:
 |	UseStmt
 |	UnlockTablesStmt
 |	LockTablesStmt
+|	OptimizeTableStmt
 
 TraceableStmt:
 	DeleteFromStmt
@@ -11976,4 +11987,20 @@ AlterSequenceOption:
 	{
 		$$ = &ast.SequenceOption{Tp: ast.SequenceRestartWith, IntValue: $3.(int64)}
 	}
+
+/********************************************************************
+ * OptimizeTableStmt
+ *
+ * OPTIMIZE [NO_WRITE_TO_BINLOG | LOCAL]
+ *     TABLE tbl_name [, tbl_name] ...
+ *******************************************************************/
+OptimizeTableStmt:
+	"OPTIMIZE" NoWriteToBinLogAliasOpt TableOrTables TableNameList
+	{
+		$$ = &ast.OptimizeTableStmt{
+			Tables:          $4.([]*ast.TableName),
+			NoWriteToBinLog: $2.(bool),
+		}
+	}
+	
 %%

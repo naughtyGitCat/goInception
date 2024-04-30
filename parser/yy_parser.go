@@ -61,6 +61,8 @@ var (
 	ErrUnknownAlterAlgorithm = terror.ClassParser.New(mysql.ErrUnknownAlterAlgorithm, mysql.MySQLErrName[mysql.ErrUnknownAlterAlgorithm])
 	// ErrWrongUsage returns for incorrect usages.
 	ErrWrongUsage = terror.ClassParser.NewStd(mysql.ErrWrongUsage)
+	// ErrWrongDBName returns for incorrect DB name.
+	ErrWrongDBName = terror.ClassParser.NewStd(mysql.ErrWrongDBName)
 	// SpecFieldPattern special result field pattern
 	SpecFieldPattern = regexp.MustCompile(`(\/\*!(M?[0-9]{5,6})?|\*\/)`)
 	specCodePattern  = regexp.MustCompile(`\/\*!(M?[0-9]{5,6})?([^*]|\*+[^*/])*\*+\/`)

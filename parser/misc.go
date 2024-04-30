@@ -35,6 +35,17 @@ func isIdentExtend(ch rune) bool {
 	return ch >= 0x80 && ch <= '\uffff'
 }
 
+// See https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
+func isInCorrectIdentifierName(name string) bool {
+	if len(name) == 0 {
+		return true
+	}
+	if name[len(name)-1] == ' ' {
+		return true
+	}
+	return false
+}
+
 func isUserVarChar(ch rune) bool {
 	return isLetter(ch) || isDigit(ch) || ch == '_' || ch == '$' || ch == '.' || isIdentExtend(ch)
 }
