@@ -79,10 +79,10 @@ type Record struct {
 	ThreadId      uint32
 	SeqNo         int
 
-	DBName    string
-	TableName string
-	TableInfo *TableInfo
-
+	DBName        string
+	TableName     string
+	TableInfo     *TableInfo
+	SequencesInfo *SequencesInfo
 	// ddl回滚
 	DDLRollback string
 	OPID        string

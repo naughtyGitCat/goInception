@@ -27,6 +27,7 @@ const (
 	DBTypeMariaDB
 	DBTypeTiDB
 	DBTypeOceanBase
+	DBTypeGreatSQL
 )
 
 // 审核阶段

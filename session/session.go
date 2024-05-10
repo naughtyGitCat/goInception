@@ -175,8 +175,9 @@ type session struct {
 
 	myRecord *Record
 
-	tableCacheList map[string]*TableInfo
-	dbCacheList    map[string]*DBInfo
+	tableCacheList     map[string]*TableInfo
+	dbCacheList        map[string]*DBInfo
+	sequencesCacheList map[string]*SequencesInfo
 
 	// 备份库
 	backupDBCacheList map[string]bool

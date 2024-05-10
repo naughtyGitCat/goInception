@@ -338,7 +338,7 @@ type IndexInfo struct {
 	IsDeleted bool `gorm:"-"`
 }
 
-// TableOptionInfo 索引信息
+// TableOptionInfo 表选项信息
 type TableOptionInfo struct {
 	gorm.Model
 
@@ -361,6 +361,34 @@ type PartitionInfo struct {
 	TableRows       int    `gorm:"Column:TABLE_ROWS"`
 
 	IsDeleted bool `gorm:"-"`
+}
+
+// SequencesInfo 库信息
+type SequencesInfo struct {
+	Schema          string
+	Name            string
+	SequencesOption []SequencesOptionInfo
+	// 是否已删除
+	IsDeleted bool
+	// 是否为新增
+	IsNew bool
+	// 备份库是否已创建
+	IsCreated bool
+}
+
+// SequencesOptionInfo 序列选项信息
+type SequencesOptionInfo struct {
+	gorm.Model
+
+	Db        string `gorm:"Column:DB"`
+	Name      string `gorm:"Column:NAME"`
+	StartWtih uint64 `gorm:"Column:START_WITH"`
+	MinValue  uint64 `gorm:"Column:MINVALUE"`
+	MaxValue  uint64 `gorm:"Column:MAXVALUE"`
+	Increment uint64 `gorm:"Column:INCREMENT"`
+	CycleFlag uint64 `gorm:"Column:CYCLE_FLAG"`
+	CacheNum  uint64 `gorm:"Column:CACHE_NUM"`
+	OrderFlag uint64 `gorm:"Column:ORDER_FLAG"`
 }
 
 // DBInfo 库信息

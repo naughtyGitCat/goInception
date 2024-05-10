@@ -699,8 +699,11 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.FunctionInfo:
 		s.checkCreateFunction(node)
 	case *ast.CreateSequenceStmt:
+		s.checkCreateSequence(node)
 	case *ast.AlterSequenceStmt:
+		s.checkAlterSequence(node)
 	case *ast.DropSequenceStmt:
+		s.checkDropSequence(node)
 	case *ast.CallStmt:
 	case *ast.OptimizeTableStmt:
 		s.checkOptimizeTable(node)
@@ -885,7 +888,10 @@ func (s *session) checkSqlIsDDL(record *Record) bool {
 		// *ast.DropDatabaseStmt,
 
 		*ast.CreateIndexStmt,
-		*ast.DropIndexStmt:
+		*ast.DropIndexStmt,
+		*ast.CreateSequenceStmt,
+		*ast.DropSequenceStmt,
+		*ast.AlterSequenceStmt:
 		if record.ExecComplete {
 			return true
 		}
@@ -1252,8 +1258,10 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.FunctionInfo,
 		*ast.DropFunctionStmt,
 		*ast.CallStmt,
-		*ast.OptimizeTableStmt:
-
+		*ast.OptimizeTableStmt,
+		*ast.CreateSequenceStmt,
+		*ast.AlterSequenceStmt,
+		*ast.DropSequenceStmt:
 		s.executeRemoteStatement(record, isTran)
 
 	default:
@@ -1642,6 +1650,9 @@ func (s *session) executeRemoteStatement(record *Record, isTran bool) {
 	if _, ok := record.Type.(*ast.CreateTableStmt); ok &&
 		record.TableInfo == nil && record.DBName != "" && record.TableName != "" {
 		record.TableInfo = s.getTableFromCache(record.DBName, record.TableName, true)
+	} else if _, ok := record.Type.(*ast.CreateSequenceStmt); ok &&
+		record.SequencesInfo == nil && record.DBName != "" && record.TableName != "" {
+		record.SequencesInfo = s.getSequencesFromCache(record.DBName, record.TableName, true)
 	}
 }
 
@@ -1841,6 +1852,8 @@ func (s *session) mysqlServerVersion() {
 			case "version_comment":
 				if strings.Contains(strings.ToLower(value), "oceanbase") {
 					s.dbType = DBTypeOceanBase
+				} else if strings.Contains(strings.ToLower(value), "greatsql") {
+					s.dbType = DBTypeGreatSQL
 				}
 			case "innodb_large_prefix":
 				emptyInnodbLargePrefix = false
@@ -2417,6 +2430,231 @@ func (s *session) checkDropTable(node *ast.DropTableStmt, sql string) {
 	}
 }
 
+func (s *session) supportSequence() bool {
+	return s.dbType != DBTypeMysql
+}
+
+func (s *session) checkCreateSequence(node *ast.CreateSequenceStmt) {
+	log.Debug("checkCreateSequence")
+
+	if !s.supportSequence() {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
+
+	if node.Name.Schema.O == "" {
+		node.Name.Schema = model.NewCIStr(s.dbName)
+	}
+
+	if !s.checkDBExists(node.Name.Schema.O, true) {
+		return
+	}
+
+	s.checkKeyWords(node.Name.Name.O)
+	// 如果列名有错误的话,则直接跳出
+	if s.myRecord.ErrLevel == 2 {
+		return
+	}
+
+	/*if s.checkSequenceExists(node.Name.Schema.O, node.Name.Name.O, false) {
+		if !node.IfNotExists {
+			s.appendErrorNo(ER_SEQUENCE_EXISTS_ERROR, node.Name.Name.O)
+			return
+		}
+	}*/
+
+	table := s.getSequencesFromCache(node.Name.Schema.O, node.Name.Name.O, false)
+	if table != nil {
+		if !node.IfNotExists {
+			s.appendErrorNo(ER_SEQUENCE_EXISTS_ERROR, node.Name.Name.O)
+		}
+		s.myRecord.DBName = node.Name.Schema.O
+		s.myRecord.TableName = node.Name.Name.O
+	} else {
+
+		s.myRecord.DBName = node.Name.Schema.O
+		s.myRecord.TableName = node.Name.Name.O
+	}
+
+	if !s.hasError() && s.opt.Execute {
+		s.myRecord.DDLRollback = fmt.Sprintf("DROP SEQUENCE `%s`.`%s`;", node.Name.Schema.O, node.Name.Name.O)
+	}
+}
+
+func (s *session) checkDropSequence(node *ast.DropSequenceStmt) {
+	log.Debug("checkDropSequence")
+
+	if !s.supportSequence() {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
+
+	for _, SeqName := range node.Sequences {
+		if SeqName.Schema.O == "" {
+			SeqName.Schema = model.NewCIStr(s.dbName)
+		}
+
+		table := s.getSequencesFromCache(SeqName.Schema.O, SeqName.Name.O, false)
+
+		/*if !s.checkSequenceExists(SeqName.Schema.O, SeqName.Name.O, false) && !node.IfExists {
+			s.appendErrorNo(ER_SEQUENCE_NOT_EXISTED_ERROR, SeqName.Name.O)
+		} else {
+			if s.opt.Execute {
+				s.mysqlShowSequence(SeqName.Schema.O, SeqName.Name.O)
+			}
+		}*/
+		//如果表不存在，但存在if existed，则跳过
+		if table == nil {
+			if !node.IfExists {
+				s.appendErrorNo(ER_SEQUENCE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", SeqName.Schema.O, SeqName.Name.O))
+			}
+		} else {
+			if s.opt.Execute {
+				s.mysqlShowSequence(SeqName.Schema.O, SeqName.Name.O)
+			}
+			s.myRecord.SequencesInfo = table
+
+			s.myRecord.SequencesInfo.IsDeleted = true
+		}
+	}
+}
+
+func (s *session) checkAlterSequence(node *ast.AlterSequenceStmt) {
+	log.Debug("checkAlterSequence")
+
+	if !s.supportSequence() {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
+
+	if node.Name.Schema.O == "" {
+		node.Name.Schema = model.NewCIStr(s.dbName)
+	}
+
+	if !s.checkDBExists(node.Name.Schema.O, true) {
+		return
+	}
+
+	table := s.getSequencesFromCache(node.Name.Schema.O, node.Name.Name.O, true)
+	if table == nil {
+		return
+	}
+
+	s.myRecord.SequencesInfo = table
+
+	if s.opt.Backup {
+		s.myRecord.DDLRollback += fmt.Sprintf("ALTER SEQUENCE `%s`.`%s` ",
+			table.Schema, table.Name)
+	}
+	s.alterRollbackBuffer = nil
+
+	if len(node.SeqOptions) == 0 {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
+
+	for i, alter := range node.SeqOptions {
+		switch alter.Tp {
+		case ast.SequenceOptionIncrementBy:
+			s.checkAlterSequencesIncrementBy(table)
+		case ast.SequenceMaxValue:
+			s.checkAlterSequencesMaxValue(table)
+		case ast.SequenceCache:
+			s.checkAlterSequencesCache(table)
+		case ast.SequenceCycle:
+		case ast.SequenceNoCycle:
+		case ast.SequenceNoCache:
+		case ast.SequenceStartWith:
+		case ast.SequenceRestartWith:
+		case ast.SequenceRestart:
+		case ast.SequenceOrder:
+		case ast.SequenceNoOrder:
+		default:
+			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+			log.Info("con:", s.sessionVars.ConnectionID, " 未定义的解析: ", alter.Tp)
+
+		}
+		// 由于表结构快照机制,需要在添加/删除列后重新获取一次表结构
+		if i < len(node.SeqOptions)-1 {
+			table = s.getSequencesFromCache(node.Name.Schema.O, node.Name.Name.O, true)
+			if table == nil {
+				return
+			}
+		}
+		// 生成alter回滚语句,多个时逆向
+		if !s.hasError() && s.opt.Execute && s.opt.Backup {
+			n := len(s.alterRollbackBuffer)
+			if n > 1 {
+				swap := reflect.Swapper(s.alterRollbackBuffer)
+				for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
+					swap(i, j)
+				}
+			}
+
+			s.myRecord.DDLRollback += strings.Join(s.alterRollbackBuffer, "")
+			if strings.HasSuffix(s.myRecord.DDLRollback, ",") {
+				s.myRecord.DDLRollback = strings.TrimSuffix(s.myRecord.DDLRollback, ",") + ";"
+			}
+		}
+		s.alterRollbackBuffer = nil
+	}
+}
+
+func (s *session) checkAlterSequencesIncrementBy(t *SequencesInfo) {
+	log.Debug("checkAlterIncrementBy")
+	for _, field := range t.SequencesOption {
+		if s.opt.Execute {
+			s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+				fmt.Sprintf("INCREMENT BY `%d` ", field.Increment))
+		}
+	}
+}
+
+func (s *session) checkAlterSequencesMaxValue(t *SequencesInfo) {
+	log.Debug("checkAlterSequencesMaxValue")
+	for _, field := range t.SequencesOption {
+		if s.opt.Execute {
+			s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+				fmt.Sprintf("MAXVALUE `%d` ", field.MaxValue))
+		}
+	}
+}
+
+func (s *session) checkAlterSequencesCache(t *SequencesInfo) {
+	log.Debug("checkAlterSequencesCache")
+	for _, field := range t.SequencesOption {
+		if s.opt.Execute {
+			s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+				fmt.Sprintf("CACHE `%d` ", field.CacheNum))
+		}
+	}
+}
+
+// mysqlShowSequence 生成回滚语句
+func (s *session) mysqlShowSequence(db, seqname string) {
+
+	sql := fmt.Sprintf("SHOW CREATE SEQUENCE `%s`.`%s`;", db, seqname)
+
+	type Object struct {
+		Sequence string `gorm:"Column:Create Sequence"`
+	}
+
+	var rows []Object
+	if err := s.rawScan(sql, &rows); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	}
+
+	if rows != nil {
+		row := rows[0]
+		s.myRecord.DDLRollback = row.Sequence
+		s.myRecord.DDLRollback += ";"
+	}
+}
+
 func (s *session) supportTableGroup() bool {
 	return s.dbType == DBTypeOceanBase
 }
@@ -2551,7 +2789,7 @@ func (s *session) checkCreateProcedure(node *ast.ProcedureInfo) {
 	}
 
 	if !s.hasError() && s.opt.Execute {
-		s.myRecord.DDLRollback = fmt.Sprintf("DROP PROCEDURE %s`;", node.ProcedureName.Name.O)
+		s.myRecord.DDLRollback = fmt.Sprintf("DROP PROCEDURE`%s`.`%s`;", node.ProcedureName.Schema.O, node.ProcedureName.Name.O)
 	}
 }
 
@@ -2632,7 +2870,7 @@ func (s *session) checkCreateFunction(node *ast.FunctionInfo) {
 	}
 
 	if !s.hasError() && s.opt.Execute {
-		s.myRecord.DDLRollback = fmt.Sprintf("DROP FUNCTION %s`;", node.FunctionName.Name.O)
+		s.myRecord.DDLRollback = fmt.Sprintf("DROP FUNCTION `%s`.`%s`;", node.FunctionName.Schema.O, node.FunctionName.Name.O)
 	}
 }
 
@@ -8301,6 +8539,33 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	// s.saveFingerprint(sqlId)
 }
 
+func (s *session) querySequencesFromDB(db string, sequencesName string, reportNotExists bool) []SequencesOptionInfo {
+	if db == "" {
+		db = s.dbName
+	}
+	var rows []SequencesOptionInfo
+	var sql string
+	if s.dbType == DBTypeGreatSQL {
+		sql = fmt.Sprintf(`SELECT * FROM information_schema.SEQUENCES
+		WHERE DB='%s' AND NAME='%s';`, db, sequencesName)
+	} else if s.dbType == DBTypeTiDB {
+		sql = fmt.Sprintf(`SELECT *  FROM information_schema.SEQUENCES
+		WHERE SEQUENCE_SCHEMA='%s' AND SEQUENCE_NAME='%s';`, db, sequencesName)
+	} else if s.dbType == DBTypeOceanBase {
+		sql = fmt.Sprintf(`SELECT * FROM information_schema.SEQUENCES
+		WHERE SEQUENCE_OWNER='%s' AND SEQUENCE_NAME='%s';`, db, sequencesName)
+	}
+
+	s.rawScan(sql, &rows)
+	if len(rows) == 0 {
+		if reportNotExists {
+			s.appendErrorNo(ER_SEQUENCE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", db, sequencesName))
+		}
+		return nil
+	}
+	return rows
+}
+
 func (s *session) queryTableFromDB(db string, tableName string, reportNotExists bool) []FieldInfo {
 	if db == "" {
 		db = s.dbName
@@ -8677,6 +8942,50 @@ func extractTableList(node ast.ResultSetNode, input []*ast.TableSource) []*ast.T
 		// log.Infof("%#v", x)
 	}
 	return input
+}
+
+func (s *session) getSequencesFromCache(db string, sequencesName string, reportNotExists bool) *SequencesInfo {
+	if db == "" {
+		db = s.dbName
+	}
+
+	if db == "" {
+		s.appendErrorNo(ER_WRONG_DB_NAME, "")
+		return nil
+	}
+
+	if !s.checkDBExists(db, reportNotExists) {
+		return nil
+	}
+
+	key := fmt.Sprintf("%s.%s", db, sequencesName)
+	if s.IgnoreCase() {
+		key = strings.ToLower(key)
+	}
+
+	if t, ok := s.sequencesCacheList[key]; ok {
+		// 如果表已删除, 之后又使用到,则报错
+		if t.IsDeleted {
+			if reportNotExists {
+				s.appendErrorNo(ER_SEQUENCE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", t.Schema, t.Name))
+			}
+			return nil
+		}
+		return t
+	}
+
+	rows := s.querySequencesFromDB(db, sequencesName, reportNotExists)
+	if rows != nil {
+		newT := &SequencesInfo{
+			Schema:          db,
+			Name:            sequencesName,
+			SequencesOption: rows,
+		}
+		s.sequencesCacheList[key] = newT
+		return newT
+	}
+
+	return nil
 }
 
 func (s *session) getTableFromCache(db string, tableName string, reportNotExists bool) *TableInfo {

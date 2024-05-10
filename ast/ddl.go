@@ -500,8 +500,20 @@ func (n *ColumnOption) Restore(ctx *RestoreCtx) error {
 		ctx.WriteKeyWord("AUTO_INCREMENT")
 	case ColumnOptionDefaultValue:
 		ctx.WriteKeyWord("DEFAULT ")
+		printOuterParentheses := false
+		if funcCallExpr, ok := n.Expr.(*FuncCallExpr); ok {
+			if name := funcCallExpr.FnName.L; name != CurrentTimestamp {
+				printOuterParentheses = true
+			}
+		}
+		if printOuterParentheses {
+			ctx.WritePlain("(")
+		}
 		if err := n.Expr.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while splicing ColumnOption DefaultValue Expr")
+		}
+		if printOuterParentheses {
+			ctx.WritePlain(")")
 		}
 	case ColumnOptionUniqKey:
 		ctx.WriteKeyWord("UNIQUE KEY")
@@ -988,10 +1000,10 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 	lenCols := len(n.Cols)
 	lenConstraints := len(n.Constraints)
 	if lenCols+lenConstraints > 0 {
-		ctx.WritePlain("(")
+		ctx.WritePlain(" (")
 		for i, col := range n.Cols {
 			if i > 0 {
-				ctx.WritePlain(" (")
+				ctx.WritePlain(",")
 			}
 			if err := col.Restore(ctx); err != nil {
 				return errors.Annotatef(err, "An error occurred while splicing CreateTableStmt ColumnDef: [%v]", i)

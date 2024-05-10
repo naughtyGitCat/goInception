@@ -38,7 +38,6 @@ type chanData struct {
 func (s *session) processChan(wg *sync.WaitGroup) {
 	for {
 		r := <-s.ch
-
 		if r == nil {
 			// log.Info("剩余ch", len(s.ch), "cap ch", cap(s.ch), "通道关闭,跳出循环")
 			// log.Info("ProcessChan,close")
@@ -122,6 +121,30 @@ func (s *session) getNextBackupRecord() *Record {
 				return r
 			}
 
+		} else if r.SequencesInfo != nil {
+
+			lastBackupTable := fmt.Sprintf("`%s`.`%s`", s.getRemoteBackupDBName(r), r.SequencesInfo.Name)
+
+			if s.lastBackupTable == "" {
+				s.lastBackupTable = lastBackupTable
+			}
+
+			if s.checkSqlIsDDL(r) {
+				if s.lastBackupTable != lastBackupTable {
+					s.ch <- &chanData{sql: nil, table: s.lastBackupTable, record: s.myRecord}
+					s.lastBackupTable = lastBackupTable
+				}
+
+				s.ch <- &chanData{sqlStr: r.DDLRollback, opid: r.OPID,
+					table: s.lastBackupTable, record: r}
+
+				if r.StageStatus != StatusExecFail {
+					r.StageStatus = StatusBackupOK
+				}
+
+				continue
+
+			}
 		}
 	}
 }
@@ -531,7 +554,6 @@ func (s *session) myWrite(b []byte, binEvent *replication.BinlogEvent,
 
 // 解析的sql写入缓存,并定期入库
 func (s *session) myWriteDDL(sql string, opid string, table string, record *Record) {
-
 	s.insertBuffer = append(s.insertBuffer, sql, opid)
 
 	if len(s.insertBuffer) >= 1000 {

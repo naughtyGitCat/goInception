@@ -236,6 +236,8 @@ const (
 	ER_CANT_DROP_PROCEDURE
 	ER_PROCEDURE_NOT_ALLOWED
 	ER_FUNCTION_NOT_ALLOWED
+	ER_SEQUENCE_NOT_EXISTED_ERROR
+	ER_SEQUENCE_EXISTS_ERROR
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -439,6 +441,8 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_CANT_DROP_PROCEDURE:         "Command is forbidden! Cannot drop procedure '%s'.",
 	ER_PROCEDURE_NOT_ALLOWED:       "Procedure is not allowed.",
 	ER_FUNCTION_NOT_ALLOWED:        "Function is not allowed.",
+	ER_SEQUENCE_NOT_EXISTED_ERROR:  "Sequence '%-.64s' does not exist",
+	ER_SEQUENCE_EXISTS_ERROR:       "Sequence'%s' already exists.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -633,6 +637,8 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_CANT_DROP_PROCEDURE:                 "命令禁止! 无法删除存储过程'%s'.",
 	ER_PROCEDURE_NOT_ALLOWED:               "不允许创建存储过程.",
 	ER_FUNCTION_NOT_ALLOWED:                "不允许创建函数.",
+	ER_SEQUENCE_NOT_EXISTED_ERROR:          "序列 '%s' 不存在.",
+	ER_SEQUENCE_EXISTS_ERROR:               "序列 '%s' 已存在.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -1195,6 +1201,10 @@ func (e ErrorCode) String() string {
 		return "er_procedure_not_allowed"
 	case ER_FUNCTION_NOT_ALLOWED:
 		return "er_function_not_allowed"
+	case ER_SEQUENCE_NOT_EXISTED_ERROR:
+		return "er_sequence_not_existed_error"
+	case ER_SEQUENCE_EXISTS_ERROR:
+		return "er_sequence_exists_error"
 	}
 	return ""
 }

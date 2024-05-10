@@ -381,6 +381,7 @@ import (
 	tbpartition            "TBPARTITION"
 	tbpartitions           "TBPARTITIONS"
 	last				   "LAST"
+	lastval                "LASTVAL"
 	mm   				   "MM"
 	dd   				   "DD"
 	mmdd   			   	   "MMDD"
@@ -452,6 +453,7 @@ import (
 	minValue        	   "MINVALUE"
 	names                  "NAMES"
 	next                   "NEXT"
+	nextval                "NEXTVAL"
 	national               "NATIONAL"
 	no                     "NO"
 	nocycle        	       "NOCYCLE"
@@ -508,6 +510,7 @@ import (
 	separator              "SEPARATOR"
 	serializable           "SERIALIZABLE"
 	session                "SESSION"
+	setval                 "SETVAL"
 	share                  "SHARE"
 	shared                 "SHARED"
 	signed                 "SIGNED"
@@ -694,6 +697,11 @@ import (
 	SignedLiteral          "Literal or NumLiteral with sign"
 	DefaultValueExpr       "DefaultValueExpr(Now or Signed Literal)"
 	NowSymOptionFraction   "NowSym with optional fraction part"
+	NowSymOptionFractionParentheses "NowSym with optional fraction part within potential parentheses"
+	NextValueForSequenceParentheses "Default nextval expression within potential parentheses"
+	NextValueForSequence   "Default nextval expression"
+	FunctionNameSequence   "Function with sequence function call"
+	BuiltinFunction        "Default builtin functions for columns"
 	WindowFuncCall         "WINDOW function call"
 	RepeatableOpt          "Repeatable optional in sample clause"
 	ProcedureCall          "Procedure call with Identifier or identifier"
@@ -1178,6 +1186,7 @@ import (
 	PrimaryOpt        "Optional primary keyword"
 	NowSym            "CURRENT_TIMESTAMP/LOCALTIME/LOCALTIMESTAMP"
 	NowSymFunc        "CURRENT_TIMESTAMP/LOCALTIME/LOCALTIMESTAMP/NOW"
+	CurdateSym        "CURDATE or CURRENT_DATE"
 	DefaultKwdOpt     "optional DEFAULT keyword"
 	DatabaseSym       "DATABASE or SCHEMA"
 	ExplainSym        "EXPLAIN or DESCRIBE or DESC"
@@ -1225,6 +1234,9 @@ import (
 %precedence sqlBigResult
 %precedence sqlSmallResult
 %precedence sqlCache sqlNoCache
+%precedence next
+%precedence lowerThanValueKeyword
+%precedence value
 %precedence lowerThanWith
 %precedence with
 %precedence lowerThanStringLitToken
@@ -2717,18 +2729,53 @@ ReferOpt:
 
 /*
  * The DEFAULT clause specifies a default value for a column.
- * With one exception, the default value must be a constant;
- * it cannot be a function or an expression. This means, for example,
- * that you cannot set the default for a date column to be the value of
- * a function such as NOW() or CURRENT_DATE. The exception is that you
- * can specify CURRENT_TIMESTAMP as the default for a TIMESTAMP or DATETIME column.
+ * It can be a function or an expression. This means, for example,
+ * that you can set the default for a date column to be the value of
+ * a function such as NOW() or CURRENT_DATE. While in MySQL 8.0
+ * expression default values are required to be enclosed in parentheses,
+ * they are NOT required so in TiDB.
  *
- * See http://dev.mysql.com/doc/refman/5.7/en/create-table.html
- *      https://github.com/mysql/mysql-server/blob/5.7/sql/sql_yacc.yy#L6832
+ * See https://dev.mysql.com/doc/refman/8.0/en/create-table.html
+ *      https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html
  */
 DefaultValueExpr:
-	NowSymOptionFraction
+	NowSymOptionFractionParentheses
 |	SignedLiteral
+|	NextValueForSequenceParentheses
+|	BuiltinFunction
+
+BuiltinFunction:
+	'(' BuiltinFunction ')'
+	{
+		$$ = $2.(*ast.FuncCallExpr)
+	}
+|	identifier '(' ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+		}
+	}
+|	identifier '(' ExpressionList ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+			Args:   $3.([]ast.ExprNode),
+		}
+	}
+|	"REPLACE" '(' ExpressionList ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+			Args:   $3.([]ast.ExprNode),
+		}
+	}
+
+NowSymOptionFractionParentheses:
+	'(' NowSymOptionFractionParentheses ')'
+	{
+		$$ = $2.(*ast.FuncCallExpr)
+	}
+|	NowSymOptionFraction
 
 NowSymOptionFraction:
 	NowSym
@@ -2741,8 +2788,44 @@ NowSymOptionFraction:
 	}
 |	NowSymFunc '(' NUM ')'
 	{
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr("CURRENT_TIMESTAMP"),
-			Args: []ast.ExprNode{ast.NewValueExpr($3)}}
+		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr("CURRENT_TIMESTAMP"), Args: []ast.ExprNode{ast.NewValueExpr($3)}}
+	}
+|	CurdateSym '(' ')'
+	{
+		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr("CURRENT_DATE")}
+	}
+|	"CURRENT_DATE"
+	{
+		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr("CURRENT_DATE")}
+	}
+
+NextValueForSequenceParentheses:
+	'(' NextValueForSequenceParentheses ')'
+	{
+		$$ = $2.(*ast.FuncCallExpr)
+	}
+|	NextValueForSequence
+
+NextValueForSequence:
+	"NEXT" "VALUE" forKwd TableName
+	{
+		objNameExpr := &ast.TableNameExpr{
+			Name: $4.(*ast.TableName),
+		}
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr(ast.NextVal),
+			Args:   []ast.ExprNode{objNameExpr},
+		}
+	}
+|	"NEXTVAL" '(' TableName ')'
+	{
+		objNameExpr := &ast.TableNameExpr{
+			Name: $3.(*ast.TableName),
+		}
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr(ast.NextVal),
+			Args:   []ast.ExprNode{objNameExpr},
+		}
 	}
 
 /*
@@ -2759,6 +2842,10 @@ NowSym:
 	"CURRENT_TIMESTAMP"
 |	"LOCALTIME"
 |	"LOCALTIMESTAMP"
+
+CurdateSym:
+	builtinCurDate
+|	"CURRENT_DATE"
 
 SignedLiteral:
 	Literal
@@ -5355,7 +5442,7 @@ UnReservedKeyword:
 |	"TRUNCATE"
 |	"UNBOUNDED"
 |	"UNKNOWN"
-|	"VALUE"
+|	"VALUE" %prec lowerThanValueKeyword
 |	"WARNINGS"
 |	"YEAR"
 |	"MODE"
@@ -5476,6 +5563,7 @@ UnReservedKeyword:
 |	"FOUND"
 |	"OPEN"
 |	"NEXT"
+|	"NEXTVAL"
 |	"WAIT"
 |	"AGAINST"
 |	"EXPANSION"
@@ -5496,6 +5584,8 @@ UnReservedKeyword:
 |	"NOCYCLE"
 |	"NOORDER"
 |	"RESTART"
+|	"LASTVAL"
+|	"SETVAL"
 
 TiDBKeyword:
 	"ADMIN"
@@ -6502,6 +6592,7 @@ FunctionCallNonKeyword:
 			Args:   []ast.ExprNode{$6, $4, direction},
 		}
 	}
+|	FunctionNameSequence
 |	builtinTranslate '(' Expression ',' Expression ',' Expression ')'
 	{
 		$$ = &ast.FuncCallExpr{
@@ -6549,6 +6640,30 @@ TrimDirection:
 	{
 		$$ = ast.TrimTrailing
 	}
+
+FunctionNameSequence:
+	"LASTVAL" '(' TableName ')'
+	{
+		objNameExpr := &ast.TableNameExpr{
+			Name: $3.(*ast.TableName),
+		}
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr(ast.LastVal),
+			Args:   []ast.ExprNode{objNameExpr},
+		}
+	}
+|	"SETVAL" '(' TableName ',' SignedNum ')'
+	{
+		objNameExpr := &ast.TableNameExpr{
+			Name: $3.(*ast.TableName),
+		}
+		valueExpr := ast.NewValueExpr($5)
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr(ast.SetVal),
+			Args:   []ast.ExprNode{objNameExpr, valueExpr},
+		}
+	}
+|	NextValueForSequence
 
 SumExpr:
 	"AVG" '(' BuggyDefaultFalseDistinctOpt Expression ')' OptWindowingClause

@@ -323,6 +323,11 @@ const (
 	JSONDepth         = "json_depth"
 	JSONKeys          = "json_keys"
 	JSONLength        = "json_length"
+
+	// Sequence function.
+	NextVal = "nextval"
+	LastVal = "lastval"
+	SetVal  = "setval"
 )
 
 type FuncCallExprType int8
