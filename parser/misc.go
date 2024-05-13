@@ -399,6 +399,7 @@ var tokenMap = map[string]int{
 	"LIST":                     list,
 	"LANGUAGE":                 language,
 	"LOAD":                     load,
+	"LOOP":                     loop,
 	"LOCAL":                    local,
 	"LOCALITY":                 locality,
 	"LOCALTIME":                localTime,

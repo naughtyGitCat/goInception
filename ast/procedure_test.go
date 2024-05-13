@@ -141,6 +141,7 @@ func TestProcedureVisitor(t *testing.T) {
 		"create procedure proc_2(in id bigint) begin DECLARE value INTEGER;SET value = 0;SELECT current_value INTO value FROM t  WHERE name = seq_name; END;",
 		"create procedure proc_2(in id bigint) comment '123' begin select now();end;",
 		"create procedure proc_2(in id bigint) language sql begin select now();end;",
+		"create definer = 'root@%' procedure proc_2() begin labelname:loop select 1; end loop labelname; end;",
 		"show create procedure proc_2;",
 		"drop procedure proc_2;",
 	}

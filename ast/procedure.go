@@ -717,7 +717,7 @@ func (n *SearchCaseStmt) Accept(v Visitor) (Node, bool) {
 // ProcedureRepeatStmt store `repeat ... until expr end repeat` statement.
 type ProcedureRepeatStmt struct {
 	stmtNode
-
+	LabelName string
 	Body      []StmtNode
 	Condition ExprNode
 }
@@ -763,6 +763,45 @@ func (n *ProcedureRepeatStmt) Accept(v Visitor) (Node, bool) {
 	}
 	n.Condition = node.(ExprNode)
 
+	return v.Leave(n)
+}
+
+// ProcedureLoopStmt store `repeat ... until expr end repeat` statement.
+type ProcedureLoopStmt struct {
+	stmtNode
+	Body      []StmtNode
+	Condition ExprNode
+}
+
+// Restore implements ProcedureLoopStmt interface.
+func (n *ProcedureLoopStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("LOOP")
+	for _, stmt := range n.Body {
+		err := stmt.Restore(ctx)
+		if err != nil {
+			return err
+		}
+		ctx.WriteKeyWord(";")
+	}
+	ctx.WriteKeyWord(" END LOOP")
+	return nil
+}
+
+// Accept implements ProcedureLoopStmt Accept interface.
+func (n *ProcedureLoopStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ProcedureLoopStmt)
+
+	for i, stmt := range n.Body {
+		node, ok := stmt.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Body[i] = node.(StmtNode)
+	}
 	return v.Leave(n)
 }
 

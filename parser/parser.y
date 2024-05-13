@@ -191,6 +191,7 @@ import (
 	lines             "LINES"
 	linear            "LINEAR"
 	load              "LOAD"
+	loop              "LOOP"
 	localTime         "LOCALTIME"
 	localTs           "LOCALTIMESTAMP"
 	lock              "LOCK"
@@ -1170,6 +1171,7 @@ import (
 	ProcedureHcondList            "Procedure handler condition value list"
 	ProcedureOptDefault           "Optional procedure variable default value"
 	ProcedureProcStmt1s           "One more procedure statement"
+	ProcedureDefiner			  "Procedure definer"
 	SimpleWhenThenList            "Procedure case WhenThen list"
 	SearchedWhenThenList          "Procedure search WhenThen list"
 	ElseCaseOpt                   "Optional procedure else statement, expressed by `else .../nil`"
@@ -4320,13 +4322,13 @@ OrReplace:
 	{
 		$$ = false
 	}
-|	"OR" "REPLACE"
+|	"OR" "REPLACE" 
 	{
 		$$ = true
 	}
 
 ViewAlgorithm:
-	/* EMPTY */
+	/* EMPTY */ %prec lowerThanComma
 	{
 		$$ = model.AlgorithmUndefined
 	}
@@ -11681,6 +11683,12 @@ ProcedureUnlabelLoopStmt:
 			Condition: $4.(ast.ExprNode),
 		}
 	}
+|	"LOOP" ProcedureProcStmt1s "END" "LOOP"
+	{
+		$$ = &ast.ProcedureLoopStmt{
+			Body:      $2.([]ast.StmtNode),
+		}
+	}
 
 ProcedureLabeledBlock:
 	identifier ':' ProcedureBlockContent ProcedurceLabelOpt
@@ -11788,6 +11796,10 @@ RoutineOpt:
 		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionNotDeterministic}
 	}
 
+
+ProcedureDefiner:
+	OrReplace ViewAlgorithm ViewDefiner
+
 ProcedureProcStmt:
 	ProcedureStatementStmt
 |	CompoundProcStmt
@@ -11828,17 +11840,17 @@ CompoundProcStmt:
  *  Valid SQL routine statement
  ********************************************************************************************/
 CreateProcedureStmt:
-	"CREATE" "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' RoutineOptionListOpt ProcedureProcStmt
+	"CREATE" ProcedureDefiner "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' RoutineOptionListOpt ProcedureProcStmt
 	{
 		x := &ast.ProcedureInfo{
-			IfNotExists:    $3.(bool),
-			ProcedureName:  $4.(*ast.TableName),
-			ProcedureParam: $6.([]*ast.StoreParameter),
-			ProcedureOptions: $8.([]*ast.RoutineOption),
-			ProcedureBody:  $9,
+			IfNotExists:    $4.(bool),
+			ProcedureName:  $5.(*ast.TableName),
+			ProcedureParam: $7.([]*ast.StoreParameter),
+			ProcedureOptions: $9.([]*ast.RoutineOption),
+			ProcedureBody:  $10,
 		}
 		startOffset := parser.startOffset(&yyS[yypt])
-		originStmt := $9
+		originStmt := $10
 		originStmt.SetText(strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
 		startOffset = parser.startOffset(&yyS[yypt-3])
 		if parser.src[startOffset] == '(' {
