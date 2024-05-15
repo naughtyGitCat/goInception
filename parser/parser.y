@@ -121,6 +121,7 @@ import (
 	deleteKwd         "DELETE"
 	desc              "DESC"
 	describe          "DESCRIBE"
+	demand            "DEMAND"
 	distinct          "DISTINCT"
 	distinctRow       "DISTINCTROW"
 	div               "DIV"
@@ -139,6 +140,7 @@ import (
 	explain           "EXPLAIN"
 	falseKwd          "FALSE"
 	fetch             "FETCH"
+	fast              "FAST"
 	floatType         "FLOAT"
 	forKwd            "FOR"
 	force             "FORCE"
@@ -203,6 +205,7 @@ import (
 	mediumblobType    "MEDIUMBLOB"
 	mediumIntType     "MEDIUMINT"
 	mediumtextType    "MEDIUMTEXT"
+	materialized	  "MATERIALIZED"
 	minuteMicrosecond "MINUTE_MICROSECOND"
 	minuteSecond      "MINUTE_SECOND"
 	mod               "MOD"
@@ -251,6 +254,7 @@ import (
 	rank              "RANK"
 	rowNumber         "ROW_NUMBER"
 	rows              "ROWS"
+	rowid             "ROWID"
 	secondMicrosecond "SECOND_MICROSECOND"
 	selectKwd         "SELECT"
 	sequence          "SEQUENCE"
@@ -295,7 +299,7 @@ import (
 	utcTime           "UTC_TIME"
 	values            "VALUES"
 	long              "LONG"
-	varcharType       "VARCHAR"
+	varcharType       "VARCHAR"z
 	varbinaryType     "VARBINARY"
 	virtual           "VIRTUAL"
 	when              "WHEN"
@@ -357,6 +361,7 @@ import (
 	resume                 "RESUME"
 	committed              "COMMITTED"
 	compact                "COMPACT"
+	complete               "COMPLETE"
 	compressed             "COMPRESSED"
 	compression            "COMPRESSION"
 	connection             "CONNECTION"
@@ -405,6 +410,7 @@ import (
 	exclusive              "EXCLUSIVE"
 	execute                "EXECUTE"
 	expansion		       "EXPANSION"
+	excluding		       "EXCLUDING"
 	fields                 "FIELDS"
 	first                  "FIRST"
 	fixed                  "FIXED"
@@ -422,8 +428,10 @@ import (
 	identified             "IDENTIFIED"
 	importKwd              "IMPORT"
 	imports                "IMPORTS"
+	immediate              "IMMEDIATE"
 	isolation              "ISOLATION"
 	increment              "INCREMENT"
+	including              "INCLUDING"
 	indexes                "INDEXES"
 	invisible              "INVISIBLE"
 	invoker                "INVOKER"
@@ -453,8 +461,10 @@ import (
 	minRows                "MIN_ROWS"
 	minValue        	   "MINVALUE"
 	names                  "NAMES"
+	never                  "NEVER"
 	next                   "NEXT"
 	nextval                "NEXTVAL"
+	newKwd                 "NEW"
 	national               "NATIONAL"
 	no                     "NO"
 	nocycle        	       "NOCYCLE"
@@ -483,6 +493,7 @@ import (
 	process                "PROCESS"
 	processlist            "PROCESSLIST"
 	profiles               "PROFILES"
+	purge                  "PURGE"
 	preceding              "PRECEDING"
 	quarter                "QUARTER"
 	query                  "QUERY"
@@ -490,6 +501,7 @@ import (
 	quick                  "QUICK"
 	respect                "RESPECT"
 	restart                "RESTART"
+	refresh                "REFRESH"
 	recover                "RECOVER"
 	redundant              "REDUNDANT"
 	reload                 "RELOAD"
@@ -527,6 +539,7 @@ import (
 	status                 "STATUS"
 	system                 "SYSTEM"
 	systemTime             "SYSTEM_TIME"
+	synchronous            "SYNCHRONOUS"
 	subpartition           "SUBPARTITION"
 	subpartitions          "SUBPARTITIONS"
 	super                  "SUPER"
@@ -598,6 +611,7 @@ import (
 	timestampDiff    "TIMESTAMPDIFF"
 	top              "TOP"
 	trim             "TRIM"
+	log              "LOG"
 
 	/* The following tokens belong to TiDBKeyword. */
 	admin              "ADMIN"
@@ -723,6 +737,10 @@ import (
 	CreateTableGroupStmt "CREATE TABLEGROUP Statement"
 	CreateTableStmt      "CREATE TABLE statement"
 	CreateViewStmt       "CREATE VIEW  stetement"
+	CreateMaterializedViewStmt       "CREATE Materialized View  stetement"
+	DropMaterializedViewStmt "DROP Materialized View  stetement"
+	CreateMaterializedViewLogStmt       "CREATE Materialized View Log stetement"
+	DropMaterializedViewLogStmt       "DROP Materialized View Log stetement"
 	CreateUserStmt       "CREATE User statement"
 	CreateDatabaseStmt   "Create Database Statement"
 	AlterDatabaseStmt    "Alter Database Statement"
@@ -1179,6 +1197,12 @@ import (
 	Match                         "[MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]"
 	MatchOpt                      "optional MATCH clause"
 	AttributesOpt                 "Attributes options"
+	RefreshOpt			          "Refresh options"
+	MvrefreshOpt			      "Materialized Refresh options"
+	ParallelOpt			          "Parallel options"
+	WithOpt			              "With  options"
+	NewValuesOpt				  "New Value  options"
+	MvLogPurgeOpt				  "Materialized log purge options"
 
 %type	<ident>
 	AsOpt             "AS or EmptyString"
@@ -1288,6 +1312,7 @@ import (
 %right not not2
 %right collate
 %left interval
+%left log
 %precedence quick
 %precedence escape
 %precedence lowerThanComma
@@ -4282,6 +4307,245 @@ LikeTableWithOrWithoutParen:
 		$$ = $3
 	}
 
+
+/*******************************************************************
+ *
+ *  CREATE MATERIALIZED VIEW Statement
+ *
+ *******************************************************************/
+CreateMaterializedViewStmt:
+	"CREATE" "MATERIALIZED" "VIEW" ViewName ViewFieldList CreateTableOptionListOpt PartitionOpt RefreshOpt "AS" CreateViewSelectOpt 
+	{
+		startOffset := parser.startOffset(&yyS[yypt-1])
+		selStmt := $10.(ast.StmtNode)
+		selStmt.SetText(strings.TrimSpace(parser.src[startOffset:]))
+		x := &ast.CreateMaterializedViewStmt{
+			ViewName:  $4.(*ast.TableName),
+			Select:    selStmt,
+			Options:   $6.([]*ast.TableOption),
+		}
+
+		if $5 != nil {
+			x.Cols = $5.([]model.CIStr)
+		}
+		if $7 != nil {
+			x.Partition = $7.(*ast.PartitionOptions)
+		}
+		if $8 != nil {
+			x.RefreshOpt = $8.(*ast.RefreshOption)
+		} 
+		$$ = x
+	}
+
+RefreshOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"REFRESH" "COMPLETE" MvrefreshOpt
+	{
+		x := &ast.RefreshOption{
+			Tp: ast.RefreshComplete,
+		}
+		if $3 != nil {
+			x.Refresh = $3.(*ast.RefreshClause)
+		}
+		$$ = x
+	}
+|	"REFRESH" "FAST" MvrefreshOpt
+	{
+		x := &ast.RefreshOption{
+			Tp: ast.RefreshFast,
+		}
+		if $3 != nil {
+			x.Refresh = $3.(*ast.RefreshClause)
+		}
+		$$ = x
+	}
+|	"REFRESH" "FORCE" MvrefreshOpt
+	{
+		x := &ast.RefreshOption{
+			Tp: ast.RefreshForce,
+		}
+		if $3 != nil {
+			x.Refresh = $3.(*ast.RefreshClause)
+		}
+		$$ = x
+	}
+|	"NEVER" "REFRESH"
+	{
+		x := &ast.RefreshOption{
+			Tp: ast.Refreshnever,
+		}
+		$$ = x
+	}
+
+MvrefreshOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"ON" "DEMAND"
+	{
+		$$ = &ast.RefreshClause{Tp: ast.RefreshClauseDemand}
+	}
+|	"START" "WITH" Expression
+	{
+		$$ = &ast.RefreshClause{Tp: ast.RefreshClauseStartWith, WithExpr: $3}
+	}
+|	"NEXT" Expression
+	{
+		$$ = &ast.RefreshClause{Tp: ast.RefreshClauseNext, NextExpr: $2}
+	}
+|	"START" "WITH" Expression "NEXT" Expression
+	{
+		$$ = &ast.RefreshClause{Tp: ast.RefreshClauseStartWithNext, WithExpr: $3, NextExpr: $5}
+	}
+
+/********************************************************************************************
+*  DROP MATERIALIZED VIEW  [IF EXISTS] Statement
+********************************************************************************************/
+DropMaterializedViewStmt:
+	"DROP" "MATERIALIZED" "VIEW" TableNameList RestrictOrCascadeOpt
+	{
+		$$ = &ast.DropTableStmt{Tables: $4.([]*ast.TableName), IsMvView: true}
+	}
+|	"DROP" "MATERIALIZED" "VIEW" "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
+	{
+		$$ = &ast.DropTableStmt{IfExists: true, Tables: $6.([]*ast.TableName), IsMvView: true}
+	}
+
+
+/*******************************************************************
+ *
+ *  CREATE MATERIALIZED VIEW LOG Statement
+ *
+ *******************************************************************/
+CreateMaterializedViewLogStmt:
+	"CREATE" "MATERIALIZED" "VIEW" "LOG" "ON" TableName ParallelOpt WithOpt MvLogPurgeOpt
+	{
+		x := &ast.CreateMaterializedViewLogStmt{
+			ViewName: $6.(*ast.TableName),
+		}
+		if $7 != nil {
+			x.ParallelOpt = $7.(*ast.ParallelClause)
+		}
+		if $8 != nil {
+			x.WithNewValuesOpt = $8.(*ast.WithNewValuesClause)
+		}
+		if $9 != nil {
+			x.MvLogPurgeOpt = $9.(*ast.MvLogPurgeClause)
+		}
+		$$ = x
+	}
+
+ParallelOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"NOPARALLEL"
+	{
+		$$ = &ast.ParallelClause{Tp: ast.ParallelClauseNoParallel}
+	}
+|	"PARALLEL" EqOpt LengthNum
+	{
+		$$ = &ast.ParallelClause{Tp: ast.ParallelClauseParallel, UintValue: $3.(uint64)}
+	}
+
+WithOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"WITH" "PRIMARY" "KEY" ViewFieldList NewValuesOpt
+	{
+		x := &ast.WithNewValuesClause{
+			Tp: ast.WithClausePrimary,
+			NewValues: $5.(ast.NewValuesType),
+
+		}
+		if $4 != nil {
+			x.Cols = $4.([]model.CIStr)
+		}
+		$$ = x
+	}
+|	"WITH" "ROWID" ViewFieldList NewValuesOpt
+	{
+		x := &ast.WithNewValuesClause{
+			Tp: ast.WithClauseRowid,
+			NewValues: $4.(ast.NewValuesType),
+
+		}
+		if $3 != nil {
+			x.Cols = $3.([]model.CIStr)
+		}
+		$$ = x
+	}
+|	"WITH" "SEQUENCE" ViewFieldList NewValuesOpt
+	{
+		x := &ast.WithNewValuesClause{
+			Tp: ast.WithClauseSequence,
+			NewValues: $4.(ast.NewValuesType),
+
+		}
+		if $3 != nil {
+			x.Cols = $3.([]model.CIStr)
+		}
+		$$ = x
+	}
+
+NewValuesOpt:
+	/* empty */
+	{
+		$$ = ast.NewValuesNone
+	}
+|	"INCLUDING" "NEW" "VALUES"
+	{
+		$$ = ast.NewValuesIncluDing
+	}
+|	"EXCLUDING" "NEW" "VALUES"
+	{
+		$$ = ast.NewValuesExcluDind
+	}
+
+MvLogPurgeOpt:
+	/* empty */
+	{
+		$$ = nil
+	}
+|	"PURGE" "IMMEDIATE"
+	{
+		$$ = &ast.MvLogPurgeClause{Tp: ast.MvLogPurgeImmediate}
+	}
+|	"PURGE" "IMMEDIATE" "SYNCHRONOUS"
+	{
+		$$ = &ast.MvLogPurgeClause{Tp: ast.MvLogPurgeImmediateSync}
+	}
+|	"PURGE" "START" "WITH" Expression
+	{
+		$$ = &ast.MvLogPurgeClause{Tp: ast.MvLogPurgeStartWith, WithExpr: $4}
+	}
+|	"PURGE" "NEXT" Expression
+	{
+		$$ = &ast.MvLogPurgeClause{Tp: ast.MvLogPurgeNext, NextExpr: $3}
+	}
+|	"PURGE" "START" "WITH" Expression "NEXT" Expression
+	{
+		$$ = &ast.MvLogPurgeClause{Tp: ast.MvLogPurgeStartWithNext, WithExpr: $4, NextExpr: $6}
+	}
+
+/*******************************************************************
+ *
+ *  DROP MATERIALIZED VIEW LOG Statement
+ *
+ *******************************************************************/
+DropMaterializedViewLogStmt:
+	"DROP" "MATERIALIZED" "VIEW" "LOG" "ON" TableName
+	{
+		$$ = &ast.DropMaterializedViewLogStmt{ViewName: $6.(*ast.TableName)}
+	}
+
 /*******************************************************************
  *
  *  Create View Statement
@@ -5364,6 +5628,7 @@ UnReservedKeyword:
 |	"PAUSE"
 |	"RESUME"
 |	"COMPACT"
+|	"COMPLETE"
 |	"COMPRESSED"
 |	"CONSISTENT"
 |	"DATA"
@@ -5430,6 +5695,7 @@ UnReservedKeyword:
 |	"YYYYDD_OPT"
 |	"UNI_HASH"
 |	"SYSTEM_TIME"
+|	"SYNCHRONOUS"
 |	"SINGLE"
 |	"TABLEGROUP_ID"
 |	"TABLEGROUPS"
@@ -5507,6 +5773,7 @@ UnReservedKeyword:
 |	"MONTH"
 |	"PROCESS"
 |	"PROFILES"
+|	"PURGE"
 |	"MICROSECOND"
 |	"MINUTE"
 |	"PLUGINS"
@@ -5538,6 +5805,7 @@ UnReservedKeyword:
 |	"UNDEFINED"
 |	"SECURITY"
 |	"CASCADED"
+|	"REFRESH"
 |	"RECOVER"
 |	"HISTORY"
 |	"DIRECTORY"
@@ -5551,6 +5819,7 @@ UnReservedKeyword:
 |	"REPAIR"
 |	"IMPORT"
 |	"IMPORTS"
+|	"IMMEDIATE"
 |	"DISCARD"
 |	"INVISIBLE"
 |	"VISIBLE"
@@ -5564,11 +5833,14 @@ UnReservedKeyword:
 |	"DECLARE"
 |	"FOUND"
 |	"OPEN"
+|	"NEVER"
 |	"NEXT"
 |	"NEXTVAL"
+|	"NEW"
 |	"WAIT"
 |	"AGAINST"
 |	"EXPANSION"
+|	"EXCLUDING"
 |	"LANGUAGE"
 |	"BERNOULLI"
 |	"PERCENT"
@@ -5579,6 +5851,7 @@ UnReservedKeyword:
 |	"CACHE"
 |	"NOCACHE"
 | 	"INCREMENT"
+|	"INCLUDING"
 |	"MINVALUE"
 |	"NOMAXVALUE"
 |	"NOMINVALUE"
@@ -5639,6 +5912,7 @@ NotKeywordToken:
 |	"TRIM"
 |	"JSON_ARRAYAGG"
 |	"JSON_OBJECTAGG"
+|	"LOG"
 
 /************************************************************************************
  *
@@ -6370,6 +6644,7 @@ FunctionNameConflict:
 |	"USER"
 |	"WEEK"
 |	"YEAR"
+|	"LOG"
 
 OptionalBraces:
 	{}
@@ -9607,6 +9882,10 @@ Statement:
 |	CreateTableGroupStmt
 |	CreateTableStmt
 |	CreateViewStmt
+|	CreateMaterializedViewStmt
+|	DropMaterializedViewStmt
+|	CreateMaterializedViewLogStmt
+|	DropMaterializedViewLogStmt
 |	CreateUserStmt
 |	CreateProcedureStmt
 |	CreateFunctionStmt
@@ -11799,6 +12078,9 @@ RoutineOpt:
 
 ProcedureDefiner:
 	OrReplace ViewAlgorithm ViewDefiner
+	{
+		$$ = $3
+	}
 
 ProcedureProcStmt:
 	ProcedureStatementStmt
@@ -11843,6 +12125,7 @@ CreateProcedureStmt:
 	"CREATE" ProcedureDefiner "PROCEDURE" IfNotExists TableName '(' OptSpPdparams ')' RoutineOptionListOpt ProcedureProcStmt
 	{
 		x := &ast.ProcedureInfo{
+			Definer:        $2.(*auth.UserIdentity),
 			IfNotExists:    $4.(bool),
 			ProcedureName:  $5.(*ast.TableName),
 			ProcedureParam: $7.([]*ast.StoreParameter),
@@ -11891,17 +12174,18 @@ DropProcedureStmt:
  ********************************************************************************************/
 
 CreateFunctionStmt:
-	"CREATE" "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type RoutineOptionListOpt FunctionProcStmt
+	"CREATE" ProcedureDefiner "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type RoutineOptionListOpt FunctionProcStmt
 	{
 		x := &ast.FunctionInfo{
-			IfNotExists:    $3.(bool),
-			FunctionName:  $4.(*ast.TableName),
-			FunctionParam: $6.([]*ast.StoreParameter),
-			FunctionOptions: $10.([]*ast.RoutineOption),
-			FunctionBody:  $11,
+			Definer:        $2.(*auth.UserIdentity),
+			IfNotExists:    $4.(bool),
+			FunctionName:  $5.(*ast.TableName),
+			FunctionParam: $7.([]*ast.StoreParameter),
+			FunctionOptions: $11.([]*ast.RoutineOption),
+			FunctionBody:  $12,
 		}
 		startOffset := parser.startOffset(&yyS[yypt])
-		originStmt := $11
+		originStmt := $12
 		originStmt.SetText(strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
 		startOffset = parser.startOffset(&yyS[yypt-3])
 		if parser.src[startOffset] == '(' {

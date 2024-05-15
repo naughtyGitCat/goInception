@@ -36,6 +36,8 @@ var (
 	_ DDLNode = &CreateTableStmt{}
 	_ DDLNode = &CreateTableGroupStmt{}
 	_ DDLNode = &CreateViewStmt{}
+	_ DDLNode = &CreateMaterializedViewStmt{}
+	_ DDLNode = &CreateMaterializedViewLogStmt{}
 	_ DDLNode = &CreateSequenceStmt{}
 	_ DDLNode = &DropDatabaseStmt{}
 	_ DDLNode = &DropIndexStmt{}
@@ -43,6 +45,7 @@ var (
 	_ DDLNode = &DropSequenceStmt{}
 	_ DDLNode = &OptimizeTableStmt{}
 	_ DDLNode = &DropTableGroupStmt{}
+	_ DDLNode = &DropMaterializedViewLogStmt{}
 	_ DDLNode = &RenameTableStmt{}
 	_ DDLNode = &TruncateTableStmt{}
 
@@ -823,7 +826,7 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 		}
 	}
 	if len(n.ColGroupOption) > 0 {
-		ctx.WritePlain("WITH COLUMN GROUP (")
+		ctx.WritePlain(" WITH COLUMN GROUP (")
 		for i, col := range n.ColGroupOption {
 			if i > 0 {
 				ctx.WritePlain(",")
@@ -1027,7 +1030,7 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 		}
 	}
 	if len(n.ColGroupOption) > 0 {
-		ctx.WritePlain("WITH COLUMN GROUP (")
+		ctx.WritePlain(" WITH COLUMN GROUP (")
 		for i, col := range n.ColGroupOption {
 			if i > 0 {
 				ctx.WritePlain(",")
@@ -1342,6 +1345,7 @@ type DropTableStmt struct {
 	IfExists                    bool
 	Tables                      []*TableName
 	IsView                      bool
+	IsMvView                    bool
 	TemporaryOrPartitionKeyword // make sense ONLY if/when IsView == false
 }
 
@@ -1349,6 +1353,9 @@ type DropTableStmt struct {
 func (n *DropTableStmt) Restore(ctx *RestoreCtx) error {
 	if n.IsView {
 		ctx.WriteKeyWord("DROP VIEW ")
+	}
+	if n.IsMvView {
+		ctx.WriteKeyWord("DROP MATERIALIZED VIEW ")
 	}
 	switch n.TemporaryOrPartitionKeyword {
 	case TemporaryNone:
@@ -1694,6 +1701,524 @@ func (n *CreateViewStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
+type CreateMaterializedViewStmt struct {
+	ddlNode
+
+	OrReplace  bool
+	ViewName   *TableName
+	Cols       []model.CIStr
+	Select     StmtNode
+	SchemaCols []model.CIStr
+	Options    []*TableOption
+	Partition  *PartitionOptions
+	RefreshOpt *RefreshOption
+}
+
+// Restore implements Node interface.
+func (n *CreateMaterializedViewStmt) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("CREATE MATERIALIZED VIEW ")
+
+	if err := n.ViewName.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while create CreateMaterializedViewStmt.ViewName")
+	}
+
+	for i, col := range n.Cols {
+		if i == 0 {
+			ctx.WritePlain(" (")
+		} else {
+			ctx.WritePlain(",")
+		}
+		ctx.WriteName(col.O)
+		if i == len(n.Cols)-1 {
+			ctx.WritePlain(")")
+		}
+	}
+
+	for i, option := range n.Options {
+		ctx.WritePlain(" ")
+		if err := option.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while splicing CreateMaterializedViewStmt TableOption: [%v]", i)
+		}
+	}
+
+	if n.Partition != nil {
+		ctx.WritePlain(" ")
+		if err := n.Partition.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewStmt Partition")
+		}
+	}
+	if n.RefreshOpt != nil {
+		ctx.WritePlain(" ")
+		if err := n.RefreshOpt.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewStmt RefreshOpt")
+		}
+	}
+	ctx.WriteKeyWord(" AS ")
+
+	if err := n.Select.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while create CreateMaterializedViewStmt.Select")
+	}
+
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *CreateMaterializedViewStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*CreateMaterializedViewStmt)
+	node, ok := n.ViewName.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.ViewName = node.(*TableName)
+	selnode, ok := n.Select.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.Select = selnode.(StmtNode)
+	if n.RefreshOpt != nil {
+		node, ok := n.RefreshOpt.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.RefreshOpt = node.(*RefreshOption)
+	}
+	return v.Leave(n)
+}
+
+type RefreshOptionType int
+
+const (
+	RefreshNone RefreshOptionType = iota
+	RefreshComplete
+	RefreshFast
+	RefreshForce
+	Refreshnever
+)
+
+// RefreshOption is used for parsing table option from SQL.
+type RefreshOption struct {
+	node
+	Tp      RefreshOptionType
+	Refresh *RefreshClause
+}
+
+func (n *RefreshOption) Restore(ctx *format.RestoreCtx) error {
+	switch n.Tp {
+	case Refreshnever:
+		ctx.WriteKeyWord("NEVER REFRESH ")
+	case RefreshComplete:
+		ctx.WriteKeyWord("REFRESH COMPLETE")
+		if n.Refresh != nil {
+			if err := n.Refresh.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore RefreshOption.Refresh")
+			}
+		}
+	case RefreshFast:
+		ctx.WriteKeyWord("REFRESH FAST")
+		if n.Refresh != nil {
+			if err := n.Refresh.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore RefreshOption.Refresh")
+			}
+		}
+	case RefreshForce:
+		ctx.WriteKeyWord("REFRESH FORCE")
+		if n.Refresh != nil {
+			if err := n.Refresh.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore RefreshOption.Refresh")
+			}
+		}
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *RefreshOption) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*RefreshOption)
+	if n.Refresh != nil {
+		node, ok := n.Refresh.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Refresh = node.(*RefreshClause)
+	}
+	return v.Leave(n)
+}
+
+type RefreshClauseOptionType int
+
+const (
+	RefreshClauseNone RefreshClauseOptionType = iota
+	RefreshClauseDemand
+	RefreshClauseStartWith
+	RefreshClauseNext
+	RefreshClauseStartWithNext
+)
+
+// RefreshClause represents Refresh clause.
+type RefreshClause struct {
+	node
+	Tp       RefreshClauseOptionType
+	WithExpr ExprNode
+	NextExpr ExprNode
+}
+
+// Restore implements Node interface.
+func (n *RefreshClause) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case RefreshClauseDemand:
+		ctx.WriteKeyWord(" ON DEMAND")
+	case RefreshClauseStartWith:
+		ctx.WriteKeyWord(" START WITH ")
+		if err := n.WithExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore RefreshClause.WithExpr")
+		}
+	case RefreshClauseNext:
+		ctx.WriteKeyWord(" NEXT ")
+		if err := n.NextExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore RefreshClause.NextExpr")
+		}
+	case RefreshClauseStartWithNext:
+		ctx.WriteKeyWord(" START WITH ")
+		if err := n.WithExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore RefreshClause.WithExpr")
+		}
+		ctx.WriteKeyWord(" NEXT ")
+		if err := n.NextExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore RefreshClause.NextExpr")
+		}
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *RefreshClause) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*RefreshClause)
+	if n.WithExpr != nil {
+		node, ok := n.WithExpr.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.WithExpr = node.(ExprNode)
+	}
+	if n.NextExpr != nil {
+		node, ok := n.NextExpr.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.NextExpr = node.(ExprNode)
+	}
+	return v.Leave(n)
+}
+
+type CreateMaterializedViewLogStmt struct {
+	ddlNode
+
+	ViewName         *TableName
+	ParallelOpt      *ParallelClause
+	WithNewValuesOpt *WithNewValuesClause
+	MvLogPurgeOpt    *MvLogPurgeClause
+}
+
+// Restore implements Node interface.
+func (n *CreateMaterializedViewLogStmt) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("CREATE MATERIALIZED VIEW LOG ON ")
+
+	if err := n.ViewName.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while create CreateMaterializedViewLogStmt.ViewName")
+	}
+
+	if n.ParallelOpt != nil {
+		ctx.WritePlain(" ")
+		if err := n.ParallelOpt.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewLogStmt ParallelOpt")
+		}
+	}
+
+	if n.WithNewValuesOpt != nil {
+		ctx.WritePlain(" ")
+		if err := n.WithNewValuesOpt.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewLogStmt WithNewValuesOpt")
+		}
+	}
+	if n.MvLogPurgeOpt != nil {
+		ctx.WritePlain(" ")
+		if err := n.MvLogPurgeOpt.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewLogStmt MvLogPurgeOpt")
+		}
+	}
+
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *CreateMaterializedViewLogStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*CreateMaterializedViewLogStmt)
+	node, ok := n.ViewName.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.ViewName = node.(*TableName)
+	if n.MvLogPurgeOpt != nil {
+		node, ok := n.MvLogPurgeOpt.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.MvLogPurgeOpt = node.(*MvLogPurgeClause)
+	}
+	return v.Leave(n)
+}
+
+type ParallelClauseOptionType int
+
+const (
+	ParallelClauseNone ParallelClauseOptionType = iota
+	ParallelClauseNoParallel
+	ParallelClauseParallel
+)
+
+// RefreshClause represents Refresh clause.
+type ParallelClause struct {
+	node
+	Tp        ParallelClauseOptionType
+	UintValue uint64
+}
+
+// Restore implements Node interface.
+func (n *ParallelClause) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case ParallelClauseNoParallel:
+		ctx.WriteKeyWord("NOPARALLEL ")
+	case ParallelClauseParallel:
+		ctx.WriteKeyWord("PARALLEL")
+		ctx.WritePlain(" ")
+		ctx.WritePlainf("%d", n.UintValue)
+	}
+	return nil
+}
+
+// NewValuesType is the type for reference match type.
+type NewValuesType int
+
+// match type
+const (
+	NewValuesNone NewValuesType = iota
+	NewValuesIncluDing
+	NewValuesExcluDind
+)
+
+type WithClauseOptionType int
+
+const (
+	WithClauseNone WithClauseOptionType = iota
+	WithClausePrimary
+	WithClauseRowid
+	WithClauseSequence
+)
+
+// RefreshClause represents Refresh clause.
+type WithNewValuesClause struct {
+	node
+	Tp        WithClauseOptionType
+	Cols      []model.CIStr
+	NewValues NewValuesType
+}
+
+// Restore implements Node interface.
+func (n *WithNewValuesClause) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case WithClausePrimary:
+		ctx.WriteKeyWord("WITH PRIMARY KEY")
+		if len(n.Cols) > 0 {
+			for i, col := range n.Cols {
+				if i == 0 {
+					ctx.WritePlain(" (")
+				} else {
+					ctx.WritePlain(",")
+				}
+				ctx.WriteName(col.O)
+				if i == len(n.Cols)-1 {
+					ctx.WritePlain(")")
+				}
+			}
+		}
+		if n.NewValues != NewValuesNone {
+			switch n.NewValues {
+			case NewValuesIncluDing:
+				ctx.WriteKeyWord(" INCLUDING NEW VALUES")
+			case NewValuesExcluDind:
+				ctx.WriteKeyWord(" EXCLUDING NEW VALUES")
+			}
+		}
+	case WithClauseRowid:
+		ctx.WriteKeyWord("WITH ROWID KEY")
+		if len(n.Cols) > 0 {
+			for i, col := range n.Cols {
+				if i == 0 {
+					ctx.WritePlain(" (")
+				} else {
+					ctx.WritePlain(",")
+				}
+				ctx.WriteName(col.O)
+				if i == len(n.Cols)-1 {
+					ctx.WritePlain(")")
+				}
+			}
+		}
+		if n.NewValues != NewValuesNone {
+			switch n.NewValues {
+			case NewValuesIncluDing:
+				ctx.WriteKeyWord(" INCLUDING NEW VALUES")
+			case NewValuesExcluDind:
+				ctx.WriteKeyWord(" EXCLUDING NEW VALUES")
+			}
+		}
+	case WithClauseSequence:
+		ctx.WriteKeyWord("WITH SEQUENCE KEY")
+		if len(n.Cols) > 0 {
+			for i, col := range n.Cols {
+				if i == 0 {
+					ctx.WritePlain(" (")
+				} else {
+					ctx.WritePlain(",")
+				}
+				ctx.WriteName(col.O)
+				if i == len(n.Cols)-1 {
+					ctx.WritePlain(")")
+				}
+			}
+		}
+		if n.NewValues != NewValuesNone {
+			switch n.NewValues {
+			case NewValuesIncluDing:
+				ctx.WriteKeyWord(" INCLUDING NEW VALUES")
+			case NewValuesExcluDind:
+				ctx.WriteKeyWord(" EXCLUDING NEW VALUES")
+			}
+		}
+	}
+	return nil
+}
+
+type MvLogPurgeOptionType int
+
+const (
+	MvLogPurgeNone MvLogPurgeOptionType = iota
+	MvLogPurgeImmediate
+	MvLogPurgeImmediateSync
+	MvLogPurgeStartWith
+	MvLogPurgeNext
+	MvLogPurgeStartWithNext
+)
+
+// RefreshClause represents Refresh clause.
+type MvLogPurgeClause struct {
+	node
+	Tp       MvLogPurgeOptionType
+	WithExpr ExprNode
+	NextExpr ExprNode
+}
+
+// Restore implements Node interface.
+func (n *MvLogPurgeClause) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case MvLogPurgeImmediate:
+		ctx.WriteKeyWord("PURGE IMMEDIATE")
+	case MvLogPurgeImmediateSync:
+		ctx.WriteKeyWord("PURGE IMMEDIATE SYNCHRONOUS")
+	case MvLogPurgeStartWith:
+		ctx.WriteKeyWord("PURGE START WITH ")
+		if err := n.WithExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore MvLogPurgeClause.WithExpr")
+		}
+	case MvLogPurgeNext:
+		ctx.WriteKeyWord("PURGE NEXT ")
+		if err := n.NextExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore MvLogPurgeClause.NextExpr")
+		}
+	case MvLogPurgeStartWithNext:
+		ctx.WriteKeyWord("PURGE START WITH ")
+		if err := n.WithExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore MvLogPurgeClause.WithExpr")
+		}
+		ctx.WriteKeyWord(" NEXT ")
+		if err := n.NextExpr.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore MvLogPurgeClause.NextExpr")
+		}
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *MvLogPurgeClause) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*MvLogPurgeClause)
+	if n.WithExpr != nil {
+		node, ok := n.WithExpr.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.WithExpr = node.(ExprNode)
+	}
+	if n.NextExpr != nil {
+		node, ok := n.NextExpr.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.NextExpr = node.(ExprNode)
+	}
+	return v.Leave(n)
+}
+
+// DropTableGroupStmt is a statement to drop one table group.
+type DropMaterializedViewLogStmt struct {
+	ddlNode
+	ViewName *TableName
+}
+
+// Restore implements Node interface.
+func (n *DropMaterializedViewLogStmt) Restore(ctx *RestoreCtx) error {
+	ctx.WriteKeyWord("DROP MATERIALIZED VIEW LOG ON ")
+
+	if err := n.ViewName.Restore(ctx); err != nil {
+		return errors.Annotate(err, "An error occurred while restore DropMaterializedViewLogStmt.ViewName")
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *DropMaterializedViewLogStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*DropMaterializedViewLogStmt)
+	node, ok := n.ViewName.Accept(v)
+	if !ok {
+		return n, false
+	}
+	n.ViewName = node.(*TableName)
+	return v.Leave(n)
+}
+
 // CreateSequenceStmt is a statement to create a Sequence.
 type CreateSequenceStmt struct {
 	ddlNode
@@ -1850,7 +2375,7 @@ func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 	}
 
 	if len(n.ColGroupOption) > 0 {
-		ctx.WritePlain("WITH COLUMN GROUP (")
+		ctx.WritePlain(" WITH COLUMN GROUP (")
 		for i, col := range n.ColGroupOption {
 			if i > 0 {
 				ctx.WritePlain(",")
@@ -2513,7 +3038,7 @@ const (
 	ColumnGroupAllColumn
 )
 
-// TableOption is used for parsing table option from SQL.
+// ColumnGroupOption is used for parsing table option from SQL.
 type ColumnGroupOption struct {
 	Tp ColumnGroupOptionType
 }

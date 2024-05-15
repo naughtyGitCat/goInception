@@ -183,6 +183,9 @@ func (ts *testDDLSuite) TestDDLConstraintRestore(c *C) {
 		{"FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
 		{"FOREIGN KEY ((parent_id+1),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "CONSTRAINT FOREIGN KEY ((`parent_id`+1), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
 		{"FOREIGN KEY ((parent_id+1)) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "CONSTRAINT FOREIGN KEY ((`parent_id`+1)) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
+		{"INDEX par_ind (parent_id) with column group (all columns)", "INDEX `par_ind`(`parent_id`) WITH COLUMN GROUP (ALL COLUMNS)"},
+		{"INDEX par_ind (parent_id) with column group (each column)", "INDEX `par_ind`(`parent_id`) WITH COLUMN GROUP (EACH COLUMN)"},
+		{"INDEX par_ind (parent_id) with column group (all columns,each column)", "INDEX `par_ind`(`parent_id`) WITH COLUMN GROUP (ALL COLUMNS,EACH COLUMN)"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node.(*CreateTableStmt).Constraints[0]
@@ -424,6 +427,9 @@ func (ts *testDDLSuite) TestAlterTableSpecRestore(c *C) {
 		{"ADD CONSTRAINT fulltext key full_id (parent_id)", "ADD FULLTEXT `full_id`(`parent_id`)"},
 		{"ADD CONSTRAINT fulltext INDEX full_id (parent_id)", "ADD FULLTEXT `full_id`(`parent_id`)"},
 		{"ADD CONSTRAINT PRIMARY KEY (id)", "ADD PRIMARY KEY(`id`)"},
+		{"ADD CONSTRAINT INDEX par_ind (parent_id) with column group (all columns)", "ADD INDEX `par_ind`(`parent_id`) WITH COLUMN GROUP (ALL COLUMNS)"},
+		{"ADD CONSTRAINT INDEX par_ind (parent_id) with column group (each column)", "ADD INDEX `par_ind`(`parent_id`) WITH COLUMN GROUP (EACH COLUMN)"},
+		{"ADD CONSTRAINT INDEX par_ind (parent_id) with column group (all columns,each column)", "ADD INDEX `par_ind`(`parent_id`) WITH COLUMN GROUP (ALL COLUMNS,EACH COLUMN)"},
 		{"ADD CONSTRAINT FOREIGN KEY (parent_id(2),hello(4)) REFERENCES parent(id) ON DELETE CASCADE", "ADD CONSTRAINT FOREIGN KEY (`parent_id`(2), `hello`(4)) REFERENCES `parent`(`id`) ON DELETE CASCADE"},
 		{"ADD CONSTRAINT FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "ADD CONSTRAINT FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
 		{"ADD CONSTRAINT fk_123 FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE CASCADE ON UPDATE RESTRICT", "ADD CONSTRAINT `fk_123` FOREIGN KEY (`parent_id`) REFERENCES `parent`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT"},
@@ -511,6 +517,67 @@ func (ts *testDDLSuite) TestAdminOptimizeTableRestore(c *C) {
 		{"OPTIMIZE TABLE t1, t2", "OPTIMIZE TABLE `t1`, `t2`"},
 		{"optimize table t1,t2", "OPTIMIZE TABLE `t1`, `t2`"},
 		{"optimize tables t1, t2", "OPTIMIZE TABLE `t1`, `t2`"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node
+	}
+	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+}
+
+func (ts *testDDLSuite) TestViewRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"create algorithm = undefined definer = current_user sql security definer view v as select * from orders", "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` AS SELECT * FROM `orders`"},
+		{"create algorithm = undefined definer = current_user sql security definer view v (ID) as select * from orders", "CREATE ALGORITHM = UNDEFINED DEFINER = CURRENT_USER SQL SECURITY DEFINER VIEW `v` (`ID`) AS SELECT * FROM `orders`"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node
+	}
+	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+}
+
+func (ts *testDDLSuite) TestMaterializedViewRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"create materialized view v as select * from orders", "CREATE MATERIALIZED VIEW `v` AS SELECT * FROM `orders`"},
+		{"create materialized view v partition by hash (CNT) partitions 8 as select * from orders", "CREATE MATERIALIZED VIEW `v` PARTITION BY HASH (`CNT`) PARTITIONS 8 AS SELECT * FROM `orders`"},
+		{"create materialized view v refresh complete on demand as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE ON DEMAND AS SELECT * FROM `orders`"},
+		{"create materialized view v refresh complete as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE AS SELECT * FROM `orders`"},
+		{"create materialized view v refresh complete start with sysdate() as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE START WITH SYSDATE() AS SELECT * FROM `orders`"},
+		{"create materialized view v refresh complete next sysdate() as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE NEXT SYSDATE() AS SELECT * FROM `orders`"},
+		{"create materialized view v refresh complete start with sysdate() next sysdate() as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE START WITH SYSDATE() NEXT SYSDATE() AS SELECT * FROM `orders`"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node
+	}
+	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+}
+
+func (ts *testDDLSuite) TestMaterializedViewLogRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"create materialized view log on v", "CREATE MATERIALIZED VIEW LOG ON `v`"},
+		{"create materialized view log on v parallel 8", "CREATE MATERIALIZED VIEW LOG ON `v` PARALLEL 8"},
+		{"create materialized view log on v with primary key", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY"},
+		{"create materialized view log on v with primary key (CNT,NUM)", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`)"},
+		{"create materialized view log on v with primary key (CNT,NUM) including new values", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`) INCLUDING NEW VALUES"},
+		{"create materialized view log on v with primary key (CNT,NUM) including new values purge immediate", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`) INCLUDING NEW VALUES PURGE IMMEDIATE"},
+		{"create materialized view log on v with primary key (CNT,NUM) including new values purge immediate synchronous", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`) INCLUDING NEW VALUES PURGE IMMEDIATE SYNCHRONOUS"},
+		{"create materialized view log on v with primary key (CNT,NUM) including new values purge start with sysdate()", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`) INCLUDING NEW VALUES PURGE START WITH SYSDATE()"},
+		{"create materialized view log on v with primary key (CNT,NUM) including new values purge next sysdate()", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`) INCLUDING NEW VALUES PURGE NEXT SYSDATE()"},
+		{"create materialized view log on v with primary key (CNT,NUM) including new values purge start with sysdate() next sysdate()", "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY (`CNT`,`NUM`) INCLUDING NEW VALUES PURGE START WITH SYSDATE() NEXT SYSDATE()"},
+		//// test drop materialized view log
+		{"drop materialized view log on v", "DROP MATERIALIZED VIEW LOG ON `v`"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node
+	}
+	RunNodeRestoreTest(c, testCases, "%s", extractNodeFunc)
+}
+
+func (ts *testDDLSuite) TestCreateTableColumnGroupRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"create table v (id int)", "CREATE TABLE `v` (`id` INT)"},
+		{"create table v (id int) with column group (all columns)", "CREATE TABLE `v` (`id` INT) WITH COLUMN GROUP (ALL COLUMNS)"},
+		{"create table v (id int) with column group (each column)", "CREATE TABLE `v` (`id` INT) WITH COLUMN GROUP (EACH COLUMN)"},
+		{"create table v (id int) with column group (all columns,each column)", "CREATE TABLE `v` (`id` INT) WITH COLUMN GROUP (ALL COLUMNS,EACH COLUMN)"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node

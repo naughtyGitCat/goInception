@@ -1755,6 +1755,27 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE foo (a varchar(50), b int) BROADCAST;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) BROADCAST"},
 		// for create partition table
 		{"CREATE PARTITION TABLE t (a varchar(50), b int);", true, "CREATE PARTITION TABLE `t` (`a` VARCHAR(50),`b` INT)"},
+		// for create materialized view
+		{"create materialized view v as select * from t", true, "CREATE MATERIALIZED VIEW `v` AS SELECT * FROM `t`"},
+		{"create materialized view v never refresh as select * from t", true, "CREATE MATERIALIZED VIEW `v` NEVER REFRESH AS SELECT * FROM `t`"},
+		{"create materialized view v refresh fast start with sysdate() next sysdate() + interval 1 day as select * from t", true, "CREATE MATERIALIZED VIEW `v` REFRESH FAST START WITH SYSDATE() NEXT SYSDATE() + INTERVAL 1 DAY AS SELECT * FROM `t`"},
+		{"create materialized view v partition by hash(col1) partitions 8 never refresh as select * from t", true, "CREATE MATERIALIZED VIEW `v` PARTITION BY HASH(COL1) PARTITIONS 8 NEVER REFRESH AS SELECT * FROM `t`"},
+		{"create materialized view v parallel 8 partition by hash(col1) partitions 8 never refresh as select * from t", true, "CREATE MATERIALIZED VIEW `v` PARALLEL 8 PARTITION BY HASH(COL1) PARTITIONS 8 NEVER REFRESH AS SELECT * FROM `t`"},
+		// for drop materialized view
+		{"drop materialized view v", true, "DROP MATERIALIZED VIEW `v`"},
+		{"drop materialized view v cascade", true, "DROP MATERIALIZED VIEW `v` CASCADE"},
+		{"drop materialized view v restrict", true, "DROP MATERIALIZED VIEW `v` RESTRICT"},
+
+		// for create materialized view log
+		{"create materialized view log on v with primary key", true, "CREATE MATERIALIZED VIEW LOG ON `v` WITH PRIMARY KEY"},
+		{"create materialized view log on v with sequence(name ,age)", true, "CREATE MATERIALIZED VIEW LOG ON `v` WITH SEQUENCE(`NAME` ,`AGE`)"},
+		{"create materialized view log on v with sequence(name ,age) including new values", true, "CREATE MATERIALIZED VIEW LOG ON `v` WITH SEQUENCE(`NAME` ,`AGE`) INCLUDING NEW VALUES"},
+		{"create materialized view log on v parallel 8 with sequence(name ,age) including new values", true, "CREATE MATERIALIZED VIEW LOG ON `v` PARALLEL 8 WITH SEQUENCE(`NAME` ,`AGE`) INCLUDING NEW VALUES"},
+		{"create materialized view log on v with sequence(name ,age) including new values purge start with sysdate()", true, "CREATE MATERIALIZED VIEW LOG ON `v` WITH SEQUENCE(`NAME` ,`AGE`) INCLUDING NEW VALUES PURGE START WITH SYSDATE()"},
+		{"create materialized view log on v with sequence(name ,age) including new values purge next sysdate()", true, "CREATE MATERIALIZED VIEW LOG ON `v` WITH SEQUENCE(`NAME` ,`AGE`) INCLUDING NEW VALUES PURGE NEXT SYSDATE()"},
+		{"create materialized view log on v with sequence(name ,age) including new values purge start with sysdate() next sysdate() + interval 1 day", true, "CREATE MATERIALIZED VIEW LOG ON `v` WITH SEQUENCE(`NAME` ,`AGE`) INCLUDING NEW VALUES PURGE START WITH SYSDATE() NEXT SYSDATE() + INTERVAL 1 DAY"},
+		// for drop materialized view log
+		{"drop materialized view log on v", true, "DROP MATERIALIZED VIEW LOG ON `v`"},
 		// for create sequence
 		{"create sequence sequence", false, ""},
 		{"create sequence seq", true, "CREATE SEQUENCE `seq`"},

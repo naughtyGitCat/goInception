@@ -707,6 +707,12 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.CallStmt:
 	case *ast.OptimizeTableStmt:
 		s.checkOptimizeTable(node)
+	case *ast.CreateMaterializedViewStmt:
+		s.checkCreateMaterializedView(node)
+	case *ast.CreateMaterializedViewLogStmt:
+		s.checkCreateMaterializedViewLog(node)
+	case *ast.DropMaterializedViewLogStmt:
+		s.checkDropMaterializedViewLog(node)
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
@@ -1261,7 +1267,10 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.OptimizeTableStmt,
 		*ast.CreateSequenceStmt,
 		*ast.AlterSequenceStmt,
-		*ast.DropSequenceStmt:
+		*ast.DropSequenceStmt,
+		*ast.CreateMaterializedViewStmt,
+		*ast.CreateMaterializedViewLogStmt,
+		*ast.DropMaterializedViewLogStmt:
 		s.executeRemoteStatement(record, isTran)
 
 	default:
@@ -2395,7 +2404,10 @@ func (s *session) checkDropTable(node *ast.DropTableStmt, sql string) {
 			s.appendErrorNo(ER_CANT_DROP_TABLE, t.Name)
 			continue
 		}
-
+		if node.IsMvView && s.dbType != DBTypeOceanBase {
+			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+			return
+		}
 		if t.Schema.O == "" {
 			t.Schema = model.NewCIStr(s.dbName)
 		}
@@ -2410,7 +2422,7 @@ func (s *session) checkDropTable(node *ast.DropTableStmt, sql string) {
 		} else {
 			if s.opt.Execute {
 				// 生成回滚语句
-				s.mysqlShowCreateTable(table, node.IsView)
+				s.mysqlShowCreateTable(table, node.IsView, node.IsMvView)
 			}
 
 			if s.opt.Check {
@@ -2683,6 +2695,27 @@ func (s *session) checkTableGroupExists(name string, reportNotExists bool) bool 
 		s.appendErrorNo(ER_TABLE_GROUP_NOT_EXISTED_ERROR, name)
 	}
 	return found
+}
+
+func (s *session) checkCreateMaterializedView(node *ast.CreateMaterializedViewStmt) {
+	if !s.supportTableGroup() {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
+}
+
+func (s *session) checkCreateMaterializedViewLog(node *ast.CreateMaterializedViewLogStmt) {
+	if !s.supportTableGroup() {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
+}
+
+func (s *session) checkDropMaterializedViewLog(node *ast.DropMaterializedViewLogStmt) {
+	if !s.supportTableGroup() {
+		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+		return
+	}
 }
 
 func (s *session) checkCreateTableGroup(node *ast.CreateTableGroupStmt, sql string) {
@@ -3034,14 +3067,14 @@ func (s *session) mysqlGetTableSize(t *TableInfo) {
 }
 
 // mysqlShowCreateTable 生成回滚语句
-func (s *session) mysqlShowCreateTable(t *TableInfo, isView bool) {
+func (s *session) mysqlShowCreateTable(t *TableInfo, isView, isMvView bool) {
 
 	if t.IsNew {
 		return
 	}
 
 	var sql string
-	if isView {
+	if isView || isMvView {
 		sql = fmt.Sprintf("SHOW CREATE VIEW `%s`.`%s`;", t.Schema, t.Name)
 	} else {
 		sql = fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`;", t.Schema, t.Name)
@@ -3062,7 +3095,7 @@ func (s *session) mysqlShowCreateTable(t *TableInfo, isView bool) {
 	}
 	if rows != nil {
 		row := rows[0]
-		if isView {
+		if isView || isMvView {
 			s.myRecord.DDLRollback = row.View
 		} else {
 			s.myRecord.DDLRollback = row.Table

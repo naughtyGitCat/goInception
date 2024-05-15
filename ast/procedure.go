@@ -18,6 +18,7 @@ import (
 
 	"github.com/hanchuanchuan/goInception/format"
 	"github.com/hanchuanchuan/goInception/types"
+	"github.com/hanchuanchuan/goInception/util/auth"
 	"github.com/pingcap/errors"
 )
 
@@ -235,6 +236,7 @@ func (n *ProcedureBlock) Accept(v Visitor) (Node, bool) {
 // ProcedureInfo stores all procedure information.
 type ProcedureInfo struct {
 	stmtNode
+	Definer           *auth.UserIdentity
 	IfNotExists       bool
 	ProcedureName     *TableName
 	ProcedureParam    []*StoreParameter //procedure param
@@ -245,7 +247,21 @@ type ProcedureInfo struct {
 
 // Restore implements Node interface.
 func (n *ProcedureInfo) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE PROCEDURE ")
+	ctx.WriteKeyWord("CREATE")
+	ctx.WriteKeyWord(" DEFINER")
+	ctx.WritePlain(" = ")
+
+	// todo Use n.Definer.Restore(ctx) to replace this part
+	if n.Definer.CurrentUser {
+		ctx.WriteKeyWord("current_user")
+	} else {
+		ctx.WriteName(n.Definer.Username)
+		if n.Definer.Hostname != "" {
+			ctx.WritePlain("@")
+			ctx.WriteName(n.Definer.Hostname)
+		}
+	}
+	ctx.WriteKeyWord(" PROCEDURE ")
 	if n.IfNotExists {
 		ctx.WriteKeyWord("IF NOT EXISTS ")
 	}
@@ -1275,6 +1291,7 @@ func (n *ProcedureReturn) Accept(v Visitor) (Node, bool) {
 // FunctionInfo stores all function information.
 type FunctionInfo struct {
 	stmtNode
+	Definer          *auth.UserIdentity
 	IfNotExists      bool
 	FunctionName     *TableName
 	FunctionParam    []*StoreParameter //procedure param
@@ -1285,7 +1302,21 @@ type FunctionInfo struct {
 
 // Restore implements Node interface.
 func (n *FunctionInfo) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE FUNCTION ")
+	ctx.WriteKeyWord("CREATE")
+	ctx.WriteKeyWord(" DEFINER")
+	ctx.WritePlain(" = ")
+
+	// todo Use n.Definer.Restore(ctx) to replace this part
+	if n.Definer.CurrentUser {
+		ctx.WriteKeyWord("current_user")
+	} else {
+		ctx.WriteName(n.Definer.Username)
+		if n.Definer.Hostname != "" {
+			ctx.WritePlain("@")
+			ctx.WriteName(n.Definer.Hostname)
+		}
+	}
+	ctx.WriteKeyWord(" FUNCTION ")
 	if n.IfNotExists {
 		ctx.WriteKeyWord("IF NOT EXISTS ")
 	}
@@ -1318,8 +1349,8 @@ func (n *FunctionInfo) Accept(v Visitor) (Node, bool) {
 		return v.Leave(newNode)
 	}
 	n = newNode.(*FunctionInfo)
-	for i, ProcedureParam := range n.FunctionParam {
-		node, ok := ProcedureParam.Accept(v)
+	for i, FunctionParam := range n.FunctionParam {
+		node, ok := FunctionParam.Accept(v)
 		if !ok {
 			return n, false
 		}
