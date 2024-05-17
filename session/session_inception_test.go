@@ -726,7 +726,7 @@ func (s *testSessionIncSuite) TestCreateTable(c *C) {
 		s.testErrorCode(c, sql,
 			session.NewErr(session.ER_TOO_LONG_KEY, "uq_1", indexMaxLength))
 
-		sql = "create table test_error_code_3(c1 int primary key,c2 varchar(1022),c3 int, key uq_1(c2,c3)) default charset utf8;"
+		sql = "create table test_error_code_3(c1 int primary key,c2 varchar(766),c3 int, key uq_1(c2,c3)) default charset utf8;"
 		s.testErrorCode(c, sql)
 	} else {
 		sql = "create table test_error_code_3(c1 int primary key,c2 varchar(256),c3 int, key uq_1(c2,c3)) default charset utf8;"

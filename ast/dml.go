@@ -71,7 +71,6 @@ const (
 // Join represents table join.
 type Join struct {
 	node
-	resultSetNode
 
 	// Left table can be TableSource or JoinNode.
 	Left ResultSetNode
@@ -89,6 +88,8 @@ type Join struct {
 	StraightJoin   bool
 	ExplicitParens bool
 }
+
+func (*Join) resultSet() {}
 
 // NewCrossJoin builds a cross join without `on` or `using` clause.
 // If the right child is a join tree, we need to handle it differently to make the precedence get right.
@@ -124,7 +125,9 @@ type Join struct {
 // We get (t1 join t3) left join t2, the semantics is correct.
 func NewCrossJoin(left, right ResultSetNode) (n *Join) {
 	rj, ok := right.(*Join)
-	if !ok || rj.Right == nil {
+	// don't break the explicit parents name scope constraints.
+	// this kind of join re-order can be done in logical-phase after the name resolution.
+	if !ok || rj.Right == nil || rj.ExplicitParens {
 		return &Join{Left: left, Right: right, Tp: CrossJoin}
 	}
 
@@ -139,11 +142,11 @@ func NewCrossJoin(left, right ResultSetNode) (n *Join) {
 			leftMostLeafFatherOfRight.Tp = LeftJoin
 		}
 		leftChild := leftMostLeafFatherOfRight.Left
-		if join, ok := leftChild.(*Join); ok && join.Right != nil {
-			leftMostLeafFatherOfRight = join
-		} else {
+		join, ok := leftChild.(*Join)
+		if !(ok && join.Right != nil) {
 			break
 		}
+		leftMostLeafFatherOfRight = join
 	}
 
 	newCrossJoin := &Join{Left: left, Right: leftMostLeafFatherOfRight.Left, Tp: CrossJoin}
@@ -164,6 +167,7 @@ func (n *Join) Restore(ctx *RestoreCtx) error {
 			}
 		}
 	}
+
 	if leftIsJoin && !useCommaJoin {
 		ctx.WritePlain("(")
 	}
@@ -254,13 +258,19 @@ func (n *Join) Accept(v Visitor) (Node, bool) {
 		}
 		n.On = node.(*OnCondition)
 	}
+	for i, col := range n.Using {
+		node, ok = col.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.Using[i] = node.(*ColumnName)
+	}
 	return v.Leave(n)
 }
 
 // TableName represents a table name.
 type TableName struct {
 	node
-	resultSetNode
 
 	Schema model.CIStr
 	Name   model.CIStr
@@ -275,14 +285,27 @@ type TableName struct {
 	AsOf *AsOfClause
 }
 
+func (*TableName) resultSet() {}
+
 // Restore implements Node interface.
 func (n *TableName) restoreName(ctx *RestoreCtx) {
-	if n.Schema.String() != "" {
-		ctx.WriteName(n.Schema.String())
-		ctx.WritePlain(".")
+	if !ctx.Flags.HasWithoutSchemaNameFlag() {
+		// restore db name
+		if n.Schema.String() != "" {
+			ctx.WriteName(n.Schema.String())
+			ctx.WritePlain(".")
+		} else if ctx.DefaultDB != "" {
+			// Try CTE, for a CTE table name, we shouldn't write the database name.
+			if !ctx.IsCTETableName(n.Name.L) {
+				ctx.WriteName(ctx.DefaultDB)
+				ctx.WritePlain(".")
+			}
+		}
 	}
+	// restore table name
 	ctx.WriteName(n.Name.String())
 }
+
 func (n *TableName) restorePartitions(ctx *RestoreCtx) {
 	if len(n.PartitionNames) > 0 {
 		ctx.WriteKeyWord(" PARTITION")
@@ -358,6 +381,8 @@ const (
 	HintUse IndexHintType = iota + 1
 	HintIgnore
 	HintForce
+	HintOrderIndex
+	HintNoOrderIndex
 )
 
 // IndexHintScope is the type for index hint for join, order by or group by.
@@ -388,6 +413,10 @@ func (n *IndexHint) Restore(ctx *RestoreCtx) error {
 		indexHintType = "IGNORE INDEX"
 	case HintForce:
 		indexHintType = "FORCE INDEX"
+	case HintOrderIndex:
+		indexHintType = "ORDER INDEX"
+	case HintNoOrderIndex:
+		indexHintType = "NO ORDER INDEX"
 	default: // Prevent accidents
 		return errors.New("IndexHintType has an error while matching")
 	}
@@ -432,6 +461,13 @@ func (n *TableName) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.TableSample = newTs.(*TableSample)
+	}
+	if n.AsOf != nil {
+		newNode, skipChildren := n.AsOf.Accept(v)
+		if skipChildren {
+			return v.Leave(n)
+		}
+		n.AsOf = newNode.(*AsOfClause)
 	}
 	return v.Leave(n)
 }
@@ -524,16 +560,20 @@ func (n *TableSource) Restore(ctx *RestoreCtx) error {
 	case *SelectStmt, *SetOprStmt:
 		needParen = true
 	}
+
 	if tn, tnCase := n.Source.(*TableName); tnCase {
 		if needParen {
 			ctx.WritePlain("(")
 		}
+
 		tn.restoreName(ctx)
 		tn.restorePartitions(ctx)
+
 		if asName := n.AsName.String(); asName != "" {
 			ctx.WriteKeyWord(" AS ")
 			ctx.WriteName(asName)
 		}
+
 		if tn.AsOf != nil {
 			ctx.WritePlain(" ")
 			if err := tn.AsOf.Restore(ctx); err != nil {
@@ -549,6 +589,7 @@ func (n *TableSource) Restore(ctx *RestoreCtx) error {
 				return errors.Annotate(err, "An error occurred while splicing TableName.TableSample")
 			}
 		}
+
 		if needParen {
 			ctx.WritePlain(")")
 		}
@@ -567,6 +608,7 @@ func (n *TableSource) Restore(ctx *RestoreCtx) error {
 			ctx.WriteName(asName)
 		}
 	}
+
 	return nil
 }
 
@@ -815,7 +857,9 @@ type SelectField struct {
 	// Auxiliary stands for if this field is auxiliary.
 	// When we add a Field into SelectField list which is used for having/orderby clause but the field is not in select clause,
 	// we should set its Auxiliary to true. Then the TrimExec will trim the field.
-	Auxiliary bool
+	Auxiliary             bool
+	AuxiliaryColInAgg     bool
+	AuxiliaryColInOrderBy bool
 }
 
 // Restore implements Node interface.
@@ -1148,7 +1192,6 @@ type WithClause struct {
 // See https://dev.mysql.com/doc/refman/5.7/en/select.html
 type SelectStmt struct {
 	dmlNode
-	resultSetNode
 
 	// SelectStmtOpts wraps around select hints and switches.
 	*SelectStmtOpts
@@ -1189,6 +1232,8 @@ type SelectStmt struct {
 	Lists []*RowExpr
 	With  *WithClause
 }
+
+func (*SelectStmt) resultSet() {}
 
 func (n *WithClause) Restore(ctx *RestoreCtx) error {
 	ctx.WriteKeyWord("WITH ")
@@ -1678,13 +1723,15 @@ func (s *SetOprType) String() string {
 // See https://dev.mysql.com/doc/refman/5.7/en/union.html
 type SetOprStmt struct {
 	dmlNode
-	resultSetNode
+
 	IsInBraces bool
 	SelectList *SetOprSelectList
 	OrderBy    *OrderByClause
 	Limit      *Limit
 	With       *WithClause
 }
+
+func (*SetOprStmt) resultSet() {}
 
 // Restore implements Node interface.
 func (n *SetOprStmt) Restore(ctx *RestoreCtx) error {
@@ -1798,8 +1845,46 @@ func (n *Assignment) Accept(v Visitor) (Node, bool) {
 }
 
 type ColumnNameOrUserVar struct {
+	node
 	ColumnName *ColumnName
 	UserVar    *VariableExpr
+}
+
+func (n *ColumnNameOrUserVar) Restore(ctx *RestoreCtx) error {
+	if n.ColumnName != nil {
+		if err := n.ColumnName.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ColumnNameOrUserVar.ColumnName")
+		}
+	}
+	if n.UserVar != nil {
+		if err := n.UserVar.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore ColumnNameOrUserVar.UserVar")
+		}
+	}
+	return nil
+}
+
+func (n *ColumnNameOrUserVar) Accept(v Visitor) (node Node, ok bool) {
+	newNode, skipChild := v.Enter(n)
+	if skipChild {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ColumnNameOrUserVar)
+	if n.ColumnName != nil {
+		node, ok = n.ColumnName.Accept(v)
+		if !ok {
+			return node, false
+		}
+		n.ColumnName = node.(*ColumnName)
+	}
+	if n.UserVar != nil {
+		node, ok = n.UserVar.Accept(v)
+		if !ok {
+			return node, false
+		}
+		n.UserVar = node.(*VariableExpr)
+	}
+	return v.Leave(n)
 }
 
 // LoadDataStmt is a statement to load data from a specified file, then insert this rows into an existing table.
@@ -2222,16 +2307,21 @@ type DeleteStmt struct {
 // Restore implements Node interface.
 func (n *DeleteStmt) Restore(ctx *RestoreCtx) error {
 	if n.With != nil {
+		defer ctx.RestoreCTEFunc()() //nolint: all_revive
 		err := n.With.Restore(ctx)
 		if err != nil {
 			return err
 		}
 	}
+
 	ctx.WriteKeyWord("DELETE ")
 
 	if n.TableHints != nil && len(n.TableHints) != 0 {
 		ctx.WritePlain("/*+ ")
 		for i, tableHint := range n.TableHints {
+			if i != 0 {
+				ctx.WritePlain(" ")
+			}
 			if err := tableHint.Restore(ctx); err != nil {
 				return errors.Annotatef(err, "An error occurred while restore UpdateStmt.TableHints[%d]", i)
 			}
@@ -2378,16 +2468,21 @@ type UpdateStmt struct {
 // Restore implements Node interface.
 func (n *UpdateStmt) Restore(ctx *RestoreCtx) error {
 	if n.With != nil {
+		defer ctx.RestoreCTEFunc()() //nolint: all_revive
 		err := n.With.Restore(ctx)
 		if err != nil {
 			return err
 		}
 	}
+
 	ctx.WriteKeyWord("UPDATE ")
 
 	if n.TableHints != nil && len(n.TableHints) != 0 {
 		ctx.WritePlain("/*+ ")
 		for i, tableHint := range n.TableHints {
+			if i != 0 {
+				ctx.WritePlain(" ")
+			}
 			if err := tableHint.Restore(ctx); err != nil {
 				return errors.Annotatef(err, "An error occurred while restore UpdateStmt.TableHints[%d]", i)
 			}

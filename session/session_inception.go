@@ -195,7 +195,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 			quotaIsDouble = !quotaIsDouble
 		}
 
-		if (strings.HasSuffix(sql_line, "END;") || strings.HasSuffix(sql_line, "END;\r")) && ((strings.HasSuffix(sql_line, ";") || strings.HasSuffix(sql_line, ";\r")) &&
+		if ((strings.HasSuffix(sql_line, ";") || strings.HasSuffix(sql_line, ";\r") && (strings.HasSuffix(sql_line, "DELIMITER;") || strings.HasSuffix(sql_line, "DELIMITER\r;"))) &&
 			quotaIsDouble) || i == lineCount {
 			// batchSize = 1
 			buf = append(buf, sql_line)
@@ -5798,7 +5798,6 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 
 					columnIndexLength = tmpField.getDataLength(s.dbVersion, s.databaseCharset)
 					keyMaxLen += columnIndexLength
-
 					// bysPerChar := 3
 					// charset := s.Inc.DefaultCharset
 					// if foundField.Collation != "" {
@@ -5852,7 +5851,9 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 		// --删除!-- mysql 5.6版本索引长度限制是767,5.7及之后变为3072
 		// 未开启innodbLargePrefix时,单列长度不能超过767
 		// 大部分情况下,总长度不能超过3072，但全文索引允许
-		if keyMaxLen > maxKeyLength57 && tp != ast.ConstraintFulltext {
+		log.Debug("max:", keyMaxLen)
+		if keyMaxLen > maxKeyLength57 && strings.ToLower(s.databaseCharset) == "utf8mb4" &&
+			tp != ast.ConstraintFulltext {
 			s.appendErrorNo(ER_TOO_LONG_KEY, IndexName, maxKeyLength57)
 		}
 

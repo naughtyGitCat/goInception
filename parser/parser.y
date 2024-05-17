@@ -942,6 +942,7 @@ import (
 	LikeTableWithOrWithoutParen   "LIKE table_name or ( LIKE table_name )"
 	LimitClause                   "LIMIT clause"
 	LimitOption                   "Limit option could be integer or parameter marker."
+	FetchFirstOpt                 "Fetch option could be integer or parameter marker."
 	Lines                         "Lines clause"
 	LinesTerminated               "Lines terminated by"
 	LocalOpt                      "Local opt"
@@ -1253,6 +1254,7 @@ import (
 	FunctionNameDateArith           "Date arith function call names (date_add or date_sub)"
 	FunctionNameDateArithMultiForms "Date arith function call names (adddate or subdate)"
 	ProcedurceLabelOpt              "Optional Procedure label name"
+	VariableName                    "A simple Identifier like xx or the xx.xx form"
 %precedence empty
 %precedence as
 %precedence lowerThanSelectOpt
@@ -2003,7 +2005,7 @@ MaxNumBuckets:
 
 /*******************************************************************************************/
 Assignment:
-	ColumnName eq Expression
+	ColumnName EqOrAssignmentEq Expression
 	{
 		$$ = &ast.Assignment{Column: $1.(*ast.ColumnName), Expr: $3}
 	}
@@ -4592,7 +4594,7 @@ OrReplace:
 	}
 
 ViewAlgorithm:
-	/* EMPTY */ %prec lowerThanComma
+	/* EMPTY */
 	{
 		$$ = model.AlgorithmUndefined
 	}
@@ -8197,9 +8199,6 @@ TableRefs:
 
 EscapedTableRef:
 	TableRef %prec lowerThanSetKeyword
-	{
-		$$ = $1
-	}
 |	'{' Identifier TableRef '}'
 	{
 		/*
@@ -8211,13 +8210,7 @@ EscapedTableRef:
 
 TableRef:
 	TableFactor
-	{
-		$$ = $1
-	}
 |	JoinTable
-	{
-		$$ = $1
-	}
 
 TableFactor:
 	TableName PartitionNameListOpt TableAsNameOpt AsOfClauseOpt IndexHintListOpt TableSampleOpt
@@ -8436,6 +8429,20 @@ LimitOption:
 		}
 	}
 
+RowOrRows:
+	"ROW"
+|	"ROWS"
+
+FirstOrNext:
+	"FIRST"
+|	"NEXT"
+
+FetchFirstOpt:
+	{
+		$$ = ast.NewValueExpr(uint64(1))
+	}
+|	LimitOption
+
 SelectStmtLimit:
 	"LIMIT" LimitOption
 	{
@@ -8448,6 +8455,10 @@ SelectStmtLimit:
 |	"LIMIT" LimitOption "OFFSET" LimitOption
 	{
 		$$ = &ast.Limit{Offset: $4.(ast.ExprNode), Count: $2.(ast.ExprNode)}
+	}
+|	"FETCH" FirstOrNext FetchFirstOpt RowOrRows "ONLY"
+	{
+		$$ = &ast.Limit{Count: $3.(ast.ExprNode)}
 	}
 
 SelectStmtLimitOpt:
@@ -8765,7 +8776,9 @@ SetOprStmt:
 	}
 
 
-
+// See https://dev.mysql.com/doc/refman/5.7/en/union.html
+// See https://mariadb.com/kb/en/intersect/
+// See https://mariadb.com/kb/en/except/
 SetOprStmtWoutLimitOrderBy:
 	SetOprClauseList SetOpr SelectStmt
 	{	
@@ -9013,11 +9026,11 @@ SetStmt:
 	{
 		$$ = &ast.SetStmt{Variables: $2.([]*ast.VariableAssignment)}
 	}
-|	"SET" "PASSWORD" eq PasswordOpt
+|	"SET" "PASSWORD" EqOrAssignmentEq PasswordOpt
 	{
 		$$ = &ast.SetPwdStmt{Password: $4.(string)}
 	}
-|	"SET" "PASSWORD" "FOR" Username eq PasswordOpt
+|	"SET" "PASSWORD" "FOR" Username EqOrAssignmentEq PasswordOpt
 	{
 		$$ = &ast.SetPwdStmt{User: $4.(*auth.UserIdentity), Password: $6.(string)}
 	}
@@ -9127,24 +9140,35 @@ SetExpr:
 	}
 |	ExprOrDefault
 
+EqOrAssignmentEq:
+	eq
+|	assignmentEq
+
+VariableName:
+	Identifier
+|	Identifier '.' Identifier
+	{
+		$$ = $1 + "." + $3
+	}
+
 VariableAssignment:
-	Identifier eq SetExpr
+	VariableName EqOrAssignmentEq SetExpr
 	{
 		$$ = &ast.VariableAssignment{Name: $1, Value: $3, IsSystem: true}
 	}
-|	"GLOBAL" Identifier eq SetExpr
+|	"GLOBAL" VariableName EqOrAssignmentEq SetExpr
 	{
 		$$ = &ast.VariableAssignment{Name: $2, Value: $4, IsGlobal: true, IsSystem: true}
 	}
-|	"SESSION" Identifier eq SetExpr
+|	"SESSION" VariableName EqOrAssignmentEq SetExpr
 	{
 		$$ = &ast.VariableAssignment{Name: $2, Value: $4, IsSystem: true}
 	}
-|	"LOCAL" Identifier eq Expression
+|	"LOCAL" VariableName EqOrAssignmentEq Expression
 	{
 		$$ = &ast.VariableAssignment{Name: $2, Value: $4, IsSystem: true}
 	}
-|	doubleAtIdentifier eq SetExpr
+|	doubleAtIdentifier EqOrAssignmentEq SetExpr
 	{
 		v := strings.ToLower($1)
 		var isGlobal bool
@@ -9160,13 +9184,7 @@ VariableAssignment:
 		}
 		$$ = &ast.VariableAssignment{Name: v, Value: $3, IsGlobal: isGlobal, IsSystem: true}
 	}
-|	singleAtIdentifier eq Expression
-	{
-		v := $1
-		v = strings.TrimPrefix(v, "@")
-		$$ = &ast.VariableAssignment{Name: v, Value: $3}
-	}
-|	singleAtIdentifier assignmentEq Expression
+|	singleAtIdentifier EqOrAssignmentEq Expression
 	{
 		v := $1
 		v = strings.TrimPrefix(v, "@")

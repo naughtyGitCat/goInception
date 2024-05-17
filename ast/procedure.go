@@ -733,7 +733,7 @@ func (n *SearchCaseStmt) Accept(v Visitor) (Node, bool) {
 // ProcedureRepeatStmt store `repeat ... until expr end repeat` statement.
 type ProcedureRepeatStmt struct {
 	stmtNode
-	LabelName string
+
 	Body      []StmtNode
 	Condition ExprNode
 }
@@ -785,8 +785,7 @@ func (n *ProcedureRepeatStmt) Accept(v Visitor) (Node, bool) {
 // ProcedureLoopStmt store `repeat ... until expr end repeat` statement.
 type ProcedureLoopStmt struct {
 	stmtNode
-	Body      []StmtNode
-	Condition ExprNode
+	Body []StmtNode
 }
 
 // Restore implements ProcedureLoopStmt interface.
