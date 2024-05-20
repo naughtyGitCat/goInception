@@ -235,6 +235,7 @@ import (
 	primaryZone       "PRIMARY_ZONE"
 	procedure         "PROCEDURE"
 	shardRowIDBits    "SHARD_ROW_ID_BITS"
+	srid    		  "SRID"
 	rangeKwd          "RANGE"
 	read              "READ"
 	realType          "REAL"
@@ -2456,6 +2457,11 @@ ColumnOption:
 	{
 		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionAutoRandom, AutoRandomBitLength: $2.(int)}
 	}
+|	"SRID" NUM
+	{
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionSrId, UintValue: getUint64FromNUM($2)}
+	}
+
 
 GeneratedAlways:
 

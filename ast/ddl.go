@@ -457,6 +457,7 @@ const (
 	ColumnOptionColumnFormat
 	ColumnOptionStorage
 	ColumnOptionAutoRandom
+	ColumnOptionSrId
 )
 
 var (
@@ -481,6 +482,7 @@ type ColumnOption struct {
 	// Refer is used for foreign key.
 	Refer               *ReferenceDef
 	StrValue            string
+	UintValue           uint64
 	AutoRandomBitLength int
 	PrimaryKeyTp        model.PrimaryKeyType
 }
@@ -564,6 +566,9 @@ func (n *ColumnOption) Restore(ctx *RestoreCtx) error {
 		if n.AutoRandomBitLength != types.UnspecifiedLength {
 			ctx.WritePlainf("(%d)", n.AutoRandomBitLength)
 		}
+	case ColumnOptionSrId:
+		ctx.WriteKeyWord("SRID ")
+		ctx.WritePlainf("%d", n.UintValue)
 	default:
 		return errors.New("An error occurred while splicing ColumnOption")
 	}
