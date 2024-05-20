@@ -99,6 +99,10 @@ func TestProcedure(t *testing.T) {
 		`create procedure proc_2() begin labelname: while id < 10 do set id = id + 1; select 1; end while; end`,
 		`create procedure proc_2() begin labelname: while id < 10 do set id = id + 1; select 1; end while labelname; end`,
 		`create procedure proc_2(id int) begin labelname: REPEAT set id = id + 1; select 1; UNTIL id < 10 end REPEAT labelname; end`,
+		`create procedure proc_2(id int) begin while id < 10 do set id = id + 1; call proc_2(); select 1; end while; end`,
+		`create procedure proc_2() begin start transaction; end`,
+		`create procedure proc_2() begin create temporary table t1 (id int); end`,
+		`create procedure proc_2() begin drop temporary table if exists t1; end`,
 	}
 	for _, testcase := range testcases {
 		stmt, _, err := p.Parse(testcase, "", "")

@@ -413,7 +413,10 @@ func (s *testSessionIncSuite) TestCreateTable(c *C) {
 	// 主键的默认值为函数
 	sql = "create table t1(c1 datetime(6) not null default current_timestamp(6) primary key);"
 	s.testErrorCode(c, sql)
-
+	//SRID列选项检查
+	sql = "create table t1(c1 int not null srid 4326);"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_INVALID_NO_GEOMETRY_DEFAULT, "c1"))
 	// 关键字
 	config.GetGlobalConfig().Inc.EnableIdentiferKeyword = false
 	config.GetGlobalConfig().Inc.CheckIdentifier = true

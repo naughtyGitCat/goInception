@@ -11584,6 +11584,10 @@ ProcedureStatementStmt:
 		$$ = sel
 	}
 |	SetStmt
+|	CallStmt
+|	CreateTableStmt
+|	DropTableStmt
+|	BeginTransactionStmt
 |	UpdateStmt
 |	UseStmt
 |	InsertIntoStmt
