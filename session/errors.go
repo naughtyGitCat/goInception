@@ -238,6 +238,7 @@ const (
 	ER_FUNCTION_NOT_ALLOWED
 	ER_SEQUENCE_NOT_EXISTED_ERROR
 	ER_SEQUENCE_EXISTS_ERROR
+	ER_INVALID_NO_GEOMETRY_DEFAULT
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -443,6 +444,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_FUNCTION_NOT_ALLOWED:        "Function is not allowed.",
 	ER_SEQUENCE_NOT_EXISTED_ERROR:  "Sequence '%-.64s' does not exist",
 	ER_SEQUENCE_EXISTS_ERROR:       "Sequence'%s' already exists.",
+	ER_INVALID_NO_GEOMETRY_DEFAULT: "Incorrect usage of SRID and non-geometry column '%s'.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -639,6 +641,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_FUNCTION_NOT_ALLOWED:                "不允许创建函数.",
 	ER_SEQUENCE_NOT_EXISTED_ERROR:          "序列 '%s' 不存在.",
 	ER_SEQUENCE_EXISTS_ERROR:               "序列 '%s' 已存在.",
+	ER_INVALID_NO_GEOMETRY_DEFAULT:         "列 '%s' 默认值SRID,非geometry列无效.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -770,7 +773,8 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrUniqueKeyNeedAllFieldsInPf,
 		ER_INCEPTION_EMPTY_QUERY,
 		ER_CANT_DROP_FUNCTION,
-		ER_CANT_DROP_PROCEDURE:
+		ER_CANT_DROP_PROCEDURE,
+		ER_INVALID_NO_GEOMETRY_DEFAULT:
 		return 2
 
 	default:
@@ -1205,6 +1209,8 @@ func (e ErrorCode) String() string {
 		return "er_sequence_not_existed_error"
 	case ER_SEQUENCE_EXISTS_ERROR:
 		return "er_sequence_exists_error"
+	case ER_INVALID_NO_GEOMETRY_DEFAULT:
+		return "er_invalid_no_geometry_default"
 	}
 	return ""
 }

@@ -4900,6 +4900,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 	hasComment := false
 	notNullFlag := false
 	autoIncrement := false
+	hasGeometry := false
 	hasDefaultValue := false
 	hasGenerated := false
 	var defaultValue *types.Datum
@@ -4921,6 +4922,8 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 				notNullFlag = false
 			case ast.ColumnOptionAutoIncrement:
 				autoIncrement = true
+			case ast.ColumnOptionSrId:
+				hasGeometry = true
 			case ast.ColumnOptionDefaultValue:
 				defaultExpr = op.Expr
 				defaultValue = op.Expr.GetDatum()
@@ -5102,6 +5105,12 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 			field.Tp.Tp != mysql.TypeLonglong &&
 			field.Tp.Tp != mysql.TypeInt24 {
 			s.appendErrorNo(ER_SET_DATA_TYPE_INT_BIGINT)
+		}
+	}
+
+	if hasGeometry {
+		if field.Tp.Tp != mysql.TypeGeometry {
+			s.appendErrorNo(ER_INVALID_NO_GEOMETRY_DEFAULT, field.Name.Name.O)
 		}
 	}
 
