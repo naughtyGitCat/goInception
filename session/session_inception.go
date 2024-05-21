@@ -6297,9 +6297,25 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 							if !types.IsTypeNumeric(v.Type.Tp) {
 								fieldType := GetDataTypeBase(fields[colIndex].Type)
 								switch fieldType {
-								case "bit", "tinyint", "smallint", "mediumint", "int", "integer",
+								case "tinyint", "smallint", "mediumint", "int", "integer",
 									"bigint", "decimal", "float", "double", "real":
 									if !IsNumeric(v.GetValue()) {
+										s.appendErrorMsg(
+											fmt.Sprintf("Incorrect integer value: '%v' for column '%s' at row %v",
+												v.GetValue(), fields[colIndex].Field, i+1))
+									}
+								case "bit":
+									if !IsBit(v.GetValue()) {
+										s.appendErrorMsg(
+											fmt.Sprintf("Incorrect integer value: '%v' for column '%s' at row %v",
+												v.GetValue(), fields[colIndex].Field, i+1))
+									}
+								}
+							} else {
+								fieldType := GetDataTypeBase(fields[colIndex].Type)
+								switch fieldType {
+								case "bit":
+									if !IsBit(v.GetValue()) {
 										s.appendErrorMsg(
 											fmt.Sprintf("Incorrect integer value: '%v' for column '%s' at row %v",
 												v.GetValue(), fields[colIndex].Field, i+1))

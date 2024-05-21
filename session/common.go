@@ -1069,3 +1069,28 @@ func IsNumeric(val interface{}) bool {
 
 	return false
 }
+
+// IsBit 判断Bit类型和值
+func IsBit(val interface{}) bool {
+	switch v := val.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		value, _ := types.ToString(v)
+		if value == "0" || value == "1" {
+			return true
+		}
+		return false
+	case float32, float64, complex64, complex128:
+		return false
+	case []byte:
+		return false
+	case string:
+		return false
+	default:
+		value, _ := types.ToString(v)
+		if value[len(value)-1:] == "\x00" || value[len(value)-1:] == "\x01" {
+			return true
+		}
+		return false
+		// fmt.Printf("%#v %T\n", v, v)
+	}
+}
