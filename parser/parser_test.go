@@ -1868,12 +1868,16 @@ func (s *testParserSuite) TestDDL(c *C) {
 		//parallel option
 		{"CREATE TABLE foo (pump varchar(50), b int) parallel 10;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) PARALLEL 10"},
 		{"CREATE TABLE foo (pump varchar(50), b int) noparallel 1;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) NOPARALLEL 10"},
-		// index column group option
+		//for create table with index column group option
 		{"CREATE TABLE foo (pump varchar(50), b int, index i1 (b) with column group(each column));", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`B` INT, INDEX i1 (`B`) WITH COLUMN GROUP(each column))"},
 		{"CREATE TABLE foo (pump varchar(50), b int, index i1 (b) with column group(all columns, each column));", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`B` INT, INDEX i1 (`B`) WITH COLUMN GROUP(ALL COLUMNS, EACH COLUMN))"},
-		// table column group option
+		//for create table with table column group option
 		{"CREATE TABLE foo (pump varchar(50), b int) with column group(each column);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`B` INT) WITH COLUMN GROUP(each column)"},
-		// table column storing index
+		//for alter table with add column group option
+		{"ALTER TABLE foo add column group(each column);", true, "ALTER TABLE `foo` ADD COLUMN GROUP(each column)"},
+		//for alter table with drop column group option
+		{"ALTER TABLE foo drop column group(each column);", true, "ALTER TABLE `foo` DROP COLUMN GROUP(each column)"},
+		//for create table with table column storing index
 		{"CREATE TABLE foo (pump varchar(50), b int, index i1 (b) storing (b) with column group(each column));", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT, INDEX i1 (`B`) STORING (`B`) WITH COLUMN GROUP(each column))"},
 		// test use key word as column name
 		{"CREATE TABLE foo (pump varchar(50), b int);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT)"},

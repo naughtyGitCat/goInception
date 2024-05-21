@@ -1499,6 +1499,13 @@ AlterTableSpec:
 //			Name: $3,
 //		}
 //	}
+|	"DROP" "COLUMN" "GROUP" '(' ColumnGroupList ')'
+	{
+		$$ = &ast.AlterTableSpec{
+			Tp:         ast.AlterTableDropColumnGroup,
+			ColGroupName: $5.([]*ast.ColumnGroupOption),
+		}
+	}
 |	"LAST" "PARTITION" "LESS" "THAN" '(' Expression ')' NoWriteToBinLogAliasOpt
 	{
 		noWriteToBinlog := $8.(bool)

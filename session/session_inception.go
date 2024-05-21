@@ -4105,7 +4105,8 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 			ast.AlterTableAddLastPartition,
 			ast.AlterTableDropFirstPartition,
 			ast.AlterTableSetInterval,
-			ast.AlterTableAddColumnGroup:
+			ast.AlterTableAddColumnGroup,
+			ast.AlterTableDropColumnGroup:
 			// 不做校验,允许这些参数
 
 		case ast.AlterTableIndexInvisible:

@@ -3248,6 +3248,7 @@ const (
 	AlterTableNoCache
 	AlterTableSetInterval
 	AlterTableAddColumnGroup
+	AlterTableDropColumnGroup
 
 	// TODO: Add more actions
 )
@@ -3935,7 +3936,20 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("NOCACHE")
 	case AlterTableAddColumnGroup:
 		if len(n.ColGroupName) > 0 {
-			ctx.WritePlain("WITH COLUMN GROUP (")
+			ctx.WritePlain("ADD COLUMN GROUP (")
+			for i, col := range n.ColGroupName {
+				if i > 0 {
+					ctx.WritePlain(",")
+				}
+				if err := col.Restore(ctx); err != nil {
+					return errors.Annotatef(err, "An error occurred while splicing AlterTableSpec.ColGroupName[%d]", i)
+				}
+			}
+			ctx.WritePlain(")")
+		}
+	case AlterTableDropColumnGroup:
+		if len(n.ColGroupName) > 0 {
+			ctx.WritePlain("DROP COLUMN GROUP (")
 			for i, col := range n.ColGroupName {
 				if i > 0 {
 					ctx.WritePlain(",")
