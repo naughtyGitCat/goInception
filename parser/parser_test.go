@@ -1842,28 +1842,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) LOCAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) LOCAL)"},
 		{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b) PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(`b`) PARTITION BY HASH(`b`))"},
 		{"CREATE TABLE t (a varchar(50), b int, unique global index idx_b(b)  PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, UNIQUE GLOBAL index idx_b(b) PARTITION BY HASH(`b`))"},
-		// drds partition table
-		{"CREATE TABLE foo (a int(50), b int) dbpartition by hash(b);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) dbpartition by hash(b)"},
-		{"CREATE TABLE foo (a int(50), b int, c int) dbpartition by hash(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by hash(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c int) dbpartition by hash(b) tbpartition by hash(c) tbpartitions 3;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by hash(b) tbpartition by hash(c) tbpartitions 3"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by MM(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by MM(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by DD(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by DD(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by WEEK(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by WEEK(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by MMDD(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by MMDD(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYMM(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYMM(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYWEEK(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYWEEK(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYDD(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYDD(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYMM_OPT(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYMM_OPT(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYWEEK_OPT(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYWEEK_OPT(c)"},
-		{"CREATE TABLE foo (a int(50), b int, c date) dbpartition by hash(b) tbpartition by YYYYDD_OPT(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` DATE) dbpartition by hash(b) tbpartition by YYYYDD_OPT(c)"},
-
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYMM(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYMM(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYWEEK(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYWEEK(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYDD(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYMM_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYMM_OPT(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYWEEK_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYWEEK_OPT(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD_OPT(b) tbpartition by hash(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` DATE, `c` INT) dbpartition by YYYYDD_OPT(b) tbpartition by hash(c)"},
-		{"CREATE TABLE foo (a int(50), b date, c int) dbpartition by YYYYDD_OPT(b) tbpartition by UNI_HASH(c);", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT, `c` INT) dbpartition by UNI_HASH(b) tbpartition by hash(c)"},
 
 		//parallel option
 		{"CREATE TABLE foo (pump varchar(50), b int) parallel 10;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) PARALLEL 10"},
@@ -2267,9 +2245,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"ALTER TABLE t ADD UNIQUE KEY (a) COMMENT 'a'", true, "ALTER TABLE `t` ADD UNIQUE(`a`) COMMENT 'a'"},
 		{"ALTER TABLE t ADD UNIQUE INDEX (a) COMMENT 'a'", true, "ALTER TABLE `t` ADD UNIQUE(`a`) COMMENT 'a'"},
 		{"ALTER TABLE t ADD PRIMARY KEY ident USING RTREE ( a DESC , b   )", true, "ALTER TABLE `t` ADD PRIMARY KEY `ident`(`a`, `b`) USING RTREE"},
-		// drds
-		{"ALTER TABLE t ADD GLOBAL INDEX (a) COVERING (a)  dbpartition by hash(a)", true, "ALTER TABLE t ADD GLOBAL INDEX (`a`) COVERING (`a`)  dbpartition by hash(`a`)"},
-		{"ALTER TABLE t ADD UNIQUE GLOBAL INDEX (a) COVERING (a)  dbpartition by hash(a)", true, "ALTER TABLE t ADD UNIQUE GLOBAL INDEX (`a`) COVERING (`a`)  dbpartition by hash(`a`)"},
 
 		{"ALTER TABLE t ENGINE ''", true, "ALTER TABLE `t` ENGINE = ''"},
 		{"ALTER TABLE t ENGINE = ''", true, "ALTER TABLE `t` ENGINE = ''"},

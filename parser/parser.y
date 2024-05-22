@@ -384,21 +384,8 @@ import (
 	do                     "DO"
 	duplicate              "DUPLICATE"
 	dynamic                "DYNAMIC"
-	dbpartition            "DBPARTITION"
-	tbpartition            "TBPARTITION"
-	tbpartitions           "TBPARTITIONS"
 	last				   "LAST"
 	lastval                "LASTVAL"
-	mm   				   "MM"
-	dd   				   "DD"
-	mmdd   			   	   "MMDD"
-	yyyymm   			   "YYYYMM"
-	yyyyweek   			   "YYYYWEEK"
-	yyyydd   			   "YYYYDD"
-	yyyymm_opt   		   "YYYYMM_OPT"
-	yyyyweek_opt   		   "YYYYWEEK_OPT"
-	yyyydd_opt   		   "YYYYDD_OPT"
-	uni_hash   		   	   "UNI_HASH"
 	enable                 "ENABLE"
 	end                    "END"
 	engine                 "ENGINE"
@@ -3765,23 +3752,6 @@ PartitionOpt:
 		}
 		$$ = opt
 	}
-|	"DBPARTITION" "BY" PartitionMethod PartitionNumOpt SubPartitionOpt PartitionDefinitionListOpt
-	{	
-		method := $3.(*ast.PartitionMethod)
-		method.Num = $4.(uint64)
-		sub, _ := $5.(*ast.PartitionMethod)
-		defs, _ := $6.([]*ast.PartitionDefinition)
-		opt := &ast.PartitionOptions{
-			PartitionMethod: *method,
-			Sub:             sub,
-			Definitions:     defs,
-		}
-		if err := opt.Validate(); err != nil {
-			yylex.AppendError(err)
-			return 1
-		}
-		$$ = opt
-	}
 
 SubPartitionMethod:
 	LinearOpt "KEY" PartitionKeyAlgorithmOpt '(' ColumnNameListOpt ')'
@@ -3798,95 +3768,6 @@ SubPartitionMethod:
 	{
 		$$ = &ast.PartitionMethod{
 			Tp:     model.PartitionTypeHash,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-
-|	LinearOpt "MM" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeMM,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "DD" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeDD,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "WEEK" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeWEEK,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "MMDD" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeMMDD,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "YYYYMM" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeYYYYMM,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "YYYYWEEK" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeYYYYWEEK,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "YYYYDD" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeYYYYDD,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "YYYYMM_OPT" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeYYYYMMOPT,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "YYYYWEEK_OPT" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeYYYYWEEKOPT,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "YYYYDD_OPT" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeYYYYDDOPT,
-			Linear: len($1) != 0,
-			Expr:   $4.(ast.ExprNode),
-		}
-	}
-|	LinearOpt "UNI_HASH" '(' Expression ')'
-	{
-		$$ = &ast.PartitionMethod{
-			Tp:     model.PartitionTypeUNIHASH,
 			Linear: len($1) != 0,
 			Expr:   $4.(ast.ExprNode),
 		}
@@ -4050,12 +3931,6 @@ SubPartitionOpt:
 		method.Num = $4.(uint64)
 		$$ = method
 	}
-|	"TBPARTITION" "BY" SubPartitionMethod SubPartitionNumOpt
-	{
-		method := $3.(*ast.PartitionMethod)
-		method.Num = $4.(uint64)
-		$$ = method
-	}
 
 
 SubPartitionNumOpt:
@@ -4067,15 +3942,6 @@ SubPartitionNumOpt:
 		res := $2.(uint64)
 		if res == 0 {
 			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("subpartitions"))
-			return 1
-		}
-		$$ = res
-	}
-|	"TBPARTITIONS" LengthNum
-	{
-		res := $2.(uint64)
-		if res == 0 {
-			yylex.AppendError(ast.ErrNoParts.GenWithStackByArgs("tabpartitions"))
 			return 1
 		}
 		$$ = res
@@ -5695,20 +5561,7 @@ UnReservedKeyword:
 |	"STATUS"
 |	"SUBPARTITIONS"
 |	"SUBPARTITION"
-|	"TBPARTITION"
-|	"TBPARTITIONS"
-|	"DBPARTITION"
 |	"LAST"
-|	"MM"
-|	"DD"
-|	"MMDD"
-|	"YYYYMM"
-|	"YYYYWEEK"
-|	"YYYYDD"
-|	"YYYYMM_OPT"
-|	"YYYYWEEK_OPT"
-|	"YYYYDD_OPT"
-|	"UNI_HASH"
 |	"SYSTEM_TIME"
 |	"SYNCHRONOUS"
 |	"SINGLE"
