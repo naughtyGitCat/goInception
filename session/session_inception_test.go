@@ -3576,7 +3576,7 @@ func (s *testSessionIncSuite) TestGroupBy(c *C) {
 	sql = `SELECT count(pid) as as_count_pid,concat(c1,'..') as as_pid FROM system_menu group by pid;`
 	if strings.Contains(s.sqlMode, "ONLY_FULL_GROUP_BY") {
 		s.testErrorCode(c, sql,
-			session.NewErr(session.ErrFieldNotInGroupBy, 2, "SELECT list", "CONCAT(`c1`, '..')"))
+			session.NewErr(session.ErrFieldNotInGroupBy, 2, "SELECT list", "c1"))
 	} else {
 		s.testErrorCode(c, sql)
 	}

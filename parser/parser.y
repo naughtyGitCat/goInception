@@ -576,6 +576,7 @@ import (
 	copyKwd          "COPY"
 	count            "COUNT"
 	curTime          "CURTIME"
+	curDate          "CURDATE"
 	dateAdd          "DATE_ADD"
 	dateSub          "DATE_SUB"
 	extract          "EXTRACT"
@@ -5216,19 +5217,22 @@ FieldList:
 	{
 		field := $1.(*ast.SelectField)
 		field.Offset = parser.startOffset(&yyS[yypt])
+		if field.Expr != nil {
+			endOffset := parser.yylval.offset
+			field.SetText(strings.TrimSpace(parser.src[field.Offset:endOffset]))
+		}
 		$$ = []*ast.SelectField{field}
 	}
 |	FieldList ',' Field
 	{
 		fl := $1.([]*ast.SelectField)
-		last := fl[len(fl)-1]
-		if last.Expr != nil && last.AsName.O == "" {
-			lastEnd := parser.endOffset(&yyS[yypt-1])
-			last.SetText(parser.src[last.Offset:lastEnd])
+		field := $3.(*ast.SelectField)
+		field.Offset = parser.startOffset(&yyS[yypt])
+		if field.Expr != nil {
+			endOffset := parser.yylval.offset
+			field.SetText(strings.TrimSpace(parser.src[field.Offset:endOffset]))
 		}
-		newField := $3.(*ast.SelectField)
-		newField.Offset = parser.startOffset(&yyS[yypt])
-		$$ = append(fl, newField)
+		$$ = append(fl, field)
 	}
 
 WithRollupClause:
@@ -5757,6 +5761,7 @@ NotKeywordToken:
 |	"COPY"
 |	"COUNT"
 |	"CURTIME"
+|	"CURDATE"
 |	"DATE_ADD"
 |	"DATE_SUB"
 |	"EXTRACT"

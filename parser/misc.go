@@ -229,6 +229,7 @@ var tokenMap = map[string]int{
 	"CREATE":                   create,
 	"CROSS":                    cross,
 	"CURRENT":                  current,
+	"CURDATE":                  curDate,
 	"CURRENT_DATE":             currentDate,
 	"CURRENT_TIME":             currentTime,
 	"CURRENT_TIMESTAMP":        currentTs,

@@ -9428,7 +9428,7 @@ func (s *session) checkSubSelectItem(node *ast.SelectStmt, outerTables []*TableI
 	groupTables = append(groupTables, t)
 	groupTables = append(groupTables, tableInfoList...)
 
-	// log.Info("group by : ", s.sessionVars.SQLMode.HasOnlyFullGroupBy())
+	//log.Info("group by : ", s.sessionVars.SQLMode.HasOnlyFullGroupBy())
 	if s.sessionVars.SQLMode.HasOnlyFullGroupBy() && node.From != nil {
 		var err error
 		if node.GroupBy != nil {

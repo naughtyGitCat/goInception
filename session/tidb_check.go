@@ -21,11 +21,9 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"reflect"
 	"strings"
 
 	"github.com/hanchuanchuan/goInception/ast"
-	"github.com/hanchuanchuan/goInception/format"
 	"github.com/hanchuanchuan/goInception/model"
 	"github.com/hanchuanchuan/goInception/mysql"
 	"github.com/hanchuanchuan/goInception/types"
@@ -593,7 +591,16 @@ func (s *session) checkExprInGroupBy(expr ast.ExprNode, offset int, loc string,
 	// 		return
 	// 	}
 	// }
+	if _, ok := expr.(*ast.ColumnNameExpr); !ok {
+		for _, gbyExpr := range gbyExprs {
+			if ast.ExpressionDeepEqual(gbyExpr, expr) {
+				return
+			}
+		}
+	}
+
 	if c, ok := expr.(*ast.ColumnNameExpr); ok {
+		gbyCols["findColumn"] = struct{}{}
 		col := findColumnWithList(c, tables)
 		if col != nil {
 			if _, ok := gbyCols[col.getName()]; !ok {
@@ -601,22 +608,32 @@ func (s *session) checkExprInGroupBy(expr ast.ExprNode, offset int, loc string,
 			}
 		}
 	} else {
-		for _, gbyExpr := range gbyExprs {
-			if reflect.DeepEqual(gbyExpr, expr) {
-				return
-			}
-		}
-
 		// todo: 待优化，从表达式中返回一列
-		// colNames := s.getSubSelectColumns(expr)
-		// log.Errorf("colNames: %#v", colNames)
+		//colNames := s.getSubSelectColumns(expr)
+		//log.Errorf("colNames: %#v", colNames)
 		// if len(colNames) > 0 {
 		// 	notInGbyCols[colNames[0]] = ErrExprLoc{Offset: offset, Loc: loc}
 		// }
 
-		var builder strings.Builder
-		_ = expr.Restore(format.NewRestoreCtx(format.DefaultRestoreFlags, &builder))
-		notInGbyCols[builder.String()] = ErrExprLoc{Offset: offset, Loc: loc}
+		if _, ok := gbyCols["findColumn"]; !ok {
+			s.checkFactorial(expr, notInGbyCols, offset, loc)
+		}
+	}
+}
+
+func (s *session) checkFactorial(expr ast.ExprNode, notInGbyCols map[string]ErrExprLoc, offset int, loc string) {
+	checkRecursive(expr, notInGbyCols, offset, loc)
+}
+
+func checkRecursive(node ast.ExprNode, notInGbyCols map[string]ErrExprLoc, offset int, loc string) {
+	if funcCall, ok := node.(*ast.FuncCallExpr); ok {
+		checkRecursive(funcCall.Args[0], notInGbyCols, offset, loc)
+	} else {
+		var buf bytes.Buffer
+		node.Format(&buf)
+		colName := strings.Replace(buf.String(), "`", "", -1)
+		notInGbyCols[colName] = ErrExprLoc{Offset: offset, Loc: loc}
+		return
 	}
 }
 
