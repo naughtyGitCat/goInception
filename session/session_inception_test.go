@@ -1296,6 +1296,12 @@ func (s *testSessionIncSuite) TestAlterTableAddColumn(c *C) {
 		create table t1(id int,c1 char(10));
 		alter table t1 add column cc char(20) unique key;`
 	s.testErrorCode(c, sql)
+	// 检查自增属性
+	sql = `drop table if exists t1;
+		create table t1(id int,c1 char(10));
+		alter table t1 add column c2 int auto_increment;`
+	s.testErrorCode(c, sql,
+		session.NewErrf("Incorrect table definition; there can be only one auto column and it must be defined as a key."))
 }
 
 func (s *testSessionIncSuite) TestAlterTableRenameColumn(c *C) {

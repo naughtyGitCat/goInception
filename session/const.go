@@ -28,6 +28,7 @@ const (
 	DBTypeTiDB
 	DBTypeOceanBase
 	DBTypeGreatSQL
+	DBTypeDrds
 )
 
 // 审核阶段

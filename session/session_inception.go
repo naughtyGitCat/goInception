@@ -1863,6 +1863,8 @@ func (s *session) mysqlServerVersion() {
 					s.dbType = DBTypeOceanBase
 				} else if strings.Contains(strings.ToLower(value), "greatsql") {
 					s.dbType = DBTypeGreatSQL
+				} else if strings.Contains(strings.ToLower(value), "source") {
+					s.dbType = DBTypeDrds
 				}
 			case "innodb_large_prefix":
 				emptyInnodbLargePrefix = false
@@ -2669,6 +2671,10 @@ func (s *session) mysqlShowSequence(db, seqname string) {
 
 func (s *session) supportTableGroup() bool {
 	return s.dbType == DBTypeOceanBase
+}
+
+func (s *session) supportDrds() bool {
+	return s.dbType == DBTypeDrds
 }
 
 type TableGroupColumn struct {
@@ -5488,7 +5494,7 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 		} else {
 			s.checkKeyWords(nc.Name.Name.O)
 			s.mysqlCheckField(t, nc, c.Tp)
-
+			s.checkAlterTableAutoIncrement(c)
 			if !s.hasError() {
 				isPrimary := false
 				isUnique := false
@@ -8682,6 +8688,9 @@ func (s *session) queryTableOptionFromDB(db string, tableName string, reportNotE
 }
 
 func (s *session) fetchPartitionFromDB(t *TableInfo) error {
+	if s.supportDrds() {
+		return nil
+	}
 	if t.IsNew || t.IsDeleted || len(t.Partitions) > 0 {
 		return nil
 	}

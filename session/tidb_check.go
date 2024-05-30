@@ -116,6 +116,60 @@ func (s *session) checkAutoIncrement(stmt *ast.CreateTableStmt) {
 	}
 }
 
+func (s *session) checkAlterTableAutoIncrement(stmt *ast.AlterTableSpec) {
+	var (
+		isKey            bool
+		count            int
+		autoIncrementCol *ast.ColumnDef
+	)
+
+	for _, colDef := range stmt.NewColumns {
+		var hasAutoIncrement bool
+		for i, op := range colDef.Options {
+			ok, err := s.checkAutoIncrementOp(colDef, i)
+			if err != nil {
+				s.appendErrorMsg(err.Error())
+				// return
+			}
+			if ok {
+				hasAutoIncrement = true
+			}
+			switch op.Tp {
+			case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniqKey:
+				isKey = true
+			}
+		}
+		if hasAutoIncrement {
+			count++
+			autoIncrementCol = colDef
+		}
+	}
+
+	if count < 1 {
+		return
+	}
+	if !isKey {
+		isKey = isConstraintKeyTp(stmt.NewConstraints, autoIncrementCol)
+	}
+	autoIncrementMustBeKey := true
+	for _, opt := range stmt.Options {
+		if opt.Tp == ast.TableOptionEngine && strings.EqualFold(opt.StrValue, "MyISAM") {
+			autoIncrementMustBeKey = false
+		}
+	}
+	if (autoIncrementMustBeKey && !isKey) || count > 1 {
+		s.appendErrorNo(ER_WRONG_AUTO_KEY)
+	}
+
+	switch autoIncrementCol.Tp.Tp {
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong,
+		mysql.TypeFloat, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
+	default:
+		s.appendErrorMsg(
+			fmt.Sprintf("Incorrect column specifier for column '%s'", autoIncrementCol.Name.Name.O))
+	}
+}
+
 func isConstraintKeyTp(constraints []*ast.Constraint, colDef *ast.ColumnDef) bool {
 	for _, c := range constraints {
 		// If the constraint as follows: primary key(c1, c2)
@@ -721,6 +775,9 @@ func (s *session) checkPartitionNameExists(t *TableInfo, defs []*ast.PartitionDe
 }
 
 func (s *session) checkPartitionDrop(t *TableInfo, parts []model.CIStr) {
+	if s.supportDrds() {
+		return
+	}
 	for _, part := range parts {
 		found := false
 		for _, oldPart := range t.Partitions {

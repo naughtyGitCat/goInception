@@ -26,3 +26,4 @@ tools/check/go.sum
 node_modules
 docs/.vuepress/dist
 /goInception
+.vscode/launch.json
