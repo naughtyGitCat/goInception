@@ -1761,6 +1761,11 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create materialized view v refresh fast start with sysdate() next sysdate() + interval 1 day as select * from t", true, "CREATE MATERIALIZED VIEW `v` REFRESH FAST START WITH SYSDATE() NEXT SYSDATE() + INTERVAL 1 DAY AS SELECT * FROM `t`"},
 		{"create materialized view v partition by hash(col1) partitions 8 never refresh as select * from t", true, "CREATE MATERIALIZED VIEW `v` PARTITION BY HASH(COL1) PARTITIONS 8 NEVER REFRESH AS SELECT * FROM `t`"},
 		{"create materialized view v parallel 8 partition by hash(col1) partitions 8 never refresh as select * from t", true, "CREATE MATERIALIZED VIEW `v` PARALLEL 8 PARTITION BY HASH(COL1) PARTITIONS 8 NEVER REFRESH AS SELECT * FROM `t`"},
+		{"create materialized view v disable query rewrite as select * from t", true, "CREATE MATERIALIZED VIEW `v` DISABLE QUERY REWRITE AS SELECT * FROM `t`"},
+		{"create materialized view v enable query rewrite as select * from t", true, "CREATE MATERIALIZED VIEW `v` ENABLE QUERY REWRITE AS SELECT * FROM `t`"},
+		{"create materialized view v disable on query computation as select * from t", true, "CREATE MATERIALIZED VIEW `v` DISABLE ON QUERY COMPUTATION AS SELECT * FROM `t`"},
+		{"create materialized view v disable query rewrite disable on query computation as select * from t", true, "CREATE MATERIALIZED VIEW `v` DISABLE QUERY REWRITE DISABLE ON QUERY COMPUTATION AS SELECT * FROM `t`"},
+		{"create materialized view v partition by hash(col1) partitions 8 never refresh disable query rewrite disable on query computation as select * from t", true, "CREATE MATERIALIZED VIEW `v` PARTITION BY HASH(COL1) PARTITIONS 8 NEVER REFRESH DISABLE QUERY REWRITE DISABLE ON QUERY COMPUTATION AS SELECT * FROM `t`"},
 		// for drop materialized view
 		{"drop materialized view v", true, "DROP MATERIALIZED VIEW `v`"},
 		{"drop materialized view v cascade", true, "DROP MATERIALIZED VIEW `v` CASCADE"},

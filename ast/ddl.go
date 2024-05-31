@@ -1709,14 +1709,15 @@ func (n *CreateViewStmt) Accept(v Visitor) (Node, bool) {
 type CreateMaterializedViewStmt struct {
 	ddlNode
 
-	OrReplace  bool
-	ViewName   *TableName
-	Cols       []model.CIStr
-	Select     StmtNode
-	SchemaCols []model.CIStr
-	Options    []*TableOption
-	Partition  *PartitionOptions
-	RefreshOpt *RefreshOption
+	OrReplace       bool
+	ViewName        *TableName
+	Cols            []model.CIStr
+	Select          StmtNode
+	SchemaCols      []model.CIStr
+	Options         []*TableOption
+	Partition       *PartitionOptions
+	RefreshOpt      *RefreshOption
+	QueryRewriteOpt *QueryRewriteClause
 }
 
 // Restore implements Node interface.
@@ -1758,6 +1759,12 @@ func (n *CreateMaterializedViewStmt) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewStmt RefreshOpt")
 		}
 	}
+	if n.QueryRewriteOpt != nil {
+		ctx.WritePlain(" ")
+		if err := n.QueryRewriteOpt.Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while splicing CreateMaterializedViewStmt QueryRewriteOpt")
+		}
+	}
 	ctx.WriteKeyWord(" AS ")
 
 	if err := n.Select.Restore(ctx); err != nil {
@@ -1790,6 +1797,13 @@ func (n *CreateMaterializedViewStmt) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.RefreshOpt = node.(*RefreshOption)
+	}
+	if n.QueryRewriteOpt != nil {
+		node, ok := n.QueryRewriteOpt.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.QueryRewriteOpt = node.(*QueryRewriteClause)
 	}
 	return v.Leave(n)
 }
@@ -1924,6 +1938,98 @@ func (n *RefreshClause) Accept(v Visitor) (Node, bool) {
 		}
 		n.NextExpr = node.(ExprNode)
 	}
+	return v.Leave(n)
+}
+
+type QueryRewriteType int
+
+const (
+	QueryRewriteNone QueryRewriteType = iota
+	QueryRewriteEnable
+	QueryRewriteDisable
+	QueryComputationEnableClause
+	QueryComputationDisableClause
+)
+
+type QueryRewriteClause struct {
+	node
+	Tp                  QueryRewriteType
+	QueryComputationOpt *QueryComputationClause
+}
+
+// Restore implements Node interface.
+func (n *QueryRewriteClause) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case QueryRewriteEnable:
+		ctx.WriteKeyWord("ENABLE QUERY REWRITE")
+		if n.QueryComputationOpt != nil {
+			if err := n.QueryComputationOpt.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore RefreshOption.QueryComputationOpt")
+			}
+		}
+	case QueryRewriteDisable:
+		ctx.WriteKeyWord("DISABLE QUERY REWRITE")
+		if n.QueryComputationOpt != nil {
+			if err := n.QueryComputationOpt.Restore(ctx); err != nil {
+				return errors.Annotate(err, "An error occurred while restore RefreshOption.QueryComputationOpt")
+			}
+		}
+	case QueryComputationEnableClause:
+		ctx.WriteKeyWord("ENABLE ON QUERY COMPUTATION")
+	case QueryComputationDisableClause:
+		ctx.WriteKeyWord("DISABLE ON QUERY COMPUTATION")
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *QueryRewriteClause) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*QueryRewriteClause)
+	if n.QueryComputationOpt != nil {
+		node, ok := n.QueryComputationOpt.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.QueryComputationOpt = node.(*QueryComputationClause)
+	}
+	return v.Leave(n)
+}
+
+type QueryComputationType int
+
+const (
+	QueryComputationNone QueryComputationType = iota
+	QueryComputationEnable
+	QueryComputationDisable
+)
+
+type QueryComputationClause struct {
+	node
+	Tp QueryComputationType
+}
+
+// Restore implements Node interface.
+func (n *QueryComputationClause) Restore(ctx *RestoreCtx) error {
+	switch n.Tp {
+	case QueryComputationEnable:
+		ctx.WriteKeyWord(" ENABLE ON QUERY COMPUTATION")
+	case QueryComputationDisable:
+		ctx.WriteKeyWord(" DISABLE ON QUERY COMPUTATION")
+	}
+	return nil
+}
+
+// Accept implements Node Accept interface.
+func (n *QueryComputationClause) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*QueryComputationClause)
 	return v.Leave(n)
 }
 

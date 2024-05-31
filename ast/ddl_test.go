@@ -550,6 +550,11 @@ func (ts *testDDLSuite) TestMaterializedViewRestore(c *C) {
 		{"create materialized view v refresh complete start with sysdate() as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE START WITH SYSDATE() AS SELECT * FROM `orders`"},
 		{"create materialized view v refresh complete next sysdate() as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE NEXT SYSDATE() AS SELECT * FROM `orders`"},
 		{"create materialized view v refresh complete start with sysdate() next sysdate() as select * from orders", "CREATE MATERIALIZED VIEW `v` REFRESH COMPLETE START WITH SYSDATE() NEXT SYSDATE() AS SELECT * FROM `orders`"},
+		{"create materialized view v disable query rewrite as select * from orders", "CREATE MATERIALIZED VIEW `v` DISABLE QUERY REWRITE AS SELECT * FROM `orders`"},
+		{"create materialized view v enable query rewrite as select * from orders", "CREATE MATERIALIZED VIEW `v` ENABLE QUERY REWRITE AS SELECT * FROM `orders`"},
+		{"create materialized view v disable on query computation as select * from orders", "CREATE MATERIALIZED VIEW `v` DISABLE ON QUERY COMPUTATION AS SELECT * FROM `orders`"},
+		{"create materialized view v enable on query computation as select * from orders", "CREATE MATERIALIZED VIEW `v` ENABLE ON QUERY COMPUTATION AS SELECT * FROM `orders`"},
+		{"create materialized view v enable query rewrite disable on query computation as select * from orders", "CREATE MATERIALIZED VIEW `v` ENABLE QUERY REWRITE DISABLE ON QUERY COMPUTATION AS SELECT * FROM `orders`"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node

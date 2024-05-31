@@ -109,6 +109,7 @@ import (
 	currentUser       "CURRENT_USER"
 	cursor            "CURSOR"
 	cumeDist          "CUME_DIST"
+	computation       "COMPUTATION"
 	database          "DATABASE"
 	databases         "DATABASES"
 	dayHour           "DAY_HOUR"
@@ -245,6 +246,7 @@ import (
 	rename            "RENAME"
 	returns           "RETURNS"
 	returnKwd         "RETURN"
+	rewrite           "REWRITE"
 	deterministic     "DETERMINISTIC"
 	repeat            "REPEAT"
 	replace           "REPLACE"
@@ -1189,6 +1191,8 @@ import (
 	AttributesOpt                 "Attributes options"
 	RefreshOpt			          "Refresh options"
 	MvrefreshOpt			      "Materialized Refresh options"
+	QueryRewriteOpt			      "Materialized Query Rewrite options"
+	QueryComputationOpt			  "Materialized Query Computation options"
 	ParallelOpt			          "Parallel options"
 	WithOpt			              "With  options"
 	NewValuesOpt				  "New Value  options"
@@ -4196,10 +4200,10 @@ LikeTableWithOrWithoutParen:
  *
  *******************************************************************/
 CreateMaterializedViewStmt:
-	"CREATE" "MATERIALIZED" "VIEW" ViewName ViewFieldList CreateTableOptionListOpt PartitionOpt RefreshOpt "AS" CreateViewSelectOpt 
+	"CREATE" "MATERIALIZED" "VIEW" ViewName ViewFieldList CreateTableOptionListOpt PartitionOpt RefreshOpt QueryRewriteOpt "AS" CreateViewSelectOpt 
 	{
 		startOffset := parser.startOffset(&yyS[yypt-1])
-		selStmt := $10.(ast.StmtNode)
+		selStmt := $11.(ast.StmtNode)
 		selStmt.SetText(strings.TrimSpace(parser.src[startOffset:]))
 		x := &ast.CreateMaterializedViewStmt{
 			ViewName:  $4.(*ast.TableName),
@@ -4215,7 +4219,10 @@ CreateMaterializedViewStmt:
 		}
 		if $8 != nil {
 			x.RefreshOpt = $8.(*ast.RefreshOption)
-		} 
+		}
+		if $9 != nil {
+			x.QueryRewriteOpt = $9.(*ast.QueryRewriteClause)
+		}
 		$$ = x
 	}
 
@@ -4282,6 +4289,61 @@ MvrefreshOpt:
 |	"START" "WITH" Expression "NEXT" Expression
 	{
 		$$ = &ast.RefreshClause{Tp: ast.RefreshClauseStartWithNext, WithExpr: $3, NextExpr: $5}
+	}
+
+
+QueryRewriteOpt:
+	/* empty */ 
+	{
+		$$ = nil
+	}
+|	"DISABLE" "QUERY" "REWRITE" QueryComputationOpt
+	{
+		x := &ast.QueryRewriteClause{
+			Tp: ast.QueryRewriteDisable,
+		}
+		if $4 != nil {
+			x.QueryComputationOpt = $4.(*ast.QueryComputationClause)
+		}
+		$$ = x
+	}
+|	"ENABLE" "QUERY" "REWRITE" QueryComputationOpt
+	{
+		x := &ast.QueryRewriteClause{
+			Tp: ast.QueryRewriteEnable,
+		}
+		if $4 != nil {
+			x.QueryComputationOpt = $4.(*ast.QueryComputationClause)
+		}
+		$$ = x
+	}
+|	"DISABLE" "ON" "QUERY" "COMPUTATION"
+	{
+		x := &ast.QueryRewriteClause{
+			Tp: ast.QueryComputationDisableClause,
+		}
+		$$ = x
+	}
+|	"ENABLE" "ON" "QUERY" "COMPUTATION"
+	{
+		x := &ast.QueryRewriteClause{
+			Tp: ast.QueryComputationEnableClause,
+		}
+		$$ = x
+	}
+
+QueryComputationOpt:
+	/* empty */ 
+	{
+		$$ = nil
+	}
+|	"DISABLE" "ON" "QUERY" "COMPUTATION"
+	{
+		$$ = &ast.QueryComputationClause{Tp: ast.QueryComputationDisable}
+	}
+|	"ENABLE" "ON" "QUERY" "COMPUTATION"
+	{
+		$$ = &ast.QueryComputationClause{Tp: ast.QueryComputationEnable}
 	}
 
 /********************************************************************************************
