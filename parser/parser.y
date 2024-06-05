@@ -2859,6 +2859,10 @@ NowSymOptionFraction:
 	{
 		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr("CURRENT_DATE")}
 	}
+|	"UTC_TIMESTAMP"
+	{
+		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr("UTC_TIMESTAMP")}
+	}
 
 NextValueForSequenceParentheses:
 	'(' NextValueForSequenceParentheses ')'
@@ -2897,6 +2901,7 @@ NowSymFunc:
 	"CURRENT_TIMESTAMP"
 |	"LOCALTIME"
 |	"LOCALTIMESTAMP"
+|	"UTC_TIMESTAMP"
 |	builtinNow
 
 NowSym:

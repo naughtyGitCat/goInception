@@ -2163,7 +2163,8 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table t (a int default (upper(substring_index(user(),'@',1))))", true, "CREATE TABLE `t` (`a` INT DEFAULT (UPPER(SUBSTRING_INDEX(USER(), _UTF8MB4'@', 1))))"},
 		{"create table t (a varchar(32) default (str_to_date('1980-01-01','%Y-%m-%d')))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (STR_TO_DATE(_UTF8MB4'1980-01-01', _UTF8MB4'%Y-%m-%d')))"},
 		{"create table t (a varchar(32) default str_to_date('1980-01-01','%Y-%m-%d'))", true, "CREATE TABLE `t` (`a` VARCHAR(32) DEFAULT (STR_TO_DATE(_UTF8MB4'1980-01-01', _UTF8MB4'%Y-%m-%d')))"},
-
+		{"create table t (d date default (utc_timestamp))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (UTC_TIMESTAMP))"},
+		{"create table t (d date default (utc_timestamp()))", true, "CREATE TABLE `t` (`d` DATE DEFAULT (UTC_TIMESTAMP()))"},
 		// create table with expression index
 		{"create table a(a int, key(lower(a)));", false, ""},
 		{"create table a(a int, key(a+1));", false, ""},
