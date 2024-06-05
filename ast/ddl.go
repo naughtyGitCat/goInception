@@ -15,7 +15,6 @@ package ast
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/hanchuanchuan/goInception/format"
 	. "github.com/hanchuanchuan/goInception/format"
@@ -3350,6 +3349,8 @@ const (
 	AlterTableDropTableGroup
 	AlterTableDropFirstPartition
 	AlterTableAddLastPartition
+	AlterTableReorganizeLastPartition
+	AlterTableReorganizeFirstPartition
 	AlterTableCache
 	AlterTableNoCache
 	AlterTableSetInterval
@@ -3956,6 +3957,18 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 			}
 			ctx.WriteName(name.O)
 		}
+	case AlterTableReorganizeLastPartition:
+		ctx.WriteKeyWord("SPLIT MAXVALUE PARTITION LESS THAN (")
+		if err := n.Partition.PartitionMethod.Expr.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore AlterTableReorganizeLastPartition Exprs")
+		}
+		ctx.WriteKeyWord(")")
+	case AlterTableReorganizeFirstPartition:
+		ctx.WriteKeyWord("MERGE FIRST PARTITION LESS THAN (")
+		if err := n.Partition.PartitionMethod.Expr.Restore(ctx); err != nil {
+			return errors.Annotatef(err, "An error occurred while restore AlterTableReorganizeLastPartition Exprs")
+		}
+		ctx.WriteKeyWord(")")
 	case AlterTableReorganizePartition:
 		ctx.WriteKeyWord("REORGANIZE PARTITION")
 		if n.NoWriteToBinlog {
@@ -4750,7 +4763,7 @@ func (n *PartitionDefinition) Restore(ctx *RestoreCtx) error {
 type PartitionIntervalExpr struct {
 	Expr ExprNode
 	// TimeUnitInvalid if not Time based INTERVAL!
-	TimeUnit string
+	TimeUnit TimeUnitType
 }
 
 type PartitionInterval struct {
@@ -4779,7 +4792,7 @@ type PartitionMethod struct {
 	// RANGE COLUMNS and LIST COLUMNS types
 	ColumnNames []*ColumnName
 	// Unit is a time unit used as argument of SYSTEM_TIME type
-	Unit *ValueExpr
+	Unit TimeUnitType
 	// Limit is a row count used as argument of the SYSTEM_TIME type
 	Limit uint64
 
@@ -4809,20 +4822,13 @@ func (n *PartitionMethod) Restore(ctx *RestoreCtx) error {
 
 	switch {
 	case n.Tp == model.PartitionTypeSystemTime:
-		if n.Expr != nil && n.Unit != nil {
+		if n.Expr != nil && n.Unit != TimeUnitInvalid {
 			ctx.WriteKeyWord(" INTERVAL ")
 			if err := n.Expr.Restore(ctx); err != nil {
 				return errors.Annotate(err, "An error occurred while restore PartitionMethod.Expr")
 			}
-
-			// Here the Unit string should not be quoted.
-			// TODO: This is a temporary workaround that should be changed once something like "Keyword Expression" is implemented.
-			var sb strings.Builder
-			if err := n.Unit.Restore(NewRestoreCtx(0, &sb)); err != nil {
-				return errors.Annotate(err, "An error occurred while restore PartitionMethod.Unit")
-			}
 			ctx.WritePlain(" ")
-			ctx.WriteKeyWord(sb.String())
+			ctx.WriteKeyWord(n.Unit.String())
 		}
 
 	case n.Expr != nil:
@@ -4850,36 +4856,27 @@ func (n *PartitionMethod) Restore(ctx *RestoreCtx) error {
 
 	if n.Interval != nil {
 		ctx.WritePlain(" INTERVAL (")
-		if n.Interval.FirstRangeEnd != nil && n.Interval.LastRangeEnd != nil {
-			n.Interval.IntervalExpr.Expr.Restore(ctx)
-			if n.Interval.IntervalExpr.Expr != nil {
-				ctx.WritePlain(" ")
-				ctx.WriteKeyWord(n.Interval.IntervalExpr.TimeUnit)
-			}
+		n.Interval.IntervalExpr.Expr.Restore(ctx)
+		if n.Interval.IntervalExpr.TimeUnit != TimeUnitInvalid {
+			ctx.WritePlain(" ")
+			ctx.WriteKeyWord(n.Interval.IntervalExpr.TimeUnit.String())
+		}
+		ctx.WritePlain(")")
+		if n.Interval.FirstRangeEnd != nil {
+			ctx.WritePlain(" FIRST PARTITION LESS THAN (")
+			(*n.Interval.FirstRangeEnd).Restore(ctx)
 			ctx.WritePlain(")")
-			if n.Interval.FirstRangeEnd != nil {
-				ctx.WritePlain(" FIRST PARTITION LESS THAN (")
-				(*n.Interval.FirstRangeEnd).Restore(ctx)
-				ctx.WritePlain(")")
-			}
-			if n.Interval.LastRangeEnd != nil {
-				ctx.WritePlain(" LAST PARTITION LESS THAN (")
-				(*n.Interval.LastRangeEnd).Restore(ctx)
-				ctx.WritePlain(")")
-			}
-			if n.Interval.NullPart {
-				ctx.WritePlain(" NULL PARTITION")
-			}
-			if n.Interval.MaxValPart {
-				ctx.WritePlain(" MAXVALUE PARTITION")
-			}
-		} else {
-			if n.Interval.IntervalExpr.Expr != nil {
-				ctx.WriteKeyWord(n.Interval.IntervalExpr.TimeUnit)
-				ctx.WritePlain(",")
-				n.Interval.IntervalExpr.Expr.Restore(ctx)
-			}
+		}
+		if n.Interval.LastRangeEnd != nil {
+			ctx.WritePlain(" LAST PARTITION LESS THAN (")
+			(*n.Interval.LastRangeEnd).Restore(ctx)
 			ctx.WritePlain(")")
+		}
+		if n.Interval.NullPart {
+			ctx.WritePlain(" NULL PARTITION")
+		}
+		if n.Interval.MaxValPart {
+			ctx.WritePlain(" MAXVALUE PARTITION")
 		}
 	}
 	return nil
@@ -4900,13 +4897,6 @@ func (n *PartitionMethod) acceptInPlace(v Visitor) bool {
 			return false
 		}
 		n.ColumnNames[i] = newColName.(*ColumnName)
-	}
-	if n.Unit != nil {
-		unit, ok := n.Unit.Accept(v)
-		if !ok {
-			return false
-		}
-		n.Unit = unit.(*ValueExpr)
 	}
 	return true
 }

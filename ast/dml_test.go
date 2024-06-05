@@ -341,6 +341,43 @@ func (ts *testDMLSuite) TestHavingClauseRestore(c *C) {
 	RunNodeRestoreTest(c, testCases, "select 1 from t1 group by 1 %s", extractNodeFunc)
 }
 
+func (ts *testDMLSuite) TestPartitionByClauseRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"PARTITION BY a", "PARTITION BY `a`"},
+		{"PARTITION BY NULL", "PARTITION BY NULL"},
+		{"PARTITION BY a, b", "PARTITION BY `a`, `b`"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node.(*SelectStmt).Fields.Fields[0].Expr.(*WindowFuncExpr).Spec.PartitionBy
+	}
+	RunNodeRestoreTest(c, testCases, "select avg(val) over (%s rows current row) from t", extractNodeFunc)
+}
+
+func (ts *testDMLSuite) TestWindowSpecRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"w as ()", "`w` AS ()"},
+		{"w as (w1)", "`w` AS (`w1`)"},
+		{"w as (w1 order by country)", "`w` AS (`w1` ORDER BY `country`)"},
+		{"w as (partition by a order by b rows current row)", "`w` AS (PARTITION BY `a` ORDER BY `b` ROWS BETWEEN CURRENT ROW AND CURRENT ROW)"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return &node.(*SelectStmt).WindowSpecs[0]
+	}
+	RunNodeRestoreTest(c, testCases, "select rank() over w from t window %s", extractNodeFunc)
+
+	testCases = []NodeRestoreTestCase{
+		{"w", "`w`"},
+		{"()", "()"},
+		{"(w)", "(`w`)"},
+		{"(w PARTITION BY country)", "(`w` PARTITION BY `country`)"},
+		{"(PARTITION BY a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)", "(PARTITION BY `a` ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)"},
+	}
+	extractNodeFunc = func(node Node) Node {
+		return &node.(*SelectStmt).Fields.Fields[0].Expr.(*WindowFuncExpr).Spec
+	}
+	RunNodeRestoreTest(c, testCases, "select rank() over %s from t window w as (order by a)", extractNodeFunc)
+}
+
 func (ts *testDMLSuite) TestFulltextSearchModifier(c *C) {
 	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).IsBooleanMode(), IsFalse)
 	c.Assert(FulltextSearchModifier(FulltextSearchModifierNaturalLanguageMode).IsNaturalLanguageMode(), IsTrue)

@@ -113,6 +113,11 @@ func (ts *testFunctionsSuite) TestAggregateFuncExprRestore(c *C) {
 		// {"VAR_POP(test_score)", "VAR_POP(`test_score`)"},
 		// {"VAR_SAMP(test_score)", "VAR_SAMP(`test_score`)"},
 		// {"VARIANCE(test_score)", "VAR_POP(`test_score`)"},
+		{"JSON_OBJECTAGG(test_score, results)", "JSON_OBJECTAGG(`test_score`, `results`)"},
+		{"GROUP_CONCAT(a)", "GROUP_CONCAT(`a` SEPARATOR ',')"},
+		{"GROUP_CONCAT(a separator '--')", "GROUP_CONCAT(`a` SEPARATOR '--')"},
+		{"GROUP_CONCAT(a order by b desc, c)", "GROUP_CONCAT(`a` ORDER BY `b` DESC,`c` SEPARATOR ',')"},
+		{"GROUP_CONCAT(a order by b desc, c separator '--')", "GROUP_CONCAT(`a` ORDER BY `b` DESC,`c` SEPARATOR '--')"},
 	}
 	extractNodeFunc := func(node Node) Node {
 		return node.(*SelectStmt).Fields.Fields[0].Expr
@@ -147,11 +152,11 @@ func (ts *testFunctionsSuite) TestConvert(c *C) {
 		ErrorMessage string
 	}{
 		{`SELECT CONVERT("abc" USING "latin1")`, "latin1", ""},
-		// {`SELECT CONVERT("abc" USING laTiN1)`, "latin1", ""},
+		//{`SELECT CONVERT("abc" USING laTiN1)`, "latin1", ""},
 		{`SELECT CONVERT("abc" USING "binary")`, "binary", ""},
-		// {`SELECT CONVERT("abc" USING biNaRy)`, "binary", ""},
-		// {`SELECT CONVERT(a USING a)`, "", `[parser:1115]Unknown character set: 'a'`}, // TiDB issue #4436.
-		// {`SELECT CONVERT("abc" USING CONCAT("utf", "8"))`, "", `[parser:1115]Unknown character set: 'CONCAT'`},
+		{`SELECT CONVERT("abc" USING biNaRy)`, "binary", ""},
+		{`SELECT CONVERT(a USING a)`, "", `[parser:1115]Unknown character set: 'a'`}, // TiDB issue #4436.
+		{`SELECT CONVERT("abc" USING CONCAT("utf", "8"))`, "", `[parser:1115]Unknown character set: 'CONCAT'`},
 	}
 	for _, testCase := range cases {
 		stmt, err := parser.New().ParseOneStmt(testCase.SQL, "", "")
@@ -178,9 +183,9 @@ func (ts *testFunctionsSuite) TestChar(c *C) {
 		{`SELECT CHAR("abc" USING "latin1")`, "latin1", ""},
 		// {`SELECT CHAR("abc" USING laTiN1)`, "latin1", ""},
 		{`SELECT CHAR("abc" USING "binary")`, "binary", ""},
-		// {`SELECT CHAR("abc" USING binary)`, "binary", ""},
-		// {`SELECT CHAR(a USING a)`, "", `[parser:1115]Unknown character set: 'a'`},
-		// {`SELECT CHAR("abc" USING CONCAT("utf", "8"))`, "", `[parser:1115]Unknown character set: 'CONCAT'`},
+		{`SELECT CHAR("abc" USING binary)`, "binary", ""},
+		{`SELECT CHAR(a USING a)`, "", `[parser:1115]Unknown character set: 'a'`},
+		{`SELECT CHAR("abc" USING CONCAT("utf", "8"))`, "", `[parser:1115]Unknown character set: 'CONCAT'`},
 	}
 	for _, testCase := range cases {
 		stmt, err := parser.New().ParseOneStmt(testCase.SQL, "", "")
@@ -195,4 +200,20 @@ func (ts *testFunctionsSuite) TestChar(c *C) {
 		charsetArg := expr.Args[1].(*ast.ValueExpr)
 		c.Assert(charsetArg.GetString(), Equals, testCase.CharsetName)
 	}
+}
+
+func (ts *testFunctionsSuite) TestGenericFuncRestore(c *C) {
+	testCases := []NodeRestoreTestCase{
+		{"s.a()", "`s`.`a`()"},
+		{"`s`.`a`()", "`s`.`a`()"},
+		{"now()", "NOW()"},
+		{"`s`.`now`()", "`s`.`now`()"},
+		// FIXME: expectSQL should be `generic_func()`.
+		{"generic_func()", "GENERIC_FUNC()"},
+		{"`ident.1`.`ident.2`()", "`ident.1`.`ident.2`()"},
+	}
+	extractNodeFunc := func(node Node) Node {
+		return node.(*SelectStmt).Fields.Fields[0].Expr
+	}
+	RunNodeRestoreTest(c, testCases, "select %s from t", extractNodeFunc)
 }

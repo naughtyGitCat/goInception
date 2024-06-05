@@ -144,6 +144,12 @@ func init() {
 	initTokenFunc("'\"", startString)
 }
 
+// isInTokenMap indicates whether the target string is contained in tokenMap.
+func isInTokenMap(target string) bool {
+	_, ok := tokenMap[target]
+	return ok
+}
+
 var tokenMap = map[string]int{
 	"ACTION":           action,
 	"ADD":              add,
@@ -566,6 +572,7 @@ var tokenMap = map[string]int{
 	"SNAPSHOT":                 snapshot,
 	"SOME":                     some,
 	"SPATIAL":                  spatial,
+	"SPLIT":                    split,
 	"SQL":                      sql,
 	"SQLEXCEPTION":             sqlexception,
 	"SQLSTATE":                 sqlstate,

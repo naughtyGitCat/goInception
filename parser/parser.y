@@ -611,6 +611,7 @@ import (
 	ddl                "DDL"
 	jobs               "JOBS"
 	job                "JOB"
+	split              "SPLIT"
 	stats              "STATS"
 	statsMeta          "STATS_META"
 	statsHistograms    "STATS_HISTOGRAMS"
@@ -895,6 +896,7 @@ import (
 	FulltextSearchModifierOpt	  "Fulltext modifier"
 	TableRefsClause               "Table references clause"
 	FuncDatetimePrec              "Function datetime precision"
+	GetFormatSelector	          "{DATE|DATETIME|TIME|TIMESTAMP}"
 	GlobalScope                   "The scope of variable"
 	GroupByClause                 "GROUP BY clause"
 	HashString                    "Hashed string"
@@ -1054,6 +1056,8 @@ import (
 	TableSampleUnitOpt            "table sample unit optional"
 	TableToTable                  "rename table to table"
 	TableToTableList              "rename table to table by list"
+	TimeUnit                      "Time unit for 'DATE_ADD', 'DATE_SUB', 'ADDDATE', 'SUBDATE', 'EXTRACT'"
+	TimestampUnit                 "Time unit for 'TIMESTAMPADD' and 'TIMESTAMPDIFF'"
 	TransactionChar               "Transaction characteristic"
 	TransactionChars              "Transaction characteristic list"
 	TrimDirection                 "Trim string direction"
@@ -1206,6 +1210,7 @@ import (
 	PrimaryOpt        "Optional primary keyword"
 	NowSym            "CURRENT_TIMESTAMP/LOCALTIME/LOCALTIMESTAMP"
 	NowSymFunc        "CURRENT_TIMESTAMP/LOCALTIME/LOCALTIMESTAMP/NOW"
+	Char              "{CHAR|CHARACTER}"
 	CurdateSym        "CURDATE or CURRENT_DATE"
 	DefaultKwdOpt     "optional DEFAULT keyword"
 	DatabaseSym       "DATABASE or SCHEMA"
@@ -1215,8 +1220,6 @@ import (
 	ValueSym          "Value or Values"
 	NotSym            "Not token"
 	Varchar           "{NATIONAL VARCHAR|VARCHAR|NVARCHAR}"
-	TimeUnit          "Time unit for 'DATE_ADD', 'DATE_SUB', 'ADDDATE', 'SUBDATE', 'EXTRACT'"
-	TimestampUnit     "Time unit for 'TIMESTAMPADD' and 'TIMESTAMPDIFF'"
 	DeallocateSym     "Deallocate or drop"
 	OuterOpt          "optional OUTER clause"
 	CrossOpt          "Cross join option"
@@ -1234,7 +1237,6 @@ import (
 	logOr             "logical or operator"
 	LinearOpt         "linear or empty"
 	FieldsOrColumns   "Fields or columns"
-	GetFormatSelector "{DATE|DATETIME|TIME|TIMESTAMP}"
 
 %type	<ident>
 	Identifier                      "identifier or unreserved keyword"
@@ -1384,6 +1386,31 @@ AlterTablePartitionOpt:
 		ret := $4.(*ast.AlterTableSpec)
 		ret.NoWriteToBinlog = $3.(bool)
 		$$ = ret
+	}
+|	"SPLIT" "MAXVALUE" "PARTITION" "LESS" "THAN" '(' BitExpr ')'
+	{
+		partitionMethod := ast.PartitionMethod{Expr: $7}
+		startOffset := parser.yyVAL.offset
+		endOffset := parser.yylval.offset
+		partitionMethod.SetText(parser.src[startOffset:endOffset])
+		partitionMethod.SetOriginTextPosition(startOffset)
+		$$ = &ast.AlterTableSpec{
+			Tp:        ast.AlterTableReorganizeLastPartition,
+			Partition: &ast.PartitionOptions{PartitionMethod: partitionMethod},
+		}
+	}
+|	"MERGE" "FIRST" "PARTITION" "LESS" "THAN" '(' BitExpr ')'
+	{
+		partitionMethod := ast.PartitionMethod{Expr: $7}
+		startOffset := parser.yyVAL.offset
+		endOffset := parser.yylval.offset
+		partitionMethod.SetText(parser.src[startOffset:endOffset])
+		// Needed for replacing syntactic sugar with generated partitioning definition string
+		partitionMethod.SetOriginTextPosition(startOffset)
+		$$ = &ast.AlterTableSpec{
+			Tp:        ast.AlterTableReorganizeFirstPartition,
+			Partition: &ast.PartitionOptions{PartitionMethod: partitionMethod},
+		}
 	}
 |	"PARTITION" Identifier AttributesOpt
 	{
@@ -3837,7 +3864,7 @@ PartitionMethod:
 		$$ = &ast.PartitionMethod{
 			Tp:   model.PartitionTypeSystemTime,
 			Expr: $3.(ast.ExprNode),
-			Unit: ast.NewValueExpr($4),
+			Unit:  $4.(ast.TimeUnitType),
 		}
 	}
 |	"SYSTEM_TIME" "LIMIT" LengthNum
@@ -3874,15 +3901,15 @@ PartitionIntervalOpt:
 IntervalExpr:
 	BitExpr
 	{
-		$$ = ast.PartitionIntervalExpr{Expr: $1}
+		$$ = ast.PartitionIntervalExpr{Expr: $1, TimeUnit: ast.TimeUnitInvalid}
 	}
 |	BitExpr TimeUnit
 	{
-		$$ = ast.PartitionIntervalExpr{Expr: $1, TimeUnit: $2}
+		$$ = ast.PartitionIntervalExpr{Expr: $1, TimeUnit: $2.(ast.TimeUnitType)}
 	}
 |	TimeUnit ',' BitExpr
 	{
-		$$ = ast.PartitionIntervalExpr{Expr: $3, TimeUnit: $1}
+		$$ = ast.PartitionIntervalExpr{TimeUnit: $1.(ast.TimeUnitType), Expr: $3}
 	}
 
 NullPartOpt:
@@ -5813,6 +5840,7 @@ TiDBKeyword:
 |	"TIDB_SMJ"
 |	"TIDB_INLJ"
 |	"REGIONS"
+|	"SPLIT"
 
 NotKeywordToken:
 	"ADDDATE"
@@ -6254,7 +6282,7 @@ BitExpr:
 			Args: []ast.ExprNode{
 				$1,
 				$4,
-				ast.NewValueExpr($5),
+				&ast.TimeUnitExpr{Unit: $5.(ast.TimeUnitType)},
 			},
 		}
 	}
@@ -6265,7 +6293,7 @@ BitExpr:
 			Args: []ast.ExprNode{
 				$1,
 				$4,
-				ast.NewValueExpr($5),
+				&ast.TimeUnitExpr{Unit: $5.(ast.TimeUnitType)},
 			},
 		}
 	}
@@ -6478,7 +6506,7 @@ SimpleExpr:
 			FunctionType: ast.CastConvertFunction,
 		}
 	}
-|	"CONVERT" '(' Expression "USING" StringName ')'
+|	"CONVERT" '(' Expression "USING" CharsetName ')'
 	{
 		// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_convert
 		charset1 := ast.NewValueExpr($5)
@@ -6633,7 +6661,7 @@ FunctionCallKeyword:
 			Args:   append(args, nilVal),
 		}
 	}
-|	"CHAR" '(' ExpressionList "USING" StringName ')'
+|	"CHAR" '(' ExpressionList "USING" CharsetName ')'
 	{
 		charset1 := ast.NewValueExpr($5)
 		args := $3.([]ast.ExprNode)
@@ -6686,7 +6714,7 @@ FunctionCallNonKeyword:
 			Args: []ast.ExprNode{
 				$3,
 				$5,
-				ast.NewValueExpr("DAY"),
+				&ast.TimeUnitExpr{Unit: ast.TimeUnitDay},
 			},
 		}
 	}
@@ -6697,7 +6725,7 @@ FunctionCallNonKeyword:
 			Args: []ast.ExprNode{
 				$3,
 				$6,
-				ast.NewValueExpr($7),
+				&ast.TimeUnitExpr{Unit: $7.(ast.TimeUnitType)},
 			},
 		}
 	}
@@ -6708,13 +6736,13 @@ FunctionCallNonKeyword:
 			Args: []ast.ExprNode{
 				$3,
 				$6,
-				ast.NewValueExpr($7),
+				&ast.TimeUnitExpr{Unit: $7.(ast.TimeUnitType)},
 			},
 		}
 	}
 |	builtinExtract '(' TimeUnit "FROM" Expression ')'
 	{
-		timeUnit := ast.NewValueExpr($3)
+		timeUnit := &ast.TimeUnitExpr{Unit: $3.(ast.TimeUnitType)}
 		$$ = &ast.FuncCallExpr{
 			FnName: model.NewCIStr($1),
 			Args:   []ast.ExprNode{timeUnit, $5},
@@ -6724,7 +6752,10 @@ FunctionCallNonKeyword:
 	{
 		$$ = &ast.FuncCallExpr{
 			FnName: model.NewCIStr($1),
-			Args:   []ast.ExprNode{ast.NewValueExpr($3), $5},
+			Args: []ast.ExprNode{
+				&ast.GetFormatSelectorExpr{Selector: $3.(ast.GetFormatSelectorType)},
+				$5,
+			},
 		}
 	}
 |	builtinPosition '(' BitExpr "IN" Expression ')'
@@ -6763,14 +6794,14 @@ FunctionCallNonKeyword:
 	{
 		$$ = &ast.FuncCallExpr{
 			FnName: model.NewCIStr($1),
-			Args:   []ast.ExprNode{ast.NewValueExpr($3), $5, $7},
+			Args: []ast.ExprNode{&ast.TimeUnitExpr{Unit: $3.(ast.TimeUnitType)}, $5, $7},
 		}
 	}
 |	"TIMESTAMPDIFF" '(' TimestampUnit ',' Expression ',' Expression ')'
 	{
 		$$ = &ast.FuncCallExpr{
 			FnName: model.NewCIStr($1),
-			Args:   []ast.ExprNode{ast.NewValueExpr($3), $5, $7},
+			Args: []ast.ExprNode{&ast.TimeUnitExpr{Unit: $3.(ast.TimeUnitType)}, $5, $7},
 		}
 	}
 |	builtinTrim '(' Expression ')'
@@ -6790,7 +6821,7 @@ FunctionCallNonKeyword:
 |	builtinTrim '(' TrimDirection "FROM" Expression ')'
 	{
 		nilVal := ast.NewValueExpr(nil)
-		direction := ast.NewValueExpr(int($3.(ast.TrimDirectionType)))
+		direction := &ast.TrimDirectionExpr{Direction: $3.(ast.TrimDirectionType)}
 		$$ = &ast.FuncCallExpr{
 			FnName: model.NewCIStr($1),
 			Args:   []ast.ExprNode{$5, nilVal, direction},
@@ -6798,7 +6829,7 @@ FunctionCallNonKeyword:
 	}
 |	builtinTrim '(' TrimDirection Expression "FROM" Expression ')'
 	{
-		direction := ast.NewValueExpr(int($3.(ast.TrimDirectionType)))
+		direction := &ast.TrimDirectionExpr{Direction: $3.(ast.TrimDirectionType)}
 		$$ = &ast.FuncCallExpr{
 			FnName: model.NewCIStr($1),
 			Args:   []ast.ExprNode{$6, $4, direction},
@@ -6816,19 +6847,19 @@ FunctionCallNonKeyword:
 GetFormatSelector:
 	"DATE"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.GetFormatSelectorDate
 	}
 |	"DATETIME"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.GetFormatSelectorDatetime
 	}
 |	"TIME"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.GetFormatSelectorTime
 	}
 |	"TIMESTAMP"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.GetFormatSelectorDatetime
 	}
 
 FunctionNameDateArith:
@@ -7063,8 +7094,26 @@ OptGConcatSeparator:
 FunctionCallGeneric:
 	identifier '(' ExpressionListOpt ')'
 	{
-		$$ = &ast.FuncCallExpr{FnName: model.NewCIStr($1), Args: $3.([]ast.ExprNode)}
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+			Args:   $3.([]ast.ExprNode),
+		}
 	}
+|	Identifier '.' Identifier '(' ExpressionListOpt ')'
+	{
+		var tp ast.FuncCallExprType
+		if isInTokenMap($3) {
+			tp = ast.FuncCallExprTypeKeyword
+		} else {
+			tp = ast.FuncCallExprTypeGeneric
+		}
+		$$ = &ast.FuncCallExpr{
+			Tp:     tp,
+			Schema: model.NewCIStr($1),
+			FnName: model.NewCIStr($3),
+			Args:   $5.([]ast.ExprNode),
+		}
+ 	}
 
 FuncDatetimePrec:
 	{
@@ -7081,123 +7130,88 @@ FuncDatetimePrec:
 	}
 
 TimeUnit:
-	"MICROSECOND"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"SECOND"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"MINUTE"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"HOUR"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"DAY"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"WEEK"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"MONTH"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"QUARTER"
-	{
-		$$ = strings.ToUpper($1)
-	}
-|	"YEAR"
-	{
-		$$ = strings.ToUpper($1)
-	}
+	TimestampUnit
 |	"SECOND_MICROSECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitSecondMicrosecond
 	}
 |	"MINUTE_MICROSECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitMinuteMicrosecond
 	}
 |	"MINUTE_SECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitMinuteSecond
 	}
 |	"HOUR_MICROSECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitHourMicrosecond
 	}
 |	"HOUR_SECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitHourSecond
 	}
 |	"HOUR_MINUTE"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitHourMinute
 	}
 |	"DAY_MICROSECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitDayMicrosecond
 	}
 |	"DAY_SECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitDaySecond
 	}
 |	"DAY_MINUTE"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitDayMinute
 	}
 |	"DAY_HOUR"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitDayHour
 	}
 |	"YEAR_MONTH"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitYearMonth
 	}
 
 TimestampUnit:
 	"MICROSECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitMicrosecond
 	}
 |	"SECOND"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitSecond
 	}
 |	"MINUTE"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitMinute
 	}
 |	"HOUR"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitHour
 	}
 |	"DAY"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitDay
 	}
 |	"WEEK"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitWeek
 	}
 |	"MONTH"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitMonth
 	}
 |	"QUARTER"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitQuarter
 	}
 |	"YEAR"
 	{
-		$$ = strings.ToUpper($1)
+		$$ = ast.TimeUnitYear
 	}
 
 ExpressionOpt:
@@ -7251,7 +7265,7 @@ CastType:
 		x.Flag |= mysql.BinaryFlag
 		$$ = x
 	}
-|	"CHAR" OptFieldLen OptBinary
+|	Char OptFieldLen OptBinary
 	{
 		x := types.NewFieldType(mysql.TypeVarString)
 		x.Flen = $2.(int) // TODO: Flen should be the flen of expression
@@ -7340,6 +7354,44 @@ CastType:
 		x.Flag |= mysql.BinaryFlag | (mysql.ParseToJSONFlag)
 		x.Charset = mysql.DefaultCharset
 		x.Collate = mysql.DefaultCollationName
+		$$ = x
+	}
+|	"DOUBLE"
+	{
+		x := types.NewFieldType(mysql.TypeDouble)
+		x.Flen, x.Decimal = mysql.GetDefaultFieldLengthAndDecimalForCast(mysql.TypeDouble)
+		x.Flag |= mysql.BinaryFlag
+		x.Charset = charset.CharsetBin
+		x.Collate = charset.CollationBin
+		$$ = x
+	}
+|	"FLOAT" FloatOpt
+	{
+		x := types.NewFieldType(mysql.TypeFloat)
+		fopt := $2.(*ast.FloatOpt)
+		if fopt.Flen >= 54 {
+			yylex.AppendError(ErrTooBigPrecision.GenWithStackByArgs(fopt.Flen,"CAST",53))
+		} else if fopt.Flen >= 25 {
+			x = types.NewFieldType(mysql.TypeDouble)
+		}
+		x.Flen, x.Decimal = mysql.GetDefaultFieldLengthAndDecimalForCast(x.Tp)
+		x.Flag |= mysql.BinaryFlag
+		x.Charset = charset.CharsetBin
+		x.Collate = charset.CollationBin
+		$$ = x
+	}
+|	"REAL"
+	{
+		var x *types.FieldType
+		if parser.lexer.GetSQLMode().HasRealAsFloatMode() {
+			x = types.NewFieldType(mysql.TypeFloat)
+		} else {
+			x = types.NewFieldType(mysql.TypeDouble)
+		}
+		x.Flen, x.Decimal = mysql.GetDefaultFieldLengthAndDecimalForCast(x.Tp)
+		x.Flag |= mysql.BinaryFlag
+		x.Charset = charset.CharsetBin
+		x.Collate = charset.CollationBin
 		$$ = x
 	}
 
@@ -7941,7 +7993,7 @@ WindowFrameStart:
 	}
 |	"INTERVAL" Expression TimeUnit "PRECEDING"
 	{
-		$$ = ast.FrameBound{Type: ast.Preceding, Expr: $2, Unit: ast.NewValueExpr($3)}
+		$$ = ast.FrameBound{Type: ast.Preceding, Expr: $2, Unit: $3.(ast.TimeUnitType),}
 	}
 |	"CURRENT" "ROW"
 	{
@@ -7970,7 +8022,7 @@ WindowFrameBound:
 	}
 |	"INTERVAL" Expression TimeUnit "FOLLOWING"
 	{
-		$$ = ast.FrameBound{Type: ast.Following, Expr: $2, Unit: ast.NewValueExpr($3)}
+		$$ = ast.FrameBound{Type: ast.Following, Expr: $2, Unit: $3.(ast.TimeUnitType),}
 	}
 
 OptWindowingClause:
@@ -10533,6 +10585,10 @@ StringType:
 		x.Collate = charset.CollationBin
 		$$ = x
 	}
+
+Char:
+	"CHARACTER"
+|	"CHAR"
 
 NationalOpt:
 	{}
