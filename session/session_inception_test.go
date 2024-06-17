@@ -1430,6 +1430,10 @@ func (s *testSessionIncSuite) TestAlterTableModifyColumn(c *C) {
 	sql = "create table t1(c1 int,c1 int);alter table t1 modify column c1 varchar(10);"
 	s.testErrorCode(c, sql)
 
+	config.GetGlobalConfig().Inc.CheckColumnTypeChange = false
+	sql = "create table t1(c1 int,c1 json);alter table t1 modify column c1 varchar(10);"
+	s.testErrorCode(c, sql)
+
 	// ----------------- 列类型变更 -----------------
 	config.GetGlobalConfig().Inc.CheckColumnTypeChange = true
 	sql = "create table t1(c1 int);alter table t1 modify column c1 varchar(10);"
@@ -1473,6 +1477,11 @@ func (s *testSessionIncSuite) TestAlterTableModifyColumn(c *C) {
 	config.GetGlobalConfig().Inc.CheckColumnTypeChange = true
 	sql = "create table t1(c1 decimal(10,4));alter table t1 modify column c1 decimal(12,4);"
 	s.testErrorCode(c, sql)
+
+	config.GetGlobalConfig().Inc.CheckColumnTypeChange = true
+	sql = "create table t1(c1 json);alter table t1 modify column c1 varchar(10);"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_CHANGE_COLUMN_TYPE, "t1.c1", "json", "varchar(10)"))
 
 	// 变更长度时不影响(仅长度变小时警告)
 	sql = "create table t1(c1 char(100));alter table t1 modify column c1 char(20);"
