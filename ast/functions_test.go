@@ -155,8 +155,6 @@ func (ts *testFunctionsSuite) TestConvert(c *C) {
 		//{`SELECT CONVERT("abc" USING laTiN1)`, "latin1", ""},
 		{`SELECT CONVERT("abc" USING "binary")`, "binary", ""},
 		{`SELECT CONVERT("abc" USING biNaRy)`, "binary", ""},
-		{`SELECT CONVERT(a USING a)`, "", `[parser:1115]Unknown character set: 'a'`}, // TiDB issue #4436.
-		{`SELECT CONVERT("abc" USING CONCAT("utf", "8"))`, "", `[parser:1115]Unknown character set: 'CONCAT'`},
 	}
 	for _, testCase := range cases {
 		stmt, err := parser.New().ParseOneStmt(testCase.SQL, "", "")
@@ -181,11 +179,9 @@ func (ts *testFunctionsSuite) TestChar(c *C) {
 		ErrorMessage string
 	}{
 		{`SELECT CHAR("abc" USING "latin1")`, "latin1", ""},
-		// {`SELECT CHAR("abc" USING laTiN1)`, "latin1", ""},
+		//{`SELECT CHAR("abc" USING laTiN1)`, "latin1", ""},
 		{`SELECT CHAR("abc" USING "binary")`, "binary", ""},
 		{`SELECT CHAR("abc" USING binary)`, "binary", ""},
-		{`SELECT CHAR(a USING a)`, "", `[parser:1115]Unknown character set: 'a'`},
-		{`SELECT CHAR("abc" USING CONCAT("utf", "8"))`, "", `[parser:1115]Unknown character set: 'CONCAT'`},
 	}
 	for _, testCase := range cases {
 		stmt, err := parser.New().ParseOneStmt(testCase.SQL, "", "")

@@ -16,6 +16,7 @@ package types
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -62,15 +63,10 @@ func (ft *FieldType) Equal(other *FieldType) bool {
 		ft.Charset == other.Charset &&
 		ft.Collate == other.Collate &&
 		mysql.HasUnsignedFlag(ft.Flag) == mysql.HasUnsignedFlag(other.Flag)
-	if !partialEqual || len(ft.Elems) != len(other.Elems) {
+	if !partialEqual {
 		return false
 	}
-	for i := range ft.Elems {
-		if ft.Elems[i] != other.Elems[i] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(ft.Elems, other.Elems)
 }
 
 // AggFieldType aggregates field types for a multi-argument function like `IF`, `IFNULL`, `COALESCE`

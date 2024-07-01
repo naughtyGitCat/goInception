@@ -492,6 +492,8 @@ func (s *session) checkFilter(event *replication.RowsEvent,
 			record.appendErrorNo(s.inc.Lang, ErrMariaDBRollbackWarn, s.dbVersion)
 		}
 		return true
+	} else if s.dbType == DBTypeOceanBase {
+		return true
 	} else if record.ThreadId != currentThreadID {
 		return false
 	}
@@ -532,6 +534,8 @@ func (s *session) checkUpdateFilter(event *replication.RowsEvent,
 		if record.ErrLevel != 1 {
 			record.appendErrorNo(s.inc.Lang, ErrMariaDBRollbackWarn, s.dbVersion)
 		}
+		return true, multiTable
+	} else if s.dbType == DBTypeOceanBase {
 		return true, multiTable
 	} else if record.ThreadId != currentThreadID {
 		return false, nil

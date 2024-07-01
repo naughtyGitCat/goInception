@@ -399,6 +399,8 @@ type Inc struct {
 
 	// 自定义的关键字，用于检查字段名是否符合规范
 	CustomKeywords []string `toml:"custom_keywords" json:"custom_keywords"`
+	// 等待获取oceanbase binlog日志转换超时时间, 单位:秒
+	BinlogConvertTimeout int `toml:"binlog_convert_timeout" json:"binlog_convert_timeout"`
 }
 
 // Osc online schema change 工具参数配置
@@ -731,7 +733,8 @@ var defaultConf = Config{
 		UniqIndexPrefix: "uniq_", // 默认不检查,由CheckIndexPrefix控制
 		TablePrefix:     "",      // 默认不检查表前缀
 
-		CustomKeywords: []string{},
+		CustomKeywords:       []string{},
+		BinlogConvertTimeout: 1, // 默认等待oceanbase binlog转换1秒
 	},
 	Osc: Osc{
 		OscPrintNone:               false,

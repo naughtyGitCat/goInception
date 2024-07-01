@@ -1688,6 +1688,9 @@ func (s *session) executeRemoteStatementAndBackup(record *Record) {
 
 	if !s.hasError() || record.ExecComplete {
 		if s.opt.Backup {
+			if s.dbType == DBTypeOceanBase {
+				time.Sleep(time.Duration(s.inc.BinlogConvertTimeout) * time.Second)
+			}
 			masterStatus := s.mysqlFetchMasterBinlogPosition()
 			if masterStatus == nil {
 				s.appendErrorNo(ErrNotFoundMasterStatus)
@@ -1726,7 +1729,6 @@ func (s *session) mysqlFetchMasterBinlogPosition() *MasterStatus {
 	if rows != nil {
 		defer rows.Close()
 	}
-
 	if err != nil {
 		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
@@ -1740,7 +1742,6 @@ func (s *session) mysqlFetchMasterBinlogPosition() *MasterStatus {
 			return &r
 		}
 	}
-
 	return nil
 }
 
