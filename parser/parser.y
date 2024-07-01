@@ -559,6 +559,7 @@ import (
 	undefined              "UNDEFINED"
 	value                  "VALUE"
 	variables              "VARIABLES"
+	vectorType             "VECTOR"
 	levels                 "LEVELS"
 	view                   "VIEW"
 	visible                "VISIBLE"
@@ -1145,6 +1146,7 @@ import (
 	OptBinMod                     "Optional BINARY mode"
 	OptCharset                    "Optional Character setting"
 	OptCollate                    "Optional Collate setting"
+	OptVectorElementType          "Optional vector element type setting"
 	IgnoreLines                   "Ignore num(int) lines"
 	NUM                           "A number"
 	NumList                       "Some numbers"
@@ -5827,6 +5829,7 @@ UnReservedKeyword:
 |	"RESTART"
 |	"LASTVAL"
 |	"SETVAL"
+|	"VECTOR"
 
 TiDBKeyword:
 	"ADMIN"
@@ -7393,6 +7396,19 @@ CastType:
 		} else {
 			x = types.NewFieldType(mysql.TypeDouble)
 		}
+		x.Flen, x.Decimal = mysql.GetDefaultFieldLengthAndDecimalForCast(x.Tp)
+		x.Flag |= mysql.BinaryFlag
+		x.Charset = charset.CharsetBin
+		x.Collate = charset.CollationBin
+		$$ = x
+	}
+|	"VECTOR" OptVectorElementType OptFieldLen
+	{
+		elementType := $2.(*ast.VectorElementType)
+		if elementType.Tp != mysql.TypeFloat {
+			yylex.AppendError(yylex.Errorf("Only VECTOR is supported for now"))
+		}
+		x := types.NewFieldType(mysql.TypeTiDBVectorFloat32)
 		x.Flen, x.Decimal = mysql.GetDefaultFieldLengthAndDecimalForCast(x.Tp)
 		x.Flag |= mysql.BinaryFlag
 		x.Charset = charset.CharsetBin
@@ -10590,6 +10606,19 @@ StringType:
 		x.Collate = charset.CollationBin
 		$$ = x
 	}
+|	"VECTOR" OptVectorElementType OptFieldLen
+	{
+		elementType := $2.(*ast.VectorElementType)
+		if elementType.Tp != mysql.TypeFloat {
+			yylex.AppendError(yylex.Errorf("Only VECTOR is supported for now"))
+		}
+		x := types.NewFieldType(mysql.TypeTiDBVectorFloat32)
+		x.Flen, x.Decimal = mysql.GetDefaultFieldLengthAndDecimalForCast(x.Tp)
+		x.Flag |= mysql.BinaryFlag
+		x.Charset = charset.CharsetBin
+		x.Collate = charset.CollationBin
+		$$ = x
+	}
 
 Char:
 	"CHARACTER"
@@ -10772,6 +10801,25 @@ OptBinMod:
 |	"BINARY"
 	{
 		$$ = true
+	}
+
+OptVectorElementType:
+	{
+		$$ = &ast.VectorElementType{
+			Tp: mysql.TypeFloat,
+		}
+	}
+|	'<' "FLOAT" '>'
+	{
+		$$ = &ast.VectorElementType{
+			Tp: mysql.TypeFloat,
+		}
+	}
+|	'<' "DOUBLE" '>'
+	{
+		$$ = &ast.VectorElementType{
+			Tp: mysql.TypeDouble,
+		}
 	}
 
 OptBinary:

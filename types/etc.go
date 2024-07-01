@@ -113,34 +113,40 @@ func IsString(tp byte) bool {
 	return IsTypeChar(tp) || IsTypeBlob(tp) || IsTypeVarchar(tp) || IsTypeUnspecified(tp)
 }
 
+// IsTypeVector returns whether tp is a vector type.
+func IsTypeVector(tp byte) bool {
+	return tp == mysql.TypeTiDBVectorFloat32
+}
+
 var type2Str = map[byte]string{
-	mysql.TypeBit:        "bit",
-	mysql.TypeBlob:       "text",
-	mysql.TypeDate:       "date",
-	mysql.TypeDatetime:   "datetime",
-	mysql.TypeDecimal:    "unspecified",
-	mysql.TypeNewDecimal: "decimal",
-	mysql.TypeDouble:     "double",
-	mysql.TypeEnum:       "enum",
-	mysql.TypeFloat:      "float",
-	mysql.TypeGeometry:   "geometry",
-	mysql.TypeInt24:      "mediumint",
-	mysql.TypeJSON:       "json",
-	mysql.TypeLong:       "int",
-	mysql.TypeLonglong:   "bigint",
-	mysql.TypeLongBlob:   "longtext",
-	mysql.TypeMediumBlob: "mediumtext",
-	mysql.TypeNull:       "null",
-	mysql.TypeSet:        "set",
-	mysql.TypeShort:      "smallint",
-	mysql.TypeString:     "char",
-	mysql.TypeDuration:   "time",
-	mysql.TypeTimestamp:  "timestamp",
-	mysql.TypeTiny:       "tinyint",
-	mysql.TypeTinyBlob:   "tinytext",
-	mysql.TypeVarchar:    "varchar",
-	mysql.TypeVarString:  "var_string",
-	mysql.TypeYear:       "year",
+	mysql.TypeBit:               "bit",
+	mysql.TypeBlob:              "text",
+	mysql.TypeDate:              "date",
+	mysql.TypeDatetime:          "datetime",
+	mysql.TypeDecimal:           "unspecified",
+	mysql.TypeNewDecimal:        "decimal",
+	mysql.TypeDouble:            "double",
+	mysql.TypeEnum:              "enum",
+	mysql.TypeFloat:             "float",
+	mysql.TypeGeometry:          "geometry",
+	mysql.TypeTiDBVectorFloat32: "vector",
+	mysql.TypeInt24:             "mediumint",
+	mysql.TypeJSON:              "json",
+	mysql.TypeLong:              "int",
+	mysql.TypeLonglong:          "bigint",
+	mysql.TypeLongBlob:          "longtext",
+	mysql.TypeMediumBlob:        "mediumtext",
+	mysql.TypeNull:              "null",
+	mysql.TypeSet:               "set",
+	mysql.TypeShort:             "smallint",
+	mysql.TypeString:            "char",
+	mysql.TypeDuration:          "time",
+	mysql.TypeTimestamp:         "timestamp",
+	mysql.TypeTiny:              "tinyint",
+	mysql.TypeTinyBlob:          "tinytext",
+	mysql.TypeVarchar:           "varchar",
+	mysql.TypeVarString:         "var_string",
+	mysql.TypeYear:              "year",
 }
 
 var kind2Str = map[byte]string{
@@ -179,6 +185,7 @@ func KindStr(kind byte) (r string) {
 // It is used for converting Text to Blob,
 // or converting Char to Binary.
 // Args:
+//
 //	tp: type enum
 //	cs: charset
 func TypeToStr(tp byte, cs string) (r string) {

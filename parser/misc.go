@@ -662,6 +662,7 @@ var tokenMap = map[string]int{
 	"VARBINARY":                varbinaryType,
 	"VARCHAR":                  varcharType,
 	"VARIABLES":                variables,
+	"VECTOR":                   vectorType,
 	"VIEW":                     view,
 	"VIRTUAL":                  virtual,
 	"VISIBLE":                  visible,

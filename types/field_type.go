@@ -226,6 +226,10 @@ func (ft *FieldType) CompactStr() string {
 	case mysql.TypeBit, mysql.TypeShort, mysql.TypeTiny, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
 		// Flen is always shown.
 		suffix = fmt.Sprintf("(%d)", displayFlen)
+	case mysql.TypeTiDBVectorFloat32:
+		if ft.Flen != UnspecifiedLength {
+			suffix = fmt.Sprintf("(%d)", ft.Flen)
+		}
 	}
 	return ts + suffix
 }
@@ -374,6 +378,8 @@ func (ft *FieldType) RestoreAsCastType(ctx *format.RestoreCtx) {
 		ctx.WriteKeyWord("FLOAT")
 	case mysql.TypeYear:
 		ctx.WriteKeyWord("YEAR")
+	case mysql.TypeTiDBVectorFloat32:
+		ctx.WriteKeyWord("VECTOR")
 	}
 }
 
