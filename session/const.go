@@ -27,7 +27,6 @@ const (
 	DBTypeMariaDB
 	DBTypeTiDB
 	DBTypeOceanBase
-	DBTypeGreatSQL
 	DBTypeDrds
 )
 

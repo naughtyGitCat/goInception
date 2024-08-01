@@ -66,7 +66,11 @@ func (s *session) raw(sqlStr string) (rows *sql.Rows, err error) {
 		if err == nil {
 			return
 		}
-		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok &&
+			myErr.Number == 1064 {
+		} else {
+			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		}
 		if err == mysqlDriver.ErrInvalidConn {
 			err1 := s.initConnection()
 			if err1 != nil {

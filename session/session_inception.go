@@ -1803,6 +1803,24 @@ func (s *session) checkBinlogRowImageIsFull() bool {
 	return format != "MINIMAL"
 }
 
+func (s *session) DrdsServerVersion() {
+	log.Debug("DrdsServerVersion")
+
+	if s.dbVersion > 0 {
+		return
+	}
+
+	sql := "show ds;"
+
+	rows, err := s.raw(sql)
+	if rows != nil {
+		defer rows.Close()
+	}
+	if err == nil {
+		s.dbType = DBTypeDrds
+	}
+}
+
 func (s *session) mysqlServerVersion() {
 	log.Debug("mysqlServerVersion")
 
@@ -1862,10 +1880,6 @@ func (s *session) mysqlServerVersion() {
 			case "version_comment":
 				if strings.Contains(strings.ToLower(value), "oceanbase") {
 					s.dbType = DBTypeOceanBase
-				} else if strings.Contains(strings.ToLower(value), "greatsql") {
-					s.dbType = DBTypeGreatSQL
-				} else if strings.Contains(strings.ToLower(value), "source") {
-					s.dbType = DBTypeDrds
 				}
 			case "innodb_large_prefix":
 				emptyInnodbLargePrefix = false
@@ -2377,6 +2391,9 @@ func (s *session) checkTruncateTable(node *ast.TruncateTableStmt, sql string) {
 
 	log.Debug("checkTruncateTable")
 
+	if s.supportDrds() {
+		return
+	}
 	t := node.Table
 
 	if !s.inc.EnableDropTable {
@@ -2400,7 +2417,9 @@ func (s *session) checkTruncateTable(node *ast.TruncateTableStmt, sql string) {
 func (s *session) checkDropTable(node *ast.DropTableStmt, sql string) {
 
 	log.Debug("checkDropTable")
-
+	if s.supportDrds() {
+		return
+	}
 	for _, t := range node.Tables {
 
 		if !s.inc.EnableDropTable {
@@ -2524,7 +2543,7 @@ func (s *session) checkDropSequence(node *ast.DropSequenceStmt) {
 				s.appendErrorNo(ER_SEQUENCE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", SeqName.Schema.O, SeqName.Name.O))
 			}
 		} else {
-			if s.opt.Execute {
+			if s.opt.Execute && s.dbType != DBTypeOceanBase {
 				s.mysqlShowSequence(SeqName.Schema.O, SeqName.Name.O)
 			}
 			s.myRecord.SequencesInfo = table
@@ -2620,7 +2639,7 @@ func (s *session) checkAlterSequencesIncrementBy(t *SequencesInfo) {
 	for _, field := range t.SequencesOption {
 		if s.opt.Execute {
 			s.alterRollbackBuffer = append(s.alterRollbackBuffer,
-				fmt.Sprintf("INCREMENT BY `%d` ", field.Increment))
+				fmt.Sprintf("INCREMENT BY `%d` ", field.IncrementBy))
 		}
 	}
 }
@@ -8612,16 +8631,8 @@ func (s *session) querySequencesFromDB(db string, sequencesName string, reportNo
 	}
 	var rows []SequencesOptionInfo
 	var sql string
-	if s.dbType == DBTypeGreatSQL {
-		sql = fmt.Sprintf(`SELECT * FROM information_schema.SEQUENCES
-		WHERE DB='%s' AND NAME='%s';`, db, sequencesName)
-	} else if s.dbType == DBTypeTiDB {
-		sql = fmt.Sprintf(`SELECT *  FROM information_schema.SEQUENCES
-		WHERE SEQUENCE_SCHEMA='%s' AND SEQUENCE_NAME='%s';`, db, sequencesName)
-	} else if s.dbType == DBTypeOceanBase {
-		sql = fmt.Sprintf(`SELECT * FROM information_schema.SEQUENCES
+	sql = fmt.Sprintf(`SELECT * FROM oceanbase.DBA_SEQUENCES
 		WHERE SEQUENCE_OWNER='%s' AND SEQUENCE_NAME='%s';`, db, sequencesName)
-	}
 
 	s.rawScan(sql, &rows)
 	if len(rows) == 0 {
@@ -8634,6 +8645,9 @@ func (s *session) querySequencesFromDB(db string, sequencesName string, reportNo
 }
 
 func (s *session) queryTableFromDB(db string, tableName string, reportNotExists bool) []FieldInfo {
+	if s.supportDrds() {
+		return nil
+	}
 	if db == "" {
 		db = s.dbName
 	}

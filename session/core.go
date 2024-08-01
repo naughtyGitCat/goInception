@@ -550,7 +550,11 @@ func (s *session) checkOptions() error {
 		s.processInfo.Store(pi)
 	}
 
-	s.mysqlServerVersion()
+	s.DrdsServerVersion()
+
+	if !s.supportDrds() {
+		s.mysqlServerVersion()
+	}
 	s.setSqlSafeUpdates()
 	s.setLockWaitTimeout()
 

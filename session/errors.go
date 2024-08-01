@@ -435,7 +435,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErrNotAllowedTypeInPartition:   "Field '%-.192s' is of a not allowed type for this type of partitioning",
 	ErrUniqueKeyNeedAllFieldsInPf:  "A %-.192s must include all columns in the table's partitioning function",
 	ER_PROCEDURE_NOT_EXISTED_ERROR: "Procedure '%-.64s' does not exist",
-	ER_PROCEDURE_EXISTS_ERROR:      "Procedure'%s' already exists.",
+	ER_PROCEDURE_EXISTS_ERROR:      "Procedure '%s' already exists.",
 	ER_FUNCTION_NOT_EXISTED_ERROR:  "Function '%-.64s' does not exist",
 	ER_FUNCTION_EXISTS_ERROR:       "Function'%s' already exists.",
 	ER_CANT_DROP_FUNCTION:          "Command is forbidden! Cannot drop function '%s'.",
@@ -443,7 +443,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_PROCEDURE_NOT_ALLOWED:       "Procedure is not allowed.",
 	ER_FUNCTION_NOT_ALLOWED:        "Function is not allowed.",
 	ER_SEQUENCE_NOT_EXISTED_ERROR:  "Sequence '%-.64s' does not exist",
-	ER_SEQUENCE_EXISTS_ERROR:       "Sequence'%s' already exists.",
+	ER_SEQUENCE_EXISTS_ERROR:       "Sequence '%s' already exists.",
 	ER_INVALID_NO_GEOMETRY_DEFAULT: "Incorrect usage of SRID and non-geometry column '%s'.",
 }
 
