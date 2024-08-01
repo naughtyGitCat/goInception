@@ -3839,6 +3839,23 @@ func (s *testParserSuite) TestVector(c *C) {
 	s.RunTest(c, table, false)
 }
 
+func (s *testParserSuite) TestSpatial(c *C) {
+	table := []testCase{
+		{"CREATE TABLE t (a GEOMETRY)", true, "CREATE TABLE `t` (`a` GEOMETRY)"},
+		{"CREATE TABLE t (a GEOMETRY NOT NULL SRID 4326)", true, "CREATE TABLE `t` (`a` GEOMETRY NOT NULL SRID 4326)"},
+		{"CREATE TABLE t (a POINT)", true, "CREATE TABLE `t` (`a` POINT)"},
+		{"CREATE TABLE t (a POINT SRID 0)", true, "CREATE TABLE `t` (`a` POINT SRID 0)"},
+		{"CREATE TABLE t (a LINESTRING)", true, "CREATE TABLE `t` (`a` LINESTRING)"},
+		{"CREATE TABLE t (a POLYGON)", true, "CREATE TABLE `t` (`a` POLYGON)"},
+		{"CREATE TABLE t (a MULTIPOLYGON)", true, "CREATE TABLE `t` (`a` MULTIPOLYGON)"},
+		{"CREATE TABLE t (a MULTIPOINT)", true, "CREATE TABLE `t` (`a` MULTIPOINT)"},
+		{"CREATE TABLE t (a MULTILINESTRING)", true, "CREATE TABLE `t` (`a` MULTILINESTRING)"},
+		{"CREATE TABLE t (a GEOMETRYCOLLECTION)", true, "CREATE TABLE `t` (`a` GEOMETRYCOLLECTION)"},
+	}
+
+	s.RunTest(c, table, false)
+}
+
 // nodeTextCleaner clean the text of a node and it's child node.
 // For test only.
 type nodeTextCleaner struct {

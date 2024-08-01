@@ -328,6 +328,10 @@ var tokenMap = map[string]int{
 	"POINT":                    geometryType,
 	"LINESTRING":               geometryType,
 	"POLYGON":                  geometryType,
+	"MULTIPOLYGON":             geometryType,
+	"MULTIPOINT":               geometryType,
+	"MULTILINESTRING":          geometryType,
+	"GEOMETRYCOLLECTION":       geometryType,
 	"GET":                      get,
 	"GET_FORMAT":               getFormat,
 	"GLOBAL":                   global,
@@ -749,14 +753,18 @@ var windowFuncTokenMap = map[string]int{
 
 // aliases are strings directly map to another string and use the same token.
 var aliases = map[string]string{
-	"SCHEMA":     "DATABASE",
-	"SCHEMAS":    "DATABASES",
-	"DEC":        "DECIMAL",
-	"SUBSTR":     "SUBSTRING",
-	"POINT":      "GEOMETRY",
-	"LINESTRING": "GEOMETRY",
-	"POLYGON":    "GEOMETRY",
-	"INC":        "INCEPTION",
+	"SCHEMA":             "DATABASE",
+	"SCHEMAS":            "DATABASES",
+	"DEC":                "DECIMAL",
+	"SUBSTR":             "SUBSTRING",
+	"POINT":              "GEOMETRY",
+	"LINESTRING":         "GEOMETRY",
+	"POLYGON":            "GEOMETRY",
+	"MULTIPOLYGON":       "GEOMETRY",
+	"MULTIPOINT":         "GEOMETRY",
+	"MULTILINESTRING":    "GEOMETRY",
+	"GEOMETRYCOLLECTION": "GEOMETRY",
+	"INC":                "INCEPTION",
 	// "GET":     "SHOW",
 }
 
