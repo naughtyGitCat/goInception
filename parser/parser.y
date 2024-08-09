@@ -330,6 +330,7 @@ import (
 	autoRandomBase         "AUTO_RANDOM_BASE"
 	avgRowLength           "AVG_ROW_LENGTH"
 	avg                    "AVG"
+	before                 "BEFORE"
 	begin                  "BEGIN"
 	bernoulli              "BERNOULLI"
 	binding                "BINDING"
@@ -406,6 +407,7 @@ import (
 	fixed                  "FIXED"
 	flush                  "FLUSH"
 	following              "FOLLOWING"
+	follows                "FOLLOWS"
 	format                 "FORMAT"
 	found                  "FOUND"
 	full                   "FULL"
@@ -478,6 +480,7 @@ import (
 	plugins                "PLUGINS"
 	preSplitRegions        "PRE_SPLIT_REGIONS"
 	prepare                "PREPARE"
+	precedes               "PRECEDES"
 	preserve               "PRESERVE"
 	privileges             "PRIVILEGES"
 	process                "PROCESS"
@@ -741,11 +744,13 @@ import (
 	CreateSequenceStmt   "CREATE SEQUENCE statement"
 	CreateProcedureStmt  "CREATE PROCEDURE statement"
 	CreateFunctionStmt   "CREATE FUNCTION statement"
+	CreateTriggerStmt    "CREATE TRIGGER statement"
 	DoStmt               "Do statement"
 	DropDatabaseStmt     "DROP DATABASE statement"
 	DropIndexStmt        "DROP INDEX statement"
 	DropProcedureStmt    "DROP PROCEDURE statement"
 	DropFunctionStmt     "DROP FUNCTION statement"
+	DropTriggerStmt     "DROP TRIGGER statement"
 	DropStatsStmt        "DROP STATS statement"
 	DropTableStmt        "DROP TABLE statement"
 	DropSequenceStmt     "DROP SEQUENCE statement"
@@ -771,7 +776,7 @@ import (
 	CompoundProcStmt     "The compound of function"
 	OptimizeTableStmt    "OPTIMIZE statement"
 	PreparedStmt         "PreparedStmt"
-	FunctionProcStmt     "The entrance of function"
+	RoutineBodyStmt      "RoutineBody statement"
 	ProcedureProcStmt    "The entrance of procedure statements which contains all kinds of statements in procedure"
 	ProcedureStatementStmt     "The normal statements in procedure, such as dml, select, set ..."
 	SelectStmt           "SELECT statement"
@@ -1229,6 +1234,8 @@ import (
 	IsolationLevel    "Isolation level"
 	ShowIndexKwd      "Show index/indexs/key keyword"
 	DistinctKwd       "DISTINCT/DISTINCTROW keyword"
+	TriggerTimeKwd    "BEFORE/AFTER keyword"
+	TriggerEventKwd   "INSERT/UPDATE/DELETE keyword"
 	FromOrIn          "From or In"
 	OptTable          "Optional table keyword"
 	OptInteger        "Optional Integer keyword"
@@ -5586,6 +5593,7 @@ UnReservedKeyword:
 |	"AFTER"
 |	"ALWAYS"
 |	"AVG"
+|	"BEFORE"
 |	"BEGIN"
 |	"BINDING"
 |	"BIT"
@@ -5635,6 +5643,7 @@ UnReservedKeyword:
 |	"FULL"
 |	"HASH"
 |	"FOLLOWING"
+|	"FOLLOWS"
 |	"HOUR"
 |	"LESS"
 |	"LIST"
@@ -5645,6 +5654,7 @@ UnReservedKeyword:
 |	"PARSER"
 |	"PASSWORD" %prec lowerThanEq
 |	"PREPARE"
+|	"PRECEDES"
 |	"PRESERVE"
 |	"PRE_SPLIT_REGIONS"
 |	"QUICK"
@@ -9616,6 +9626,13 @@ ShowStmt:
 			Function: $4.(*ast.TableName),
 		}
 	}
+|	"SHOW" "CREATE" "TRIGGER" TableName
+	{
+		$$ = &ast.ShowStmt{
+			Tp:        ast.ShowCreateTrigger,
+			Trigger: $4.(*ast.TableName),
+		}
+	}
 
 ShowIndexKwd:
 	"INDEX"
@@ -9913,6 +9930,7 @@ Statement:
 |	CreateUserStmt
 |	CreateProcedureStmt
 |	CreateFunctionStmt
+|	CreateTriggerStmt
 |	CreateSequenceStmt
 |	DoStmt
 |	DropDatabaseStmt
@@ -9921,6 +9939,7 @@ Statement:
 |	DropSequenceStmt
 |	DropProcedureStmt
 |	DropFunctionStmt
+|	DropTriggerStmt
 |	DropTableGroupStmt
 |	DropViewStmt
 |	DropUserStmt
@@ -12150,8 +12169,9 @@ ProcedureProcStmt:
 	ProcedureStatementStmt
 |	CompoundProcStmt
 
-FunctionProcStmt:
+RoutineBodyStmt:
 	CompoundProcStmt
+|	SetStmt
 
 CompoundProcStmt:
 	ProcedureUnlabeledBlock
@@ -12238,24 +12258,25 @@ DropProcedureStmt:
  ********************************************************************************************/
 
 CreateFunctionStmt:
-	"CREATE" ProcedureDefiner "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type RoutineOptionListOpt FunctionProcStmt
+	"CREATE" ProcedureDefiner "FUNCTION" IfNotExists TableName '(' OptSpPdparams ')' "RETURNS" Type RoutineOptionListOpt RoutineBodyStmt
 	{
 		x := &ast.FunctionInfo{
 			Definer:        $2.(*auth.UserIdentity),
 			IfNotExists:    $4.(bool),
 			FunctionName:  $5.(*ast.TableName),
 			FunctionParam: $7.([]*ast.StoreParameter),
+			FunctionParamType: $10.(*types.FieldType),
 			FunctionOptions: $11.([]*ast.RoutineOption),
 			FunctionBody:  $12,
 		}
 		startOffset := parser.startOffset(&yyS[yypt])
 		originStmt := $12
 		originStmt.SetText(strings.TrimSpace(parser.src[startOffset:parser.yylval.offset]))
-		startOffset = parser.startOffset(&yyS[yypt-3])
+		startOffset = parser.startOffset(&yyS[yypt-5])
 		if parser.src[startOffset] == '(' {
 			startOffset++
 		}
-		endOffset := parser.startOffset(&yyS[yypt-1])
+		endOffset := parser.startOffset(&yyS[yypt-2])
 		x.FunctionParamStr = strings.TrimSpace(parser.src[startOffset:endOffset])
 		$$ = x
 	}
@@ -12271,7 +12292,64 @@ DropFunctionStmt:
 			FunctionName: $4.(*ast.TableName),
 		}
 	}
-	
+
+/********************************************************************************************
+ *
+ *  Create Trigger Statement
+ *
+ *  Example:
+ *	CREATE
+ *  [DEFINER = user]
+ *  TRIGGER trigger_name
+ *  trigger_time trigger_event
+ *  ON tbl_name FOR EACH ROW
+ *  [trigger_order]
+ *  type:
+ *  trigger_body
+ * trigger_time: { BEFORE | AFTER }
+ * trigger_event: { INSERT | UPDATE | DELETE }
+ * trigger_order: { FOLLOWS | PRECEDES } other_trigger_name
+ ********************************************************************************************/
+
+CreateTriggerStmt:
+	"CREATE" ProcedureDefiner "TRIGGER" TableName TriggerTimeKwd TriggerEventKwd "ON" TableName "FOR" "EACH" "ROW" TriggerPlaceKwd RoutineBodyStmt
+	{
+		x := &ast.TriggerInfo{
+			Definer:      $2.(*auth.UserIdentity),
+			TriggerName:  $4.(*ast.TableName),
+			Table:        $8.(*ast.TableName),
+			TriggerBody:  $13,
+		}
+		$$ = x
+	}
+
+TriggerTimeKwd:
+	"BEFORE"
+|	"AFTER"
+
+TriggerEventKwd:
+	"INSERT"
+|	"UPDATE"
+|	"DELETE"
+
+TriggerPlaceKwd:
+	{}
+|	"FOLLOWS"
+|	"PRECEDES"
+
+
+/********************************************************************************************
+*  DROP TRIGGER  [IF EXISTS] trigger_name
+********************************************************************************************/
+DropTriggerStmt:
+	"DROP" "TRIGGER" IfExists TableName
+	{
+		$$ = &ast.DropTriggerStmt{
+			IfExists:      $3.(bool),
+			TriggerName: $4.(*ast.TableName),
+		}
+	}
+
 /********************************************************************************************
  *
  *  Create Sequence Statement

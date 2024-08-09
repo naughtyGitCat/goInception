@@ -29,8 +29,10 @@ var (
 	_ StmtNode = &ProcedureBlock{}
 	_ StmtNode = &ProcedureInfo{}
 	_ StmtNode = &FunctionInfo{}
+	_ StmtNode = &TriggerInfo{}
 	_ StmtNode = &DropProcedureStmt{}
 	_ StmtNode = &DropFunctionStmt{}
+	_ StmtNode = &DropTriggerStmt{}
 	_ StmtNode = &ProcedureElseIfBlock{}
 	_ StmtNode = &ProcedureElseBlock{}
 	_ StmtNode = &ProcedureIfBlock{}
@@ -1285,118 +1287,4 @@ func (n *ProcedureReturn) Accept(v Visitor) (Node, bool) {
 	}
 	n = newNode.(*ProcedureReturn)
 	return v.Leave(n)
-}
-
-// FunctionInfo stores all function information.
-type FunctionInfo struct {
-	stmtNode
-	Definer          *auth.UserIdentity
-	IfNotExists      bool
-	FunctionName     *TableName
-	FunctionParam    []*StoreParameter //procedure param
-	FunctionBody     StmtNode          //procedure body statement
-	FunctionParamStr string            //procedure parameter string
-	FunctionOptions  []*RoutineOption
-}
-
-// Restore implements Node interface.
-func (n *FunctionInfo) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord("CREATE")
-	ctx.WriteKeyWord(" DEFINER")
-	ctx.WritePlain(" = ")
-
-	// todo Use n.Definer.Restore(ctx) to replace this part
-	if n.Definer.CurrentUser {
-		ctx.WriteKeyWord("current_user")
-	} else {
-		ctx.WriteName(n.Definer.Username)
-		if n.Definer.Hostname != "" {
-			ctx.WritePlain("@")
-			ctx.WriteName(n.Definer.Hostname)
-		}
-	}
-	ctx.WriteKeyWord(" FUNCTION ")
-	if n.IfNotExists {
-		ctx.WriteKeyWord("IF NOT EXISTS ")
-	}
-	err := n.FunctionName.Restore(ctx)
-	if err != nil {
-		return err
-	}
-	ctx.WritePlain("(")
-	for i, FunctionParam := range n.FunctionParam {
-		if i > 0 {
-			ctx.WritePlain(",")
-		}
-		err := FunctionParam.Restore(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	ctx.WritePlain(") ")
-	err = (n.FunctionBody).Restore(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// Accept implements Node Accept interface.
-func (n *FunctionInfo) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*FunctionInfo)
-	for i, FunctionParam := range n.FunctionParam {
-		node, ok := FunctionParam.Accept(v)
-		if !ok {
-			return n, false
-		}
-		n.FunctionParam[i] = node.(*StoreParameter)
-	}
-	node, ok := n.FunctionBody.Accept(v)
-	if !ok {
-		return n, false
-	}
-	n.FunctionBody = node.(StmtNode)
-	return v.Leave(n)
-}
-
-// TableOptionType is the type for TableOption
-type RoutineOptionType int
-
-// TableOption types.
-const (
-	RoutineOptionNone RoutineOptionType = iota
-	RoutineOptionComment
-	RoutineOptionLanguageSql
-	RoutineOptionDeterministic
-	RoutineOptionNotDeterministic
-	RoutineOptionSqlSecurity
-)
-
-// RoutineOption is used for parsing procedure and function option from SQL.
-type RoutineOption struct {
-	Tp       RoutineOptionType
-	StrValue string
-}
-
-func (n *RoutineOption) Restore(ctx *format.RestoreCtx) error {
-	switch n.Tp {
-	case RoutineOptionComment:
-		ctx.WriteKeyWord("COMMENT ")
-		if n.StrValue != "" {
-			ctx.WritePlain(n.StrValue)
-		}
-	case RoutineOptionLanguageSql:
-		ctx.WriteKeyWord("LANGUAGE SQL")
-	case RoutineOptionDeterministic:
-		ctx.WriteKeyWord("DETERMINISTIC")
-	case RoutineOptionNotDeterministic:
-		ctx.WriteKeyWord("NOT DETERMINISTIC")
-	default:
-		return errors.Errorf("invalid RoutineOption: %d", n.Tp)
-	}
-	return nil
 }

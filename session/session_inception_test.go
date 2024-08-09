@@ -3634,3 +3634,78 @@ func (s *testSessionIncSuite) TestCheckAuditSetting(c *C) {
 		}
 	}
 }
+
+func (s *testSessionIncSuite) TestCreateProcedure(c *C) {
+	config.GetGlobalConfig().Inc.EnableCreateProcedure = false
+	sql := ""
+	sql = "create procedure sp_t1() begin select 1;end;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_PROCEDURE_NOT_ALLOWED))
+
+	config.GetGlobalConfig().Inc.EnableCreateProcedure = true
+	sql = "create procedure sp_t1() begin select 1;end;"
+	s.testErrorCode(c, sql)
+}
+
+func (s *testSessionIncSuite) TestDropProcedure(c *C) {
+	config.GetGlobalConfig().Inc.EnableDropProcedure = false
+	sql := ""
+	sql = "drop procedure sp_t1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_CANT_DROP_PROCEDURE, "sp_t1"))
+
+	config.GetGlobalConfig().Inc.EnableDropProcedure = true
+	sql = "drop procedure sp_t1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_PROCEDURE_NOT_EXISTED_ERROR, "sp_t1"))
+}
+
+func (s *testSessionIncSuite) TestCreateFunction(c *C) {
+	config.GetGlobalConfig().Inc.EnableCreateFunction = false
+	sql := ""
+	sql = "create function sp_t1() returns int RETURN 1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_FUNCTION_NOT_ALLOWED))
+
+	config.GetGlobalConfig().Inc.EnableCreateFunction = true
+	sql = "create function sp_t1() returns int RETURN 1;"
+	s.testErrorCode(c, sql)
+}
+
+func (s *testSessionIncSuite) TestDropFunction(c *C) {
+	config.GetGlobalConfig().Inc.EnableDropFunction = false
+	sql := ""
+	sql = "drop function sp_t1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_CANT_DROP_FUNCTION, "sp_t1"))
+
+	config.GetGlobalConfig().Inc.EnableDropFunction = true
+	sql = "drop function sp_t1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_FUNCTION_NOT_EXISTED_ERROR, "sp_t1"))
+}
+
+func (s *testSessionIncSuite) TestCreateTrigger(c *C) {
+	config.GetGlobalConfig().Inc.EnableCreateTrigger = false
+	sql := ""
+	sql = "create table t1(id int);create trigger t1 before insert on t1 for each row begin select 1;end;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_TRIGGER_NOT_ALLOWED))
+
+	config.GetGlobalConfig().Inc.EnableCreateTrigger = true
+	sql = "create table t1(id int);create trigger t1 before insert on t1 for each row begin select 1;end;"
+	s.testErrorCode(c, sql)
+}
+
+func (s *testSessionIncSuite) TestDropTrigger(c *C) {
+	config.GetGlobalConfig().Inc.EnableDropTrigger = false
+	sql := ""
+	sql = "drop trigger t1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_CANT_DROP_TRIGGER, "t1"))
+
+	config.GetGlobalConfig().Inc.EnableDropTrigger = true
+	sql = "drop trigger t1;"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_TRIGGER_NOT_EXISTED_ERROR, "t1"))
+}

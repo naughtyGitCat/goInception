@@ -239,6 +239,10 @@ const (
 	ER_SEQUENCE_NOT_EXISTED_ERROR
 	ER_SEQUENCE_EXISTS_ERROR
 	ER_INVALID_NO_GEOMETRY_DEFAULT
+	ER_TRIGGER_NOT_ALLOWED
+	ER_CANT_DROP_TRIGGER
+	ER_TRIGGER_NOT_EXISTED_ERROR
+	ER_TRIGGER_EXISTS_ERROR
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -434,9 +438,9 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_ERROR_LAST:                  "TheLastError,ByeBye",
 	ErrNotAllowedTypeInPartition:   "Field '%-.192s' is of a not allowed type for this type of partitioning",
 	ErrUniqueKeyNeedAllFieldsInPf:  "A %-.192s must include all columns in the table's partitioning function",
-	ER_PROCEDURE_NOT_EXISTED_ERROR: "Procedure '%-.64s' does not exist",
+	ER_PROCEDURE_NOT_EXISTED_ERROR: "Procedure '%s' does not exist",
 	ER_PROCEDURE_EXISTS_ERROR:      "Procedure '%s' already exists.",
-	ER_FUNCTION_NOT_EXISTED_ERROR:  "Function '%-.64s' does not exist",
+	ER_FUNCTION_NOT_EXISTED_ERROR:  "Function '%s' does not exist",
 	ER_FUNCTION_EXISTS_ERROR:       "Function'%s' already exists.",
 	ER_CANT_DROP_FUNCTION:          "Command is forbidden! Cannot drop function '%s'.",
 	ER_CANT_DROP_PROCEDURE:         "Command is forbidden! Cannot drop procedure '%s'.",
@@ -445,6 +449,10 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_SEQUENCE_NOT_EXISTED_ERROR:  "Sequence '%-.64s' does not exist",
 	ER_SEQUENCE_EXISTS_ERROR:       "Sequence '%s' already exists.",
 	ER_INVALID_NO_GEOMETRY_DEFAULT: "Incorrect usage of SRID and non-geometry column '%s'.",
+	ER_CANT_DROP_TRIGGER:           "Command is forbidden! Cannot drop trigger '%s'.",
+	ER_TRIGGER_NOT_EXISTED_ERROR:   "Trigger '%s' does not exist",
+	ER_TRIGGER_NOT_ALLOWED:         "Trigger is not allowed.",
+	ER_TRIGGER_EXISTS_ERROR:        "Trigger '%s' already exists.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -639,9 +647,13 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_CANT_DROP_PROCEDURE:                 "命令禁止! 无法删除存储过程'%s'.",
 	ER_PROCEDURE_NOT_ALLOWED:               "不允许创建存储过程.",
 	ER_FUNCTION_NOT_ALLOWED:                "不允许创建函数.",
+	ER_TRIGGER_NOT_ALLOWED:                 "不允许创建触发器.",
 	ER_SEQUENCE_NOT_EXISTED_ERROR:          "序列 '%s' 不存在.",
 	ER_SEQUENCE_EXISTS_ERROR:               "序列 '%s' 已存在.",
 	ER_INVALID_NO_GEOMETRY_DEFAULT:         "列 '%s' 默认值SRID,非geometry列无效.",
+	ER_CANT_DROP_TRIGGER:                   "命令禁止! 无法删除触发器'%s'.",
+	ER_TRIGGER_NOT_EXISTED_ERROR:           "触发器 '%s' 不存在.",
+	ER_TRIGGER_EXISTS_ERROR:                "触发器 '%s' 已存在.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -708,9 +720,7 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrImplicitTypeConversion,
 		ErrUseValueExpr,
 		ErrMaxColumnCount,
-		ER_WITH_INSERT_FIELD,
-		ER_PROCEDURE_NOT_ALLOWED,
-		ER_FUNCTION_NOT_ALLOWED:
+		ER_WITH_INSERT_FIELD:
 		return 1
 
 	case ER_CONFLICTING_DECLARATIONS,
@@ -774,7 +784,8 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ER_INCEPTION_EMPTY_QUERY,
 		ER_CANT_DROP_FUNCTION,
 		ER_CANT_DROP_PROCEDURE,
-		ER_INVALID_NO_GEOMETRY_DEFAULT:
+		ER_INVALID_NO_GEOMETRY_DEFAULT,
+		ER_CANT_DROP_TRIGGER:
 		return 2
 
 	default:
@@ -1211,6 +1222,14 @@ func (e ErrorCode) String() string {
 		return "er_sequence_exists_error"
 	case ER_INVALID_NO_GEOMETRY_DEFAULT:
 		return "er_invalid_no_geometry_default"
+	case ER_CANT_DROP_TRIGGER:
+		return "er_cant_drop_trigger"
+	case ER_TRIGGER_NOT_EXISTED_ERROR:
+		return "er_trigger_not_existed_error"
+	case ER_TRIGGER_NOT_ALLOWED:
+		return "er_trigger_not_allowed"
+	case ER_TRIGGER_EXISTS_ERROR:
+		return "er_trigger_exists_error"
 	}
 	return ""
 }

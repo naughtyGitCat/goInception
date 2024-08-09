@@ -303,6 +303,8 @@ type Inc struct {
 	EnableDropProcedure    bool `toml:"enable_drop_procedure" json:"enable_drop_procedure"`
 	EnableCreateFunction   bool `toml:"enable_create_function" json:"enable_create_function"`
 	EnableDropFunction     bool `toml:"enable_drop_function" json:"enable_drop_function"`
+	EnableCreateTrigger    bool `toml:"enable_create_trigger" json:"enable_create_trigger"`
+	EnableDropTrigger      bool `toml:"enable_drop_trigger" json:"enable_drop_trigger"`
 
 	// 是否允许设置字符集和排序规则
 	EnableSetCharset   bool `toml:"enable_set_charset" json:"enable_set_charset"`

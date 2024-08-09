@@ -713,6 +713,10 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 		s.checkCreateMaterializedViewLog(node)
 	case *ast.DropMaterializedViewLogStmt:
 		s.checkDropMaterializedViewLog(node)
+	case *ast.TriggerInfo:
+		s.checkCreateTrigger(node)
+	case *ast.DropTriggerStmt:
+		s.checkDropTrigger(node)
 	default:
 		log.Warnf("无匹配类型:%T\n", stmtNode)
 		if !s.inc.EnableAnyStatement {
@@ -1270,7 +1274,9 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.DropSequenceStmt,
 		*ast.CreateMaterializedViewStmt,
 		*ast.CreateMaterializedViewLogStmt,
-		*ast.DropMaterializedViewLogStmt:
+		*ast.DropMaterializedViewLogStmt,
+		*ast.TriggerInfo,
+		*ast.DropTriggerStmt:
 		s.executeRemoteStatement(record, isTran)
 
 	default:
@@ -2830,11 +2836,9 @@ func (s *session) checkCreateProcedure(node *ast.ProcedureInfo) {
 	log.Debug("checkCreateProcedure")
 	if !s.inc.EnableCreateProcedure {
 		s.appendErrorNo(ER_PROCEDURE_NOT_ALLOWED)
-	}
-	s.checkKeyWords(node.ProcedureName.Schema.O)
-	if s.myRecord.ErrLevel == 2 {
 		return
 	}
+	s.checkKeyWords(node.ProcedureName.Schema.O)
 
 	if node.ProcedureName.Schema.O == "" {
 		node.ProcedureName.Schema = model.NewCIStr(s.dbName)
@@ -2859,9 +2863,6 @@ func (s *session) checkDropProcedure(node *ast.DropProcedureStmt) {
 		return
 	}
 	s.checkKeyWords(node.ProcedureName.Name.O)
-	if s.myRecord.ErrLevel == 2 {
-		return
-	}
 
 	if node.ProcedureName.Schema.O == "" {
 		node.ProcedureName.Schema = model.NewCIStr(s.dbName)
@@ -2911,11 +2912,9 @@ func (s *session) checkCreateFunction(node *ast.FunctionInfo) {
 	log.Debug("checkCreateFunction")
 	if !s.inc.EnableCreateFunction {
 		s.appendErrorNo(ER_FUNCTION_NOT_ALLOWED)
-	}
-	s.checkKeyWords(node.FunctionName.Schema.O)
-	if s.myRecord.ErrLevel == 2 {
 		return
 	}
+	s.checkKeyWords(node.FunctionName.Schema.O)
 
 	if node.FunctionName.Schema.O == "" {
 		node.FunctionName.Schema = model.NewCIStr(s.dbName)
@@ -2940,9 +2939,6 @@ func (s *session) checkDropFunction(node *ast.DropFunctionStmt) {
 		return
 	}
 	s.checkKeyWords(node.FunctionName.Name.O)
-	if s.myRecord.ErrLevel == 2 {
-		return
-	}
 
 	if node.FunctionName.Schema.O == "" {
 		node.FunctionName.Schema = model.NewCIStr(s.dbName)
@@ -2950,6 +2946,43 @@ func (s *session) checkDropFunction(node *ast.DropFunctionStmt) {
 
 	if !s.checkFunctionExists(node.FunctionName.Schema.O, node.FunctionName.Name.O, false) && !node.IfExists {
 		s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, node.FunctionName.Name.O)
+	}
+}
+
+func (s *session) checkCreateTrigger(node *ast.TriggerInfo) {
+	log.Debug("checkCreateTrigger")
+	if !s.inc.EnableCreateTrigger {
+		s.appendErrorNo(ER_TRIGGER_NOT_ALLOWED)
+		return
+	}
+	s.checkKeyWords(node.TriggerName.Name.O)
+
+	if node.TriggerName.Schema.O == "" {
+		node.TriggerName.Schema = model.NewCIStr(s.dbName)
+	}
+	if s.checkTriggerExists(node.TriggerName.Schema.O, node.TriggerName.Name.O, false) {
+		s.appendErrorNo(ER_TRIGGER_EXISTS_ERROR, node.TriggerName.Name.O)
+		return
+
+	}
+	if !s.hasError() && s.opt.Execute {
+		s.myRecord.DDLRollback = fmt.Sprintf("DROP TRIGGER `%s`.`%s`;", node.TriggerName.Schema.O, node.TriggerName.Name.O)
+	}
+}
+
+func (s *session) checkDropTrigger(node *ast.DropTriggerStmt) {
+	log.Debug("checkDropTrigger")
+	if !s.inc.EnableDropTrigger {
+		s.appendErrorNo(ER_CANT_DROP_TRIGGER, node.TriggerName.Name.O)
+		return
+	}
+	s.checkKeyWords(node.TriggerName.Name.O)
+
+	if node.TriggerName.Schema.O == "" {
+		node.TriggerName.Schema = model.NewCIStr(s.dbName)
+	}
+	if !s.checkTriggerExists(node.TriggerName.Schema.O, node.TriggerName.Name.O, false) && !node.IfExists {
+		s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, node.TriggerName.Name.O)
 	}
 }
 
@@ -2984,6 +3017,37 @@ func (s *session) checkFunctionExists(dbName string, funcname string, reportNotE
 	}
 	if !found && reportNotExists {
 		s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, funcname)
+	}
+	return found
+}
+
+func (s *session) checkTriggerExists(dbName string, triggerName string, reportNotExists bool) bool {
+	var db string
+	var name string
+	sql := fmt.Sprintf(`SELECT TRIGGER_SCHEMA,TRIGGER_NAME FROM information_schema.TRIGGERS
+	WHERE TRIGGER_SCHEMA='%s' AND TRIGGER_NAME='%s';`, dbName, triggerName)
+	rows, err := s.raw(sql)
+	if rows != nil {
+		defer rows.Close()
+	}
+	if err != nil {
+		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	} else if rows != nil {
+		for rows.Next() {
+			rows.Scan(&db, &name)
+		}
+	}
+	found := false
+	if strings.EqualFold(dbName, db) && strings.EqualFold(triggerName, name) {
+		found = true
+	}
+	if !found && reportNotExists {
+		s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, triggerName)
 	}
 	return found
 }
