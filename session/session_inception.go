@@ -4417,6 +4417,13 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 				_ = s.fetchPartitionFromDB(table)
 				s.checkPartitionDrop(table, alter.PartitionNames)
 			}
+		case ast.AlterTableTruncatePartition:
+			if !s.inc.EnablePartitionTable {
+				s.appendErrorNo(ER_PARTITION_NOT_ALLOWED)
+			} else {
+				_ = s.fetchPartitionFromDB(table)
+				s.checkPartitionTruncate(table, alter.PartitionNames)
+			}
 		case ast.AlterTableRemovePartitioning:
 			if !s.inc.EnablePartitionTable {
 				s.appendErrorNo(ER_PARTITION_NOT_ALLOWED)
@@ -4430,10 +4437,10 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 			} else {
 				_ = s.fetchPartitionFromDB(table)
 				s.checkPartitionConvert(table, alter.Partition)
+				s.checkAlterPartitionRule(table, alter.Partition)
 			}
 		case ast.AlterTableAlterPartition,
 			ast.AlterTableCoalescePartitions,
-			ast.AlterTableTruncatePartition,
 			ast.AlterTableRebuildPartition,
 			ast.AlterTableReorganizePartition,
 			ast.AlterTableCheckPartitions,
@@ -5097,6 +5104,37 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			if !found {
 				s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name))
 			} else {
+				// ER_CANT_MODIFY_AUTO_INCREMENT_COLUMN
+				if s.inc.CheckOfflineDDL && !s.hasError() {
+					isPrimary := false
+					isUnique := false
+					isAutoIncrement := false
+					for _, op := range nc.Options {
+						switch op.Tp {
+						case ast.ColumnOptionPrimaryKey:
+							isPrimary = true
+						case ast.ColumnOptionUniqKey:
+							isUnique = true
+						case ast.ColumnOptionAutoIncrement:
+							isAutoIncrement = true
+						}
+					}
+
+					if isAutoIncrement {
+						if s.dbType == DBTypeOceanBase {
+							s.appendErrorNo(ER_CANT_MODIFY_AUTO_INCREMENT_COLUMN, nc.Name.Name.String())
+							break
+						}
+					}
+
+					if isPrimary || isUnique {
+						if s.dbType == DBTypeOceanBase {
+							s.appendErrorNo(ER_CANT_MODIFY_PK_OR_UK_COLUMN, nc.Name.Name.String())
+							break
+						}
+					}
+				}
+
 				if nc.Tp.Tp == mysql.TypeVarchar && nc.Tp.Flen > 0 &&
 					s.inc.MaxVarcharLength > 0 {
 					if strings.Contains(GetDataTypeBase(foundField.Type), "char") {
@@ -6240,6 +6278,8 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			if !s.hasError() {
 				isPrimary := false
 				isUnique := false
+				var isStore *bool
+				isAutoIncrement := false
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionPrimaryKey:
@@ -6257,6 +6297,25 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 								}
 							}
 						}
+					case ast.ColumnOptionGenerated:
+						isStore = &op.Stored
+					case ast.ColumnOptionAutoIncrement:
+						isAutoIncrement = true
+					}
+				}
+
+				// OceanBase offline DDL 检查（来自 oceanbase/Integration b3bf3198）
+				if s.inc.CheckOfflineDDL && isAutoIncrement {
+					if s.dbType == DBTypeOceanBase {
+						s.appendErrorNo(ER_CANT_ADD_AUTO_INCREMENT_COLUMN, nc.Name.Name.String())
+						break
+					}
+				}
+
+				if s.inc.CheckOfflineDDL && isStore != nil && *isStore {
+					if s.dbType == DBTypeOceanBase {
+						s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN, nc.Name.Name.String())
+						break
 					}
 				}
 
@@ -6379,6 +6438,11 @@ func checkExistsColumns(t *TableInfo) (count int) {
 
 func (s *session) checkDropColumn(t *TableInfo, c *ast.AlterTableSpec) {
 	if s.dbType == DBTypeOceanBase {
+		if s.inc.CheckOfflineDDL {
+			s.appendErrorNo(ER_CANT_DROP_COLUMN, fmt.Sprintf("%s", c.OldColumnName.Name.O))
+			return
+		}
+
 		for _, index := range t.Indexes {
 			if strings.EqualFold(index.ColumnName, c.OldColumnName.Name.O) {
 				s.appendErrorNo(ER_CANT_DROP_INDEX_COLUMN,

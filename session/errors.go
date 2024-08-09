@@ -251,6 +251,14 @@ const (
 	ErrWarnDataOutOfRange
 	ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN
 	ErrPartitionMgmtOnNonpartitioned
+	// OceanBase offline DDL 检查（来自 oceanbase/Integration b3bf3198）
+	ER_CANT_ADD_AUTO_INCREMENT_COLUMN
+	ER_CANT_ADD_STORED_GENERATED_COLUMN
+	ER_CANT_MODIFY_AUTO_INCREMENT_COLUMN
+	ER_CANT_MODIFY_PK_OR_UK_COLUMN
+	ER_CANT_DROP_COLUMN
+	ER_CANT_DROP_PARTITION
+	ER_CANT_TRUNCATE_PARTITION
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -469,6 +477,14 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErrWarnDataOutOfRange:                         "Out of range value for column '%s' at row %d",
 	ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN: "Alter column that the prefix index column depends on not supported '%s'.",
 	ErrPartitionMgmtOnNonpartitioned:              "Partition management on a not partitioned table is not possible '%s'.",
+	// OceanBase offline DDL 检查（来自 oceanbase/Integration b3bf3198）
+	ER_CANT_ADD_AUTO_INCREMENT_COLUMN:    "Can't add AUTO_INCREMENT column '%s'.",
+	ER_CANT_MODIFY_AUTO_INCREMENT_COLUMN: "Can't modify column '%s' to AUTO_INCREMENT.",
+	ER_CANT_ADD_STORED_GENERATED_COLUMN:  "Can't add stored generated column '%s'.",
+	ER_CANT_MODIFY_PK_OR_UK_COLUMN:       "Can't modify column '%s' to PK or UK.",
+	ER_CANT_DROP_COLUMN:                  "Can't drop column '%s'.",
+	ER_CANT_DROP_PARTITION:               "Can't drop partition '%s'.",
+	ER_CANT_TRUNCATE_PARTITION:           "Can't truncate partition '%s'.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -678,6 +694,14 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrWarnDataOutOfRange:                         "数据超出范围: '%s'.",
 	ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN: "依赖前缀索引列的列不支持修改 '%s'.",
 	ErrPartitionMgmtOnNonpartitioned:              "表'%s'不是分区表,无法进行分区管理.",
+	// OceanBase offline DDL 检查（来自 oceanbase/Integration b3bf3198）
+	ER_CANT_ADD_AUTO_INCREMENT_COLUMN:    "禁止添加自增列 '%s'.",
+	ER_CANT_MODIFY_AUTO_INCREMENT_COLUMN: "禁止修改列 '%s' 为AUTO_INCREMENT列.",
+	ER_CANT_ADD_STORED_GENERATED_COLUMN:  "禁止添加Stored生成列 '%s'.",
+	ER_CANT_MODIFY_PK_OR_UK_COLUMN:       "禁止修改列 '%s' 为 PK or UK列.",
+	ER_CANT_DROP_COLUMN:                  "禁止删除列 '%s'.",
+	ER_CANT_DROP_PARTITION:               "禁止删除分区 '%s'.",
+	ER_CANT_TRUNCATE_PARTITION:           "禁止清空分区 '%s'.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
