@@ -899,9 +899,16 @@ func extractConstraintsColumnNames(cons []*ast.Constraint) []map[string]struct{}
 // checkConstraintIncludePartKey checks that the partitioning key is included in the constraint.
 func checkConstraintIncludePartKey(partkeys []string, constraints map[string]struct{}) bool {
 	for _, pk := range partkeys {
-		contents, _ := extractParenthesesContent(pk)
-		for _, content := range contents {
-			name := strings.Replace(content, "`", "", -1)
+		if containsParentheses(pk) {
+			contents, _ := extractParenthesesContent(pk)
+			for _, content := range contents {
+				name := strings.Replace(content, "`", "", -1)
+				if _, ok := constraints[name]; !ok {
+					return false
+				}
+			}
+		} else {
+			name := strings.Replace(pk, "`", "", -1)
 			if _, ok := constraints[name]; !ok {
 				return false
 			}
@@ -932,4 +939,8 @@ func extractParenthesesContent(s string) ([]string, error) {
 		return nil, fmt.Errorf("unbalanced parentheses")
 	}
 	return results, nil
+}
+
+func containsParentheses(s string) bool {
+	return strings.Contains(s, "(") || strings.Contains(s, ")")
 }

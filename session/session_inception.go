@@ -3869,6 +3869,8 @@ func (s *session) buildTableInfo(node *ast.CreateTableStmt) *TableInfo {
 
 	if collation != "" {
 		table.Collation = collation
+	} else if character != "" {
+		table.Character = character
 	}
 
 	table.Name = node.Table.Name.O
@@ -5863,7 +5865,13 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 					s.appendErrorNo(ER_BLOB_USED_AS_KEY, foundField.Field)
 				}
 
-				columnIndexLength := foundField.getDataBytes(s.dbVersion, s.databaseCharset)
+				var columnIndexLength int
+
+				if t.Character != "" {
+					columnIndexLength = foundField.getDataBytes(s.dbVersion, t.Character)
+				} else {
+					columnIndexLength = foundField.getDataBytes(s.dbVersion, s.databaseCharset)
+				}
 
 				// Length must be specified for BLOB and TEXT column indexes.
 				// if types.IsTypeBlob(col.FieldType.Tp) && ic.Length == types.UnspecifiedLength {
@@ -5896,7 +5904,11 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 						Collation: foundField.Collation,
 					}
 
-					columnIndexLength = tmpField.getDataLength(s.dbVersion, s.databaseCharset)
+					if t.Character != "" {
+						columnIndexLength = tmpField.getDataLength(s.dbVersion, t.Character)
+					} else {
+						columnIndexLength = tmpField.getDataLength(s.dbVersion, s.databaseCharset)
+					}
 					keyMaxLen += columnIndexLength
 					// bysPerChar := 3
 					// charset := s.Inc.DefaultCharset
@@ -5951,7 +5963,6 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 		// --删除!-- mysql 5.6版本索引长度限制是767,5.7及之后变为3072
 		// 未开启innodbLargePrefix时,单列长度不能超过767
 		// 大部分情况下,总长度不能超过3072，但全文索引允许
-		log.Debug("max:", keyMaxLen)
 		if keyMaxLen > maxKeyLength57 && strings.ToLower(s.databaseCharset) == "utf8mb4" &&
 			tp != ast.ConstraintFulltext {
 			s.appendErrorNo(ER_TOO_LONG_KEY, IndexName, maxKeyLength57)

@@ -308,6 +308,9 @@ type TableInfo struct {
 	// 字符集&排序规则
 	Collation string
 
+	// 字符集
+	Character string
+
 	// 有效列数，移除已删除列和生成列
 	effectiveFieldCount int
 

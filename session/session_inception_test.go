@@ -729,7 +729,7 @@ func (s *testSessionIncSuite) TestCreateTable(c *C) {
 		s.testErrorCode(c, sql,
 			session.NewErr(session.ER_TOO_LONG_KEY, "uq_1", indexMaxLength))
 
-		sql = "create table test_error_code_3(c1 int primary key,c2 varchar(766),c3 int, key uq_1(c2,c3)) default charset utf8;"
+		sql = "create table test_error_code_3(c1 int primary key,c2 varchar(1022),c3 int, key uq_1(c2,c3)) default charset utf8;"
 		s.testErrorCode(c, sql)
 	} else {
 		sql = "create table test_error_code_3(c1 int primary key,c2 varchar(256),c3 int, key uq_1(c2,c3)) default charset utf8;"
@@ -1047,6 +1047,35 @@ primary key(id)) comment 'test';`
 	s.testErrorCode(c, sql,
 		session.NewErrf("Please specify the number of digits of type double (column: \"%s\").", "c1"))
 
+	// 检查分区表RANGE类型
+	config.GetGlobalConfig().Inc.EnablePartitionTable = true
+	sql = `CREATE TABLE t1 (
+			c1  VARCHAR(10)
+			)
+			PARTITION BY RANGE (c1) (
+				PARTITION p0 VALUES LESS THAN (1));`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrNotAllowedTypeInPartition, "c1"))
+	// 检查主键,唯一键必需包含所有分区键
+	config.GetGlobalConfig().Inc.EnablePartitionTable = true
+	sql = `CREATE TABLE t1 (
+			c1  INT,
+			c2  INT,
+			PRIMARY KEY (c1)
+			)
+			PARTITION BY RANGE (c2) (
+				PARTITION p0 VALUES LESS THAN (1));`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrUniqueKeyNeedAllFieldsInPf, "PRIMARY KEY"))
+
+	sql = `CREATE TABLE t1 (
+			c1  INT,
+			c2  DATE,
+			PRIMARY KEY (c1,c2)
+			)
+			PARTITION BY RANGE (YEAR(c2)) (
+				PARTITION p0 VALUES LESS THAN (1));`
+	s.testErrorCode(c, sql)
 }
 
 func (s *testSessionIncSuite) TestCreateTableAsSelect(c *C) {
