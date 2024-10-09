@@ -317,6 +317,8 @@ type TableInfo struct {
 	// used for masking
 	maskingFields []MaskingFieldInfo
 	Options       []*TableOptionInfo
+	// row size limit
+	RowSize int
 }
 
 // BackupTable 表$_$inception_backup_information$_$相关信息

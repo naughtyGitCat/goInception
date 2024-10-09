@@ -362,7 +362,7 @@ func (s *session) checkCreateTableGrammar(stmt *ast.CreateTableStmt) {
 	}
 }
 
-func (s *session) checkColumn(colDef *ast.ColumnDef, tableCharset string, alterTableType ast.AlterTableType) {
+func (s *session) checkColumn(t *TableInfo, colDef *ast.ColumnDef, tableCharset string, alterTableType ast.AlterTableType) {
 	// Check column name.
 	cName := colDef.Name.Name.String()
 	if isIncorrectName(cName) {
@@ -388,6 +388,7 @@ func (s *session) checkColumn(colDef *ast.ColumnDef, tableCharset string, alterT
 			s.appendErrorMsg(fmt.Sprintf("Column length too big for column '%s' (max = %d); use BLOB or TEXT instead", cName, mysql.MaxFieldCharLength))
 		}
 	case mysql.TypeVarchar:
+		var charLen int
 		maxFlen := mysql.MaxFieldVarCharLength
 		cs := tp.Charset
 		// TODO: TableDefaultCharset-->DatabaseDefaultCharset-->SystemDefaultCharset.
@@ -407,6 +408,7 @@ func (s *session) checkColumn(colDef *ast.ColumnDef, tableCharset string, alterT
 		if _, ok := charSets[strings.ToLower(cs)]; ok {
 			bysPerChar := charSets[strings.ToLower(cs)]
 			maxFlen /= bysPerChar
+			charLen = bysPerChar
 		} else {
 			desc, err := charset.GetCharsetDesc(cs)
 			if err != nil {
@@ -414,10 +416,16 @@ func (s *session) checkColumn(colDef *ast.ColumnDef, tableCharset string, alterT
 				return
 			}
 			maxFlen /= desc.Maxlen
+			charLen = desc.Maxlen
 		}
 
 		if tp.Flen != types.UnspecifiedLength && tp.Flen > maxFlen {
 			s.appendErrorMsg(fmt.Sprintf("Column length too big for column '%s' (max = %d); use BLOB or TEXT instead", cName, maxFlen))
+		}
+		if t.RowSize != 0 {
+			if tp.Flen*charLen > t.RowSize/charLen && alterTableType == ast.AlterTableAddColumns {
+				s.appendErrorMsg(fmt.Sprintf("Column length too big for column '%s' (max = %d); use BLOB or TEXT instead", cName, t.RowSize/charLen))
+			}
 		}
 		// check varchar length and ignore other alter table operation
 		if alterTableType == ast.AlterTableAddColumns && tp.Flen != types.UnspecifiedLength &&

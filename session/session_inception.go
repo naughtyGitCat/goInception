@@ -3578,8 +3578,18 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				s.cacheNewTable(table)
 				s.myRecord.TableInfo = table
 
-				if s.myRecord.ErrLevel == 2 {
+				/*if s.myRecord.ErrLevel == 2 {
 					// check table row size
+					var length int
+					for _, field := range table.Fields {
+						length += field.getDataLength(s.dbVersion, s.databaseCharset)
+					}
+					if length > mysql.MaxFieldVarCharLength {
+						s.appendErrorMsg(fmt.Sprintf("Row size too large. The maximum row size for the used table type, not counting BLOBs, is %v. This includes storage overhead, check the manual. You have to change some columns to TEXT or BLOBs", mysql.MaxFieldVarCharLength))
+					}
+				}*/
+				// check table row size
+				if s.dbType == DBTypeMysql {
 					var length int
 					for _, field := range table.Fields {
 						length += field.getDataLength(s.dbVersion, s.databaseCharset)
@@ -5227,7 +5237,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 		s.appendErrorNo(ER_WITH_DEFAULT_ADD_COLUMN, field.Name.Name.O, tableName)
 	}
 
-	s.checkColumn(field, t.Collation, alterTableType)
+	s.checkColumn(t, field, t.Collation, alterTableType)
 
 	// if (thd->variables.sql_mode & MODE_NO_ZERO_DATE &&
 	//        is_timestamp_type(field->sql_type) && !field->def &&
@@ -9191,12 +9201,46 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 		if rows := s.queryTableOptionFromDB(db, tableName, reportNotExists); rows != nil {
 			newT.Options = rows
 		}
+		if rows := s.queryTableRowSize(db, tableName, reportNotExists); rows != 0 {
+			newT.RowSize = rows
+		}
 		s.tableCacheList[key] = newT
 
 		return newT
 	}
 
 	return nil
+}
+
+func (s *session) queryTableRowSize(db string, tableName string, reportNotExists bool) int {
+	if s.dbType != DBTypeMysql {
+		return 0
+	}
+	var rowsize int
+	var sql string
+	if s.dbVersion > 80000 {
+		sql = fmt.Sprintf("SELECT (65535 - SUM(LEN)) FROM information_schema.INNODB_COLUMNS WHERE TABLE_ID IN (SELECT TABLE_ID FROM information_schema.INNODB_TABLES WHERE NAME ='%s/%s');", db, tableName)
+	} else {
+		sql = fmt.Sprintf("SELECT (65535 - SUM(LEN)) FROM information_schema.INNODB_SYS_COLUMNS WHERE TABLE_ID IN (SELECT TABLE_ID FROM information_schema.INNODB_SYS_TABLES WHERE NAME ='%s/%s');", db, tableName)
+	}
+	rows, err := s.raw(sql)
+	if rows != nil {
+		defer rows.Close()
+	}
+
+	if err != nil {
+		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	} else if rows != nil {
+		for rows.Next() {
+			rows.Scan(&rowsize)
+		}
+	}
+	return rowsize
 }
 
 func (s *session) cacheNewTable(t *TableInfo) {
