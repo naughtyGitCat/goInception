@@ -67,6 +67,8 @@ const (
 	maxKeyLength57 = 3072
 
 	remoteBackupTable              = "$_$Inception_backup_information$_$"
+	transactionMarkDb              = "$_$Inception$_$"
+	transactionMarkTable           = "transaction_mark"
 	TABLE_COMMENT_MAXLEN           = 2048
 	COLUMN_COMMENT_MAXLEN          = 1024
 	INDEX_COMMENT_MAXLEN           = 1024
@@ -1111,6 +1113,10 @@ func (s *session) executeTransaction(records []*Record) int {
 		records = records[0:skipIndex]
 	}
 
+	if s.needTransactionMark() {
+		s.createTransactionMarkTable()
+	}
+
 	// 开始事务
 	tx := s.db.Begin()
 
@@ -1131,6 +1137,7 @@ func (s *session) executeTransaction(records []*Record) int {
 	}
 
 	currentThreadId := s.fetchTranThreadID(tx)
+	var txMarkData *TransactionMarkData
 
 	for i := range records {
 		record := records[i]
@@ -1150,6 +1157,30 @@ func (s *session) executeTransaction(records []*Record) int {
 			}
 			record.StartFile = masterStatus.File
 			record.StartPosition = masterStatus.Position
+
+			txMarkData = &TransactionMarkData{
+				ThreadID:    currentThreadId,
+				LogFile:     masterStatus.File,
+				LogPosition: masterStatus.Position,
+			}
+
+			if s.needTransactionMark() {
+				res := s.markTransactionStart(tx, txMarkData)
+				if errs := res.GetErrors(); len(errs) > 0 {
+					tx.Rollback()
+					log.Errorf("con:%d %v", s.sessionVars.ConnectionID, errs)
+					record.StageStatus = StatusExecFail
+					record.ExecComplete = false
+					for _, err := range errs {
+						if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+							s.appendErrorMsg(myErr.Message)
+						} else {
+							s.appendErrorMsg(err.Error())
+						}
+					}
+					return 2
+				}
+			}
 		}
 
 		record.Stage = StageExec
@@ -1160,7 +1191,13 @@ func (s *session) executeTransaction(records []*Record) int {
 		record.ExecTime = fmt.Sprintf("%.3f", time.Since(start).Seconds())
 		record.ExecTimestamp = time.Now().Unix()
 
-		if errs := res.GetErrors(); len(errs) > 0 {
+		errs := res.GetErrors()
+
+		if len(errs) == 0 && s.opt.Backup && s.needTransactionMark() && i == len(records)-1 {
+			errs = s.markTransactionEnd(tx, txMarkData).GetErrors()
+		}
+
+		if len(errs) > 0 {
 			tx.Rollback()
 			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, errs)
 
@@ -1211,7 +1248,7 @@ func (s *session) executeTransaction(records []*Record) int {
 			record.EndPosition = masterStatus.Position
 
 			// 开始位置和结束位置一样,无变更
-			if record.StartFile == record.EndFile &&
+			if !s.needTransactionMark() && record.StartFile == record.EndFile &&
 				record.StartPosition == record.EndPosition {
 
 				record.StartFile = ""
@@ -1694,9 +1731,6 @@ func (s *session) executeRemoteStatementAndBackup(record *Record) {
 
 	if !s.hasError() || record.ExecComplete {
 		if s.opt.Backup {
-			if s.dbType == DBTypeOceanBase {
-				time.Sleep(time.Duration(s.inc.BinlogConvertTimeout) * time.Second)
-			}
 			masterStatus := s.mysqlFetchMasterBinlogPosition()
 			if masterStatus == nil {
 				s.appendErrorNo(ErrNotFoundMasterStatus)

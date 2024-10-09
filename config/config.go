@@ -311,7 +311,8 @@ type Inc struct {
 	EnableSetCollation bool `toml:"enable_set_collation" json:"enable_set_collation"`
 	// 开启sql统计
 	EnableSqlStatistic bool `toml:"enable_sql_statistic" json:"enable_sql_statistic"`
-
+	// oceanbase开启binlog模式下执行DML备份
+	EnableObBinlog bool `toml:"enable_ob_binlog" json:"enable_ob_binlog"`
 	// explain判断受影响行数时使用的规则, 默认值"first"
 	// 可选值: "first", "max"
 	// 		"first": 	使用第一行的explain结果作为受影响行数
@@ -401,8 +402,6 @@ type Inc struct {
 
 	// 自定义的关键字，用于检查字段名是否符合规范
 	CustomKeywords []string `toml:"custom_keywords" json:"custom_keywords"`
-	// 等待获取oceanbase binlog日志转换超时时间, 单位:秒
-	BinlogConvertTimeout int `toml:"binlog_convert_timeout" json:"binlog_convert_timeout"`
 }
 
 // Osc online schema change 工具参数配置
@@ -735,8 +734,7 @@ var defaultConf = Config{
 		UniqIndexPrefix: "uniq_", // 默认不检查,由CheckIndexPrefix控制
 		TablePrefix:     "",      // 默认不检查表前缀
 
-		CustomKeywords:       []string{},
-		BinlogConvertTimeout: 1, // 默认等待oceanbase binlog转换1秒
+		CustomKeywords: []string{},
 	},
 	Osc: Osc{
 		OscPrintNone:               false,

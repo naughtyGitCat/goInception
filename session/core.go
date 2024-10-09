@@ -496,11 +496,6 @@ func (s *session) checkOptions() error {
 		return fmt.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 	}
 
-	if s.opt.tranBatch > 1 {
-		s.ddlDB, _ = gorm.Open("mysql", fmt.Sprintf("%s&autocommit=1", addr))
-		s.ddlDB.LogMode(false)
-	}
-
 	// 禁用日志记录器，不显示任何日志
 	db.LogMode(false)
 
@@ -561,7 +556,15 @@ func (s *session) checkOptions() error {
 	if s.opt.Backup && s.dbType == DBTypeTiDB {
 		s.appendErrorMsg("TiDB暂不支持备份功能.")
 	}
+	if s.opt.Backup && s.needTransactionMark() && s.opt.tranBatch <= 1 {
+		s.opt.tranBatch = 50
+		log.Infof("enable transaction with batch size %d to backup with transaction mark", 50)
+	}
 
+	if s.opt.tranBatch > 1 {
+		s.ddlDB, _ = gorm.Open("mysql", fmt.Sprintf("%s&autocommit=1", addr))
+		s.ddlDB.LogMode(false)
+	}
 	return nil
 }
 
