@@ -135,7 +135,15 @@ func (h *StmtHistory) Count() int {
 	return len(h.history)
 }
 
+type alterTableInfo struct {
+	Name              string
+	alterStmtList     []ast.AlterTableStmt
+	mergedSql         string
+	recordSetsPosList []int //  记录当前语句在s.recordSets里的位置，用于修改needMerge字段
+}
+
 type session struct {
+	alterTableInfoList []alterTableInfo
 	// processInfo is used by ShowProcess(), and should be modified atomically.
 	processInfo atomic.Value
 	txn         TxnState

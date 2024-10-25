@@ -319,7 +319,35 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					s.initDisableTypes()
 					continue
 				case *ast.InceptionCommitStmt:
-
+					/******* jwx added 将对同一个表的多条alter语句合并成一条 ******/
+					if s.inc.AlterAutoMerge && s.opt.Check && !s.opt.Execute {
+						for _, info := range s.alterTableInfoList {
+							if len(info.alterStmtList) >= 2 {
+								merged := info.alterStmtList[0]
+								for seq, alterStmt := range info.alterStmtList {
+									if seq > 0 {
+										merged.Specs = append(merged.Specs, alterStmt.Specs...)
+									}
+								}
+								var builder strings.Builder
+								_ = merged.Restore(format.NewRestoreCtx(format.DefaultRestoreFlags, &builder))
+								info.mergedSql = builder.String()
+								mergedRecord := &Record{
+									Sql:          info.mergedSql,
+									Buf:          new(bytes.Buffer),
+									Type:         &merged,
+									Stage:        StageCheck,
+									ErrorMessage: "MERGED",
+									NeedMerge:    -1,
+								}
+								s.recordSets.Append(mergedRecord)
+								for _, pos := range info.recordSetsPosList {
+									s.recordSets.records[pos].NeedMerge = s.recordSets.SeqNo
+								}
+							}
+						}
+					}
+					/****************/
 					if !s.haveBegin {
 						s.appendErrorMsg("Must start as begin statement.")
 						if s.opt != nil && (s.opt.Print || s.opt.Masking) {
@@ -610,7 +638,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	case *ast.CreateTableStmt:
 		s.checkCreateTable(node, currentSql)
 	case *ast.AlterTableStmt:
-		s.checkAlterTable(node, currentSql)
+		s.checkAlterTable(node, currentSql, false)
 	case *ast.DropTableStmt:
 		s.checkDropTable(node, currentSql)
 	case *ast.RenameTableStmt:
@@ -633,11 +661,24 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 		if node.KeyType == ast.IndexKeyTypeFullText {
 			tp = ast.ConstraintFulltext
 		}
-		s.checkCreateIndex(node.Table, node.IndexName,
-			node.IndexPartSpecifications, node.IndexOption, nil, node.Unique, tp)
+		if !s.inc.AlterAutoMerge { // jwx added
+			s.checkCreateIndex(node.Table, node.IndexName,
+				node.IndexPartSpecifications, node.IndexOption, nil, node.Unique, tp)
+		} else {
+			alter := s.convertCreateIndexToAlterTable(node)
+			s.checkAlterTable(alter, node.Text(), true)
+			s.checkCreateIndex(node.Table, node.IndexName,
+				node.IndexPartSpecifications, node.IndexOption, nil, node.Unique, tp)
+		}
 
 	case *ast.DropIndexStmt:
-		s.checkDropIndex(node, currentSql)
+		if !s.inc.AlterAutoMerge { // jwx added
+			s.checkDropIndex(node, currentSql)
+		} else {
+			alter := s.convertDropIndexToAlterTable(node)
+			s.checkAlterTable(alter, node.Text(), true)
+			s.checkDropIndex(node, currentSql)
+		}
 
 	case *ast.CreateViewStmt:
 		s.checkCreateView(node, currentSql)
@@ -4003,7 +4044,7 @@ func (s *session) checkTableCharsetCollation(t *TableInfo, chuintvalue uint64, c
 	}
 }
 
-func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
+func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnly bool) {
 	log.Debug("checkAlterTable")
 
 	if node.Table.Schema.O == "" {
@@ -4018,6 +4059,33 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string) {
 	if table == nil {
 		return
 	}
+
+	/*********** jwx added **********/
+	if s.inc.AlterAutoMerge {
+		tableNameInString := fmt.Sprintf("%s.%s", node.Table.Schema.O, node.Table.Name.O)
+		var found bool = false
+		var seq int = 0
+		for j, i := range s.alterTableInfoList {
+			if tableNameInString == i.Name {
+				found = true
+				seq = j
+				break
+			}
+		}
+		if found {
+			s.alterTableInfoList[seq].alterStmtList = append(s.alterTableInfoList[seq].alterStmtList, *node)
+			s.alterTableInfoList[seq].recordSetsPosList = append(s.alterTableInfoList[seq].recordSetsPosList, s.recordSets.SeqNo)
+		} else {
+			var info alterTableInfo = alterTableInfo{Name: tableNameInString}
+			info.alterStmtList = append(info.alterStmtList, *node)
+			info.recordSetsPosList = append(info.recordSetsPosList, s.recordSets.SeqNo)
+			s.alterTableInfoList = append(s.alterTableInfoList, info)
+		}
+		if mergeOnly {
+			return
+		}
+	}
+	/******************************/
 
 	table.AlterCount += 1
 
@@ -6370,6 +6438,51 @@ func (s *session) checkAddConstraint(t *TableInfo, c *ast.AlterTableSpec) {
 		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		log.Info("con:", s.sessionVars.ConnectionID, " 未定义的解析: ", c.Constraint.Tp)
 	}
+}
+
+func (s *session) convertCreateIndexToAlterTable(node *ast.CreateIndexStmt) *ast.AlterTableStmt {
+	log.Debug("convertCreateIndexToAlterTable")
+	var alter *ast.AlterTableStmt = &ast.AlterTableStmt{Specs: []*ast.AlterTableSpec{}}
+	var spec *ast.AlterTableSpec = &ast.AlterTableSpec{Tp: ast.AlterTableAddConstraint, Constraint: &ast.Constraint{}}
+	spec.IfNotExists = node.IfNotExists
+	spec.Constraint.Name = node.IndexName
+	if node.Unique {
+		spec.Constraint.Tp = ast.ConstraintUniq
+	} else {
+		spec.Constraint.Tp = ast.ConstraintIndex
+	}
+	spec.Constraint.Keys = node.IndexPartSpecifications
+	spec.Constraint.Option = node.IndexOption
+	if node.LockAlg != nil {
+		spec.LockType = node.LockAlg.LockTp
+		spec.Algorithm = node.LockAlg.AlgorithmTp
+	} else {
+		spec.LockType = 0
+		spec.Algorithm = 0
+	}
+	spec.Partition = node.Partition
+	alter.SetText(node.Text())
+	alter.Table = node.Table
+	alter.Specs = append(alter.Specs, spec)
+	return alter
+}
+func (s *session) convertDropIndexToAlterTable(node *ast.DropIndexStmt) *ast.AlterTableStmt {
+	log.Debug("convertDropIndexToAlterTable")
+	var alter *ast.AlterTableStmt = &ast.AlterTableStmt{Specs: []*ast.AlterTableSpec{}}
+	var spec *ast.AlterTableSpec = &ast.AlterTableSpec{Tp: ast.AlterTableDropIndex}
+	spec.IfExists = node.IfExists
+	spec.Name = node.IndexName
+	if node.LockAlg != nil {
+		spec.LockType = node.LockAlg.LockTp
+		spec.Algorithm = node.LockAlg.AlgorithmTp
+	} else {
+		spec.LockType = 0
+		spec.Algorithm = 0
+	}
+	alter.SetText(node.Text())
+	alter.Table = node.Table
+	alter.Specs = append(alter.Specs, spec)
+	return alter
 }
 
 func (s *session) checkDBExists(db string, reportNotExists bool) bool {
