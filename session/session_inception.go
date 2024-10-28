@@ -9478,7 +9478,7 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 }
 
 func (s *session) queryTableRowSize(db string, tableName string, reportNotExists bool) int {
-	if s.dbType != DBTypeMysql {
+	if s.dbType != DBTypeMysql && !s.inc.CheckTableRowSize {
 		return 0
 	}
 	var rowsize int

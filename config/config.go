@@ -249,6 +249,7 @@ type Inc struct {
 	CheckInsertField            bool `toml:"check_insert_field" json:"check_insert_field"`
 	CheckPrimaryKey             bool `toml:"check_primary_key" json:"check_primary_key"`
 	CheckTableComment           bool `toml:"check_table_comment" json:"check_table_comment"`
+	CheckTableRowSize           bool `toml:"check_table_size" json:"check_table_size"`
 	CheckTimestampDefault       bool `toml:"check_timestamp_default" json:"check_timestamp_default"`
 	CheckTimestampCount         bool `toml:"check_timestamp_count" json:"check_timestamp_count"`
 

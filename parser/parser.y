@@ -11640,6 +11640,9 @@ ProcedureStatementStmt:
 	}
 |	SetStmt
 |	CallStmt
+|	PreparedStmt
+|	ExecuteStmt
+|	DeallocateStmt
 |	CreateTableStmt
 |	DropTableStmt
 |	BeginTransactionStmt
