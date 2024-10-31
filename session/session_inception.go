@@ -73,6 +73,7 @@ const (
 	COLUMN_COMMENT_MAXLEN          = 1024
 	INDEX_COMMENT_MAXLEN           = 1024
 	TABLE_PARTITION_COMMENT_MAXLEN = 1024
+	TABLE_SHARD_ROW_ID_BITS_MAXLEN = 15
 )
 
 func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
@@ -3823,6 +3824,11 @@ func (s *session) checkTableOptions(t *TableInfo, options []*ast.TableOption, ta
 				}
 			} else {
 				s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+			}
+		case ast.TableOptionShardRowID:
+			if opt.UintValue > TABLE_SHARD_ROW_ID_BITS_MAXLEN {
+				s.appendErrorMsg(fmt.Sprintf("shard_row_id_bits for table '%s' is too long (max = %d)",
+					table, TABLE_SHARD_ROW_ID_BITS_MAXLEN))
 			}
 		default:
 			s.appendErrorNo(ER_NOT_SUPPORTED_ALTER_OPTION)
@@ -9478,7 +9484,7 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 }
 
 func (s *session) queryTableRowSize(db string, tableName string, reportNotExists bool) int {
-	if s.dbType != DBTypeMysql && !s.inc.CheckTableRowSize {
+	if s.dbType != DBTypeMysql || !s.inc.CheckTableRowSize {
 		return 0
 	}
 	var rowsize int
