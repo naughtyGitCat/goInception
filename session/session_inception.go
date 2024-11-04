@@ -6295,6 +6295,11 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 		}
 	}
 
+	// 只有在使用改表工具时，会提示唯一索引风险
+	if s.myRecord.useOsc && unique {
+		s.appendErrorNo(ER_TOOL_BASED_UNIQUE_INDEX_WARNING)
+	}
+
 	if s.opt.Execute {
 		var rollbackSql string
 		if IndexName == "PRIMARY" {
@@ -9337,6 +9342,8 @@ func (s *session) checkInceptionVariables(number ErrorCode) bool {
 		return s.inc.CheckIdentifierLower
 	case ErCantChangeColumn:
 		return !s.inc.EnableChangeColumn
+	case ER_TOOL_BASED_UNIQUE_INDEX_WARNING:
+		return s.inc.CheckToolBasedUniqueIndex
 	}
 
 	return true

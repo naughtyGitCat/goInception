@@ -243,6 +243,7 @@ const (
 	ER_CANT_DROP_TRIGGER
 	ER_TRIGGER_NOT_EXISTED_ERROR
 	ER_TRIGGER_EXISTS_ERROR
+	ER_TOOL_BASED_UNIQUE_INDEX_WARNING
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -413,46 +414,47 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErCantChangeColumn:                     "Not supported statement of change column('%s').",
 	// ErrMixOfGroupFuncAndFields:             "Mixing of GROUP columns (MIN(),MAX(),COUNT(),...) with no GROUP columns is illegal if there is no GROUP BY clause",
 	//ER_NULL_NAME_FOR_INDEX:                 "Index name cannot be null in table '%s'.",
-	ER_DATETIME_DEFAULT:            "Set default value for DATETIME column '%s'.",
-	ER_TOO_MUCH_AUTO_DATETIME_COLS: "Incorrect table definition; there can be only one DATETIME column with CURRENT_TIMESTAMP in DEFAULT or ON UPDATE clause",
-	ErrFloatDoubleToDecimal:        "Set column '%s' to DECIMAL type.",
-	ErrIdentifierUpper:             "Identifier '%s' must be capitalized.",
-	ErrIdentifierLower:             "Identifier '%s' must be lowercase.",
-	ErrWrongAndExpr:                "May be the wrong syntax! Separate multiple fields with commas.",
-	ErrCannotAddForeign:            "Cannot add foreign key constraint",
-	ErrWrongFkDefWithMatch:         "Incorrect foreign key definition for '%-.192s': Key reference and table reference don't match",
-	ErrFkDupName:                   "Duplicate foreign key constraint name '%s'",
-	ErrJoinNoOnCondition:           "set the on clause for join statement.",
-	ErrImplicitTypeConversion:      "Implicit type conversion is not allowed(column '%s.%s',type '%s').",
-	ErrUseValueExpr:                "Please confirm if you want to use value expression in where condition.",
-	ErrUseIndexVisibility:          "The back-end database does not support the index to specify the visible option.",
-	ErrViewSupport:                 "Not allowed to create or use views '%s'.",
-	ErrViewColumnCount:             "View's SELECT and view's field list have different column counts",
-	ErrIncorrectDateTimeValue:      "Incorrect datetime value: '%v'(column '%s')",
-	ErrSameNamePartition:           "Duplicate partition name %-.192s",
-	ErrRepeatConstDefinition:       "Duplicate partition constant definition: '%v'",
-	ErrPartitionNotExisted:         "Partition '%-.64s' does not exist",
-	ErrIndexNotExisted:             "Index '%-.64s' does not exist",
-	ErrMaxVarcharLength:            "Column length too big for column '%s' (Custom maximum is %d)",
-	ErrMaxColumnCount:              "Table '%s' has too many columns(limit %d,current %d)",
-	ER_ERROR_LAST:                  "TheLastError,ByeBye",
-	ErrNotAllowedTypeInPartition:   "Field '%-.192s' is of a not allowed type for this type of partitioning",
-	ErrUniqueKeyNeedAllFieldsInPf:  "A %-.192s must include all columns in the table's partitioning function",
-	ER_PROCEDURE_NOT_EXISTED_ERROR: "Procedure '%s' does not exist",
-	ER_PROCEDURE_EXISTS_ERROR:      "Procedure '%s' already exists.",
-	ER_FUNCTION_NOT_EXISTED_ERROR:  "Function '%s' does not exist",
-	ER_FUNCTION_EXISTS_ERROR:       "Function'%s' already exists.",
-	ER_CANT_DROP_FUNCTION:          "Command is forbidden! Cannot drop function '%s'.",
-	ER_CANT_DROP_PROCEDURE:         "Command is forbidden! Cannot drop procedure '%s'.",
-	ER_PROCEDURE_NOT_ALLOWED:       "Procedure is not allowed.",
-	ER_FUNCTION_NOT_ALLOWED:        "Function is not allowed.",
-	ER_SEQUENCE_NOT_EXISTED_ERROR:  "Sequence '%-.64s' does not exist",
-	ER_SEQUENCE_EXISTS_ERROR:       "Sequence '%s' already exists.",
-	ER_INVALID_NO_GEOMETRY_DEFAULT: "Incorrect usage of SRID and non-geometry column '%s'.",
-	ER_CANT_DROP_TRIGGER:           "Command is forbidden! Cannot drop trigger '%s'.",
-	ER_TRIGGER_NOT_EXISTED_ERROR:   "Trigger '%s' does not exist",
-	ER_TRIGGER_NOT_ALLOWED:         "Trigger is not allowed.",
-	ER_TRIGGER_EXISTS_ERROR:        "Trigger '%s' already exists.",
+	ER_DATETIME_DEFAULT:                "Set default value for DATETIME column '%s'.",
+	ER_TOO_MUCH_AUTO_DATETIME_COLS:     "Incorrect table definition; there can be only one DATETIME column with CURRENT_TIMESTAMP in DEFAULT or ON UPDATE clause",
+	ErrFloatDoubleToDecimal:            "Set column '%s' to DECIMAL type.",
+	ErrIdentifierUpper:                 "Identifier '%s' must be capitalized.",
+	ErrIdentifierLower:                 "Identifier '%s' must be lowercase.",
+	ErrWrongAndExpr:                    "May be the wrong syntax! Separate multiple fields with commas.",
+	ErrCannotAddForeign:                "Cannot add foreign key constraint",
+	ErrWrongFkDefWithMatch:             "Incorrect foreign key definition for '%-.192s': Key reference and table reference don't match",
+	ErrFkDupName:                       "Duplicate foreign key constraint name '%s'",
+	ErrJoinNoOnCondition:               "set the on clause for join statement.",
+	ErrImplicitTypeConversion:          "Implicit type conversion is not allowed(column '%s.%s',type '%s').",
+	ErrUseValueExpr:                    "Please confirm if you want to use value expression in where condition.",
+	ErrUseIndexVisibility:              "The back-end database does not support the index to specify the visible option.",
+	ErrViewSupport:                     "Not allowed to create or use views '%s'.",
+	ErrViewColumnCount:                 "View's SELECT and view's field list have different column counts",
+	ErrIncorrectDateTimeValue:          "Incorrect datetime value: '%v'(column '%s')",
+	ErrSameNamePartition:               "Duplicate partition name %-.192s",
+	ErrRepeatConstDefinition:           "Duplicate partition constant definition: '%v'",
+	ErrPartitionNotExisted:             "Partition '%-.64s' does not exist",
+	ErrIndexNotExisted:                 "Index '%-.64s' does not exist",
+	ErrMaxVarcharLength:                "Column length too big for column '%s' (Custom maximum is %d)",
+	ErrMaxColumnCount:                  "Table '%s' has too many columns(limit %d,current %d)",
+	ER_ERROR_LAST:                      "TheLastError,ByeBye",
+	ErrNotAllowedTypeInPartition:       "Field '%-.192s' is of a not allowed type for this type of partitioning",
+	ErrUniqueKeyNeedAllFieldsInPf:      "A %-.192s must include all columns in the table's partitioning function",
+	ER_PROCEDURE_NOT_EXISTED_ERROR:     "Procedure '%s' does not exist",
+	ER_PROCEDURE_EXISTS_ERROR:          "Procedure '%s' already exists.",
+	ER_FUNCTION_NOT_EXISTED_ERROR:      "Function '%s' does not exist",
+	ER_FUNCTION_EXISTS_ERROR:           "Function'%s' already exists.",
+	ER_CANT_DROP_FUNCTION:              "Command is forbidden! Cannot drop function '%s'.",
+	ER_CANT_DROP_PROCEDURE:             "Command is forbidden! Cannot drop procedure '%s'.",
+	ER_PROCEDURE_NOT_ALLOWED:           "Procedure is not allowed.",
+	ER_FUNCTION_NOT_ALLOWED:            "Function is not allowed.",
+	ER_SEQUENCE_NOT_EXISTED_ERROR:      "Sequence '%-.64s' does not exist",
+	ER_SEQUENCE_EXISTS_ERROR:           "Sequence '%s' already exists.",
+	ER_INVALID_NO_GEOMETRY_DEFAULT:     "Incorrect usage of SRID and non-geometry column '%s'.",
+	ER_CANT_DROP_TRIGGER:               "Command is forbidden! Cannot drop trigger '%s'.",
+	ER_TRIGGER_NOT_EXISTED_ERROR:       "Trigger '%s' does not exist",
+	ER_TRIGGER_NOT_ALLOWED:             "Trigger is not allowed.",
+	ER_TRIGGER_EXISTS_ERROR:            "Trigger '%s' already exists.",
+	ER_TOOL_BASED_UNIQUE_INDEX_WARNING: "Existing unique indexes may cause duplicate data loss when executing statements using schema-altering tools. It is recommended to review and assess potential risks.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -654,6 +656,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_CANT_DROP_TRIGGER:                   "命令禁止! 无法删除触发器'%s'.",
 	ER_TRIGGER_NOT_EXISTED_ERROR:           "触发器 '%s' 不存在.",
 	ER_TRIGGER_EXISTS_ERROR:                "触发器 '%s' 已存在.",
+	ER_TOOL_BASED_UNIQUE_INDEX_WARNING:     "存在唯一索引，使用改表工具执行语句可能导致重复数据丢失，建议复查是否存在风险",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -720,7 +723,8 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrImplicitTypeConversion,
 		ErrUseValueExpr,
 		ErrMaxColumnCount,
-		ER_WITH_INSERT_FIELD:
+		ER_WITH_INSERT_FIELD,
+		ER_TOOL_BASED_UNIQUE_INDEX_WARNING:
 		return 1
 
 	case ER_CONFLICTING_DECLARATIONS,
@@ -1230,6 +1234,8 @@ func (e ErrorCode) String() string {
 		return "er_trigger_not_allowed"
 	case ER_TRIGGER_EXISTS_ERROR:
 		return "er_trigger_exists_error"
+	case ER_TOOL_BASED_UNIQUE_INDEX_WARNING:
+		return "er_tool_based_unique_index_warning"
 	}
 	return ""
 }
