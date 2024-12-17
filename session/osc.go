@@ -267,6 +267,7 @@ func (s *session) mysqlExecuteWithGhost(r *Record) {
 	}
 
 	buf.WriteString(fmt.Sprintf(" --assume-master-host=%s", masterHost))
+	buf.WriteString(fmt.Sprintf(" --attempt-instant-ddl=%t", s.ghost.GhostAttemptInstantDDL))
 	buf.WriteString(fmt.Sprintf(" --exact-rowcount=%t", s.ghost.GhostExactRowcount))
 	buf.WriteString(fmt.Sprintf(" --concurrent-rowcount=%t", s.ghost.GhostConcurrentRowcount))
 	buf.WriteString(fmt.Sprintf(" --allow-on-master=%t", s.ghost.GhostAllowOnMaster))

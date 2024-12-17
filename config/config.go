@@ -510,8 +510,8 @@ type Ghost struct {
 	GhostAssumeMasterHost string `toml:"ghost_assume_master_host"`
 	// 确认gh-ost连接的数据库实例的binlog_format=ROW的情况下，可以指定-assume-rbr，
 	// 这样可以禁止从库上运行stop slave,start slave,执行gh-ost用户也不需要SUPER权限。
-	GhostAssumeRbr bool `toml:"ghost_assume_rbr"`
-
+	GhostAssumeRbr         bool `toml:"ghost_assume_rbr"`
+	GhostAttemptInstantDDL bool `toml:"ghost_attempt_instant_ddl"`
 	// 该参数如果为True(默认值)，则进行row-copy之后，估算统计行数(使用explain select count(*)方式)，
 	// 并调整ETA时间，否则，gh-ost首先预估统计行数，然后开始row-copy。
 	GhostConcurrentRowcount bool `toml:"ghost_concurrent_rowcount"`
@@ -772,6 +772,7 @@ var defaultConf = Config{
 		GhostOn:                            false,
 		GhostAllowOnMaster:                 true,
 		GhostAssumeRbr:                     true,
+		GhostAttemptInstantDDL:             false,
 		GhostChunkSize:                     1000,
 		GhostConcurrentRowcount:            true,
 		GhostCutOver:                       "atomic",
