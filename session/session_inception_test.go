@@ -2062,6 +2062,21 @@ PARTITION BY RANGE (TO_DAYS(hiredate) ) (
 
 	sql = `alter table t1 remove partitioning;`
 	s.testErrorCode(c, sql)
+
+	sql = `drop table if exists t1;CREATE TABLE t1 (
+		customer_id int(10) unsigned NOT NULL COMMENT '登录用户ID',
+		login_time DATETIME NOT NULL COMMENT '用户登录时间',
+		month_id varchar(6) NOT NULL COMMENT '月',
+		day_id varchar(2) NOT NULL COMMENT '日'
+	  ) ENGINE=InnoDB
+	  PARTITION BY RANGE  COLUMNS(MONTH_ID,DAY_ID) (
+	  PARTITION P_20241230 VALUES LESS THAN ('202412','30'),
+	  PARTITION P_20241231 VALUES LESS THAN ('202412','31'));	  `
+	s.mustRunExec(c, sql)
+
+	sql = `alter table t1 add partition (partition p_20250101 values less than ('202501','01') ENGINE = InnoDB,
+		partition p_20250102 values less than ('202501','02') ENGINE = InnoDB);`
+	s.testErrorCode(c, sql)
 }
 
 func (s *testSessionIncSuite) TestSubSelect(c *C) {

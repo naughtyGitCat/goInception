@@ -703,6 +703,7 @@ func (s *session) checkPartitionNameUnique(defs []*ast.PartitionDefinition) {
 	partNames := make(map[string]struct{})
 	listRanges := make(map[string]struct{})
 	for _, oldPar := range defs {
+		partDescription := ""
 		switch clause := oldPar.Clause.(type) {
 		case *ast.PartitionDefinitionClauseIn:
 			if clause.Values == nil {
@@ -723,16 +724,25 @@ func (s *session) checkPartitionNameUnique(defs []*ast.PartitionDefinition) {
 				}
 			}
 		case *ast.PartitionDefinitionClauseLessThan:
+			partValues := make([]string, 0)
 			for _, v := range clause.Exprs {
-				var buf bytes.Buffer
-				v.Format(&buf)
-				key := buf.String()
-				if _, ok := listRanges[key]; !ok {
-					listRanges[key] = struct{}{}
+				var key string
+				if v.GetValue() == nil {
+					var buf bytes.Buffer
+					v.Format(&buf)
+					key = buf.String()
+					partValues = append(partValues, key)
 				} else {
-					s.appendErrorNo(ErrRepeatConstDefinition, key)
-					break
+					key = fmt.Sprintf("'%v'", v.GetValue())
+					partValues = append(partValues, key)
 				}
+			}
+			partDescription = strings.Join(partValues, ",")
+			if _, ok := listRanges[partDescription]; !ok {
+				listRanges[partDescription] = struct{}{}
+			} else {
+				s.appendErrorNo(ErrRepeatConstDefinition, partDescription)
+				break
 			}
 		}
 
@@ -763,10 +773,12 @@ func (s *session) checkPartitionNameExists(t *TableInfo, defs []*ast.PartitionDe
 			partDescription = strings.Join(partValues, ",")
 
 		case *ast.PartitionDefinitionClauseLessThan:
+			partValues := make([]string, 0)
 			for _, v := range clause.Exprs {
-				partDescription = fmt.Sprintf("%v", v.GetValue())
-				break
+				key := fmt.Sprintf("'%v'", v.GetValue())
+				partValues = append(partValues, key)
 			}
+			partDescription = strings.Join(partValues, ",")
 		}
 
 		for _, oldPart := range t.Partitions {
