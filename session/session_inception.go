@@ -7023,7 +7023,17 @@ func (s *session) getSubSelectColumns(node ast.ResultSetNode) []string {
 		} else {
 
 			var tableList []*ast.TableSource
-			tableList = extractTableList(sel.From.TableRefs, tableList)
+			if sel.With != nil {
+				for _, cte := range sel.With.CTEs {
+					switch x := cte.Query.Query.(type) {
+					case *ast.SelectStmt:
+						tableList = extractTableList(x.From.TableRefs, tableList)
+					}
+				}
+			} else {
+				tableList = extractTableList(sel.From.TableRefs, tableList)
+			}
+			//tableList = extractTableList(sel.From.TableRefs, tableList)
 			// tableInfoList = s.getTableInfoByTableSource(tableList)
 
 			for _, f := range sel.Fields.Fields {
@@ -9752,8 +9762,17 @@ func (s *session) checkSubSelectItem(node *ast.SelectStmt, outerTables []*TableI
 	if node.From != nil {
 		// 递归审核子查询
 		// s.checkSelectItem(node.From.TableRefs)
-
-		tableList = extractTableList(node.From.TableRefs, tableList)
+		if node.With != nil {
+			for _, cte := range node.With.CTEs {
+				switch x := cte.Query.Query.(type) {
+				case *ast.SelectStmt:
+					tableList = extractTableList(x.From.TableRefs, tableList)
+				}
+			}
+		} else {
+			tableList = extractTableList(node.From.TableRefs, tableList)
+		}
+		//tableList = extractTableList(node.From.TableRefs, tableList)
 
 		s.checkTableAliasDuplicate(node.From.TableRefs, make(map[string]interface{}))
 	}
