@@ -7021,20 +7021,12 @@ func (s *session) getSubSelectColumns(node ast.ResultSetNode) []string {
 				}
 			}
 		} else {
-
 			var tableList []*ast.TableSource
 			if sel.With != nil {
-				for _, cte := range sel.With.CTEs {
-					switch x := cte.Query.Query.(type) {
-					case *ast.SelectStmt:
-						tableList = extractTableList(x.From.TableRefs, tableList)
-					}
-				}
+				tableList = extractTableList(sel.With.CTEs[0].Query.Query, tableList)
 			} else {
 				tableList = extractTableList(sel.From.TableRefs, tableList)
 			}
-			//tableList = extractTableList(sel.From.TableRefs, tableList)
-			// tableInfoList = s.getTableInfoByTableSource(tableList)
 
 			for _, f := range sel.Fields.Fields {
 				if f.WildCard == nil {
@@ -9391,9 +9383,7 @@ func extractTableList(node ast.ResultSetNode, input []*ast.TableSource) []*ast.T
 			input = extractTableList(x.From.TableRefs, input)
 		}
 	case *ast.SetOprStmt:
-		for _, sel := range x.SelectList.Selects {
-			input = extractTableList(sel, input)
-		}
+		input = extractTableList(x.SelectList.Selects[0].(*ast.SelectStmt).From.TableRefs, input)
 	default:
 		log.Infof("%T", x)
 		// log.Infof("%#v", x)
@@ -9760,19 +9750,11 @@ func (s *session) checkSubSelectItem(node *ast.SelectStmt, outerTables []*TableI
 
 	var tableList []*ast.TableSource
 	if node.From != nil {
-		// 递归审核子查询
-		// s.checkSelectItem(node.From.TableRefs)
 		if node.With != nil {
-			for _, cte := range node.With.CTEs {
-				switch x := cte.Query.Query.(type) {
-				case *ast.SelectStmt:
-					tableList = extractTableList(x.From.TableRefs, tableList)
-				}
-			}
+			tableList = extractTableList(node.With.CTEs[0].Query.Query, tableList)
 		} else {
 			tableList = extractTableList(node.From.TableRefs, tableList)
 		}
-		//tableList = extractTableList(node.From.TableRefs, tableList)
 
 		s.checkTableAliasDuplicate(node.From.TableRefs, make(map[string]interface{}))
 	}
