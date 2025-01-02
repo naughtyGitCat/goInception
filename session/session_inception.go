@@ -1631,6 +1631,10 @@ func statisticsTableSQL() string {
 	buf.WriteString("droptable int not null default 0, ")
 	buf.WriteString("createdb int not null default 0, ")
 	buf.WriteString("truncating int not null default 0, ")
+	buf.WriteString("createproc int not null default 0, ")
+	buf.WriteString("dropproc int not null default 0, ")
+	buf.WriteString("createfunc int not null default 0, ")
+	buf.WriteString("dropfunc int not null default 0, ")
 	buf.WriteString("host varchar(60) not null, ")
 	buf.WriteString("port int not null ")
 
