@@ -228,8 +228,8 @@ func (s *testSessionIncBackupSuite) TestAlterTableAlterColumn(c *C) {
 	}, "\n")
 	s.mustRunBackup(c, sql)
 	s.assertRows(c, s.rows[1:],
-		"ALTER TABLE `test_inc`.`t1` DROP DEFAULT;",
-		"ALTER TABLE `test_inc`.`t1` SET DEFAULT '1';",
+		"ALTER TABLE `test_inc`.`t1` ALTER COLUMN `c1` DROP DEFAULT;",
+		"ALTER TABLE `test_inc`.`t1` ALTER COLUMN `c1` SET DEFAULT '1';",
 	)
 }
 

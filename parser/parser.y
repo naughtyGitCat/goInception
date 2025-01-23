@@ -919,7 +919,7 @@ import (
 	IndexHintListOpt              "index hint list opt"
 	IndexHintScope                "index hint scope"
 	IndexHintType                 "index hint type"
-	IndexInvisible                "index visible/invisible"
+	Invisible                     "visible/invisible"
 	IndexKeyTypeOpt               "index key type"
 	IndexLockAndAlgorithmOpt      "index lock and algorithm"
 	IndexName                     "index name"
@@ -1689,6 +1689,17 @@ AlterTableSpec:
 			NewColumns: []*ast.ColumnDef{colDef},
 		}
 	}
+|	"ALTER" ColumnKeywordOpt ColumnName "SET" Invisible
+	{
+		colDef := &ast.ColumnDef{
+			Name:    $3.(*ast.ColumnName),
+		}
+		$$ = &ast.AlterTableSpec{
+			Tp:         ast.AlterTableAlterColumnInvisible,
+			NewColumns: []*ast.ColumnDef{colDef},
+			Visibility: $5.(ast.Visibility),
+		}
+	}
 |	"ALTER" ColumnKeywordOpt ColumnName "DROP" "DEFAULT"
 	{
 		colDef := &ast.ColumnDef{
@@ -1760,12 +1771,12 @@ AlterTableSpec:
 			Tp: ast.AlterTableForce,
 		}
 	}
-|	"ALTER" "INDEX" Identifier IndexInvisible
+|	"ALTER" "INDEX" Identifier Invisible
 	{
 		$$ = &ast.AlterTableSpec{
 			Tp:         ast.AlterTableIndexInvisible,
 			IndexName:  model.NewCIStr($3),
-			Visibility: $4.(ast.IndexVisibility),
+			Visibility: $4.(ast.Visibility),
 		}
 	}
 |	"DROP" "TABLEGROUP"
@@ -2495,6 +2506,10 @@ ColumnOption:
 |	"SRID" NUM
 	{
 		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionSrId, UintValue: getUint64FromNUM($2)}
+	}
+|	Invisible
+	{
+		$$ = &ast.ColumnOption{Visibility: $1.(ast.Visibility),}
 	}
 
 
@@ -5436,7 +5451,7 @@ IndexOptionList:
 				opt1.KeyBlockSize = opt2.KeyBlockSize
 			} else if len(opt2.ParserName.O) > 0 {
 				opt1.ParserName = opt2.ParserName
-			} else if opt2.Visibility != ast.IndexVisibilityDefault {
+			} else if opt2.Visibility != ast.VisibilityDefault {
 				opt1.Visibility = opt2.Visibility
 			} else if opt2.PrimaryKeyTp != model.PrimaryKeyTypeDefault {
 				opt1.PrimaryKeyTp = opt2.PrimaryKeyTp
@@ -5472,10 +5487,10 @@ IndexOption:
 			Comment: $2,
 		}
 	}
-|	IndexInvisible
+|	Invisible
 	{
 		$$ = &ast.IndexOption{
-			Visibility: $1.(ast.IndexVisibility),
+			Visibility: $1.(ast.Visibility),
 		}
 	}
 |	WithClustered
@@ -5568,14 +5583,14 @@ IndexTypeName:
 		$$ = model.IndexTypeRtree
 	}
 
-IndexInvisible:
+Invisible:
 	"VISIBLE"
 	{
-		$$ = ast.IndexVisibilityVisible
+		$$ = ast.VisibilityVisible
 	}
 |	"INVISIBLE"
 	{
-		$$ = ast.IndexVisibilityInvisible
+		$$ = ast.VisibilityInvisible
 	}
 
 /**********************************Identifier********************************************/

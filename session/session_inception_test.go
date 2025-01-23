@@ -1125,6 +1125,9 @@ func (s *testSessionIncSuite) TestAlterTableAddColumn(c *C) {
 
 	s.mustCheck(c, "drop table if exists t1;create table t1(id int);alter table t1 add column c1 int first;alter table t1 add column c2 int after c1;")
 
+	if s.DBVersion > 80000 {
+		s.mustCheck(c, "drop table if exists t1;create table t1(id int);alter table t1 add column c1 int visible first;alter table t1 add column c2 int visible after c1;")
+	}
 	// after 不存在的列
 	sql = "drop table if exists t1;create table t1(id int);alter table t1 add column c2 int after c1;"
 	s.testErrorCode(c, sql,
@@ -1253,6 +1256,10 @@ func (s *testSessionIncSuite) TestAlterTableAddColumn(c *C) {
 	sql = "drop table if exists t1;create table t1 (id int primary key);alter table t1 add column (c1 int,c2 varchar(20));"
 	s.testErrorCode(c, sql)
 
+	if s.DBVersion > 80000 {
+		sql = "drop table if exists t1;create table t1 (id int primary key);alter table t1 add column (c1 int,c2 varchar(20) visible);"
+		s.testErrorCode(c, sql)
+	}
 	// 指定特殊选项
 	sql = "drop table if exists t1;create table t1 (id int primary key);alter table t1 add column c1 int,ALGORITHM=INPLACE, LOCK=NONE;"
 	s.testErrorCode(c, sql)
@@ -1364,6 +1371,10 @@ func (s *testSessionIncSuite) TestAlterTableAlterColumn(c *C) {
 	s.mustCheck(c, "create table t1(id int);alter table t1 alter column id set default '1';")
 
 	s.mustCheck(c, "create table t1(id int);alter table t1 alter column id drop default ;alter table t1 alter column id set default '1';")
+
+	if s.DBVersion > 80000 {
+		s.mustCheck(c, "create table t1(id int);alter table t1 alter column id set visible;")
+	}
 }
 
 func (s *testSessionIncSuite) TestAlterTableModifyColumn(c *C) {
@@ -1382,6 +1393,19 @@ func (s *testSessionIncSuite) TestAlterTableModifyColumn(c *C) {
 		c.Assert(row[2], Not(Equals), "2")
 	}
 
+	if s.DBVersion > 80000 {
+		s.runCheck("create table t1(id int,c1 int);alter table t1 modify column c1 int visible first;")
+		c.Assert(s.getAffectedRows(), GreaterEqual, 2)
+		for _, row := range s.rows {
+			c.Assert(row[2], Not(Equals), "2")
+		}
+
+		s.runCheck("create table t1(id int,c1 int);alter table t1 modify column id int visible after c1;")
+		c.Assert(s.getAffectedRows(), GreaterEqual, 2)
+		for _, row := range s.rows {
+			c.Assert(row[2], Not(Equals), "2")
+		}
+	}
 	// after 不存在的列
 	sql = "create table t1(id int);alter table t1 modify column c1 int after id;"
 	s.testErrorCode(c, sql,
@@ -1580,6 +1604,10 @@ func (s *testSessionIncSuite) TestAlterTableChangeColumn(c *C) {
 
 	s.mustCheck(c, "create table t1(id int,c1 int);alter table t1 modify column id int after c1;")
 
+	if s.DBVersion > 80000 {
+		s.mustCheck(c, "create table t1(id int,c1 int);alter table t1 modify column c1 int visible first;")
+		s.mustCheck(c, "create table t1(id int,c1 int);alter table t1 modify column id int visible after c1;")
+	}
 	config.GetGlobalConfig().Inc.EnableChangeColumn = false
 
 	sql = "create table t1(id int primary key,c1 int,c2 int);alter table t1 change column c1 c3 int after id"

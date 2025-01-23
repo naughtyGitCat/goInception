@@ -4260,7 +4260,8 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 
 		case ast.AlterTableAlterColumn:
 			s.checkAlterTableAlterColumn(table, alter)
-
+		case ast.AlterTableAlterColumnInvisible:
+			s.checkAlterTableAlterColumn(table, alter)
 		case ast.AlterTableRenameIndex:
 			if s.dbVersion < 50700 {
 				s.appendErrorNo(ER_NOT_SUPPORTED_YET)
@@ -4567,7 +4568,12 @@ func (s *session) checkMultiPartitionParts(specs []*ast.AlterTableSpec) {
 
 func (s *session) checkAlterTableAlterColumn(t *TableInfo, c *ast.AlterTableSpec) {
 	// log.Info("checkAlterTableAlterColumn")
-
+	if c.Visibility != ast.VisibilityDefault {
+		if s.dbType == DBTypeMariaDB ||
+			s.dbVersion < 80000 {
+			s.appendErrorNo(ErrUseIndexVisibility)
+		}
+	}
 	for _, nc := range c.NewColumns {
 		found := false
 		var foundField *FieldInfo
@@ -4583,13 +4589,27 @@ func (s *session) checkAlterTableAlterColumn(t *TableInfo, c *ast.AlterTableSpec
 			s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name))
 		} else {
 			if s.opt.Execute {
-				if foundField.Default == nil {
-					// s.myRecord.DDLRollback += "DROP DEFAULT,"
-					s.alterRollbackBuffer = append(s.alterRollbackBuffer, "DROP DEFAULT,")
-				} else {
-					// s.myRecord.DDLRollback += fmt.Sprintf("SET DEFAULT '%s',", *foundField.Default)
-					s.alterRollbackBuffer = append(s.alterRollbackBuffer,
-						fmt.Sprintf("SET DEFAULT '%s',", *foundField.Default))
+				var rollbackSql string
+				if c.Tp == ast.AlterTableAlterColumn {
+					rollbackSql += "ALTER COLUMN "
+					rollbackSql += fmt.Sprintf("`%s`", nc.Name.Name.O)
+					if foundField.Default == nil {
+						rollbackSql += " DROP DEFAULT;"
+						s.alterRollbackBuffer = append(s.alterRollbackBuffer, rollbackSql)
+					} else {
+						rollbackSql += fmt.Sprintf(" SET DEFAULT '%s';", *foundField.Default)
+						s.alterRollbackBuffer = append(s.alterRollbackBuffer, rollbackSql)
+					}
+				} else if c.Tp == ast.AlterTableAlterColumnInvisible {
+					rollbackSql += "ALTER COLUMN "
+					rollbackSql += fmt.Sprintf("`%s`", nc.Name.Name.O)
+					switch c.Visibility {
+					case ast.VisibilityVisible:
+						rollbackSql += " SET INVISIBLE;"
+					case ast.VisibilityInvisible:
+						rollbackSql += " SET VISIBLE;"
+					}
+					s.alterRollbackBuffer = append(s.alterRollbackBuffer, rollbackSql)
 				}
 			}
 
@@ -5694,7 +5714,7 @@ func (s *session) checkIndexExists(t *TableInfo, alter *ast.AlterTableSpec) bool
 
 	indexName := alter.IndexName.O
 
-	if alter.Visibility != ast.IndexVisibilityDefault {
+	if alter.Visibility != ast.VisibilityDefault {
 		if s.dbType == DBTypeMariaDB ||
 			s.dbVersion < 80000 {
 			s.appendErrorNo(ErrUseIndexVisibility)
@@ -5725,9 +5745,9 @@ func (s *session) checkIndexExists(t *TableInfo, alter *ast.AlterTableSpec) bool
 		rollbackSql += fmt.Sprintf("`%s`", indexName)
 
 		switch alter.Visibility {
-		case ast.IndexVisibilityVisible:
+		case ast.VisibilityVisible:
 			rollbackSql += " INVISIBLE"
-		case ast.IndexVisibilityInvisible:
+		case ast.VisibilityInvisible:
 			rollbackSql += " VISIBLE"
 		}
 
@@ -6221,7 +6241,7 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 			s.appendErrorNo(ER_TOO_LONG_INDEX_COMMENT, IndexName, INDEX_COMMENT_MAXLEN)
 		}
 
-		if indexOption.Visibility != ast.IndexVisibilityDefault {
+		if indexOption.Visibility != ast.VisibilityDefault {
 			if s.dbType == DBTypeMariaDB ||
 				s.dbVersion < 80000 {
 				s.appendErrorNo(ErrUseIndexVisibility)

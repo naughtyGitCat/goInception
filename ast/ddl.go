@@ -484,6 +484,7 @@ type ColumnOption struct {
 	UintValue           uint64
 	AutoRandomBitLength int
 	PrimaryKeyTp        model.PrimaryKeyType
+	Visibility          Visibility
 }
 
 // Restore implements Node interface.
@@ -568,6 +569,14 @@ func (n *ColumnOption) Restore(ctx *RestoreCtx) error {
 	case ColumnOptionSrId:
 		ctx.WriteKeyWord("SRID ")
 		ctx.WritePlainf("%d", n.UintValue)
+		if n.Visibility != VisibilityDefault {
+			switch n.Visibility {
+			case VisibilityVisible:
+				ctx.WriteKeyWord("VISIBLE")
+			case VisibilityInvisible:
+				ctx.WriteKeyWord("INVISIBLE")
+			}
+		}
 	default:
 		return errors.New("An error occurred while splicing ColumnOption")
 	}
@@ -592,13 +601,13 @@ func (n *ColumnOption) Accept(v Visitor) (Node, bool) {
 }
 
 // IndexVisibility is the option for index visibility.
-type IndexVisibility int
+type Visibility int
 
 // IndexVisibility options.
 const (
-	IndexVisibilityDefault IndexVisibility = iota
-	IndexVisibilityVisible
-	IndexVisibilityInvisible
+	VisibilityDefault Visibility = iota
+	VisibilityVisible
+	VisibilityInvisible
 )
 
 // IndexOption is the index options.
@@ -619,7 +628,7 @@ type IndexOption struct {
 	Tp           model.IndexType
 	Comment      string
 	ParserName   model.CIStr
-	Visibility   IndexVisibility
+	Visibility   Visibility
 	PrimaryKeyTp model.PrimaryKeyType
 	Columns      []*ColumnName
 }
@@ -674,14 +683,14 @@ func (n *IndexOption) Restore(ctx *RestoreCtx) error {
 		hasPrevOption = true
 	}
 
-	if n.Visibility != IndexVisibilityDefault {
+	if n.Visibility != VisibilityDefault {
 		if hasPrevOption {
 			ctx.WritePlain(" ")
 		}
 		switch n.Visibility {
-		case IndexVisibilityVisible:
+		case VisibilityVisible:
 			ctx.WriteKeyWord("VISIBLE")
-		case IndexVisibilityInvisible:
+		case VisibilityInvisible:
 			ctx.WriteKeyWord("INVISIBLE")
 		}
 	}
@@ -823,7 +832,7 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 		}
 	}
 
-	if n.Option != nil && (n.Option.Tp != model.IndexTypeInvalid || n.Option.KeyBlockSize > 0 || n.Option.Comment != "" || len(n.Option.ParserName.O) > 0 || n.Option.Visibility != IndexVisibilityDefault) {
+	if n.Option != nil && (n.Option.Tp != model.IndexTypeInvalid || n.Option.KeyBlockSize > 0 || n.Option.Comment != "" || len(n.Option.ParserName.O) > 0 || n.Option.Visibility != VisibilityDefault) {
 		ctx.WritePlain(" ")
 		if err := n.Option.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while splicing Constraint Option")
@@ -2477,7 +2486,7 @@ func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 	}
 	ctx.WritePlain(")")
 
-	if n.IndexOption.Tp != model.IndexTypeInvalid || n.IndexOption.KeyBlockSize > 0 || n.IndexOption.Comment != "" || len(n.IndexOption.ParserName.O) > 0 || n.IndexOption.Visibility != IndexVisibilityDefault || len(n.IndexOption.Columns) > 0 {
+	if n.IndexOption.Tp != model.IndexTypeInvalid || n.IndexOption.KeyBlockSize > 0 || n.IndexOption.Comment != "" || len(n.IndexOption.ParserName.O) > 0 || n.IndexOption.Visibility != VisibilityDefault || len(n.IndexOption.Columns) > 0 {
 		ctx.WritePlain(" ")
 		if err := n.IndexOption.Restore(ctx); err != nil {
 			return errors.Annotate(err, "An error occurred while restore CreateIndexStmt.IndexOption")
@@ -3305,6 +3314,7 @@ const (
 	AlterTableRenameColumn
 	AlterTableRenameTable
 	AlterTableAlterColumn
+	AlterTableAlterColumnInvisible
 	AlterTableLock
 	AlterTableWriteable
 	AlterTableAlgorithm
@@ -3482,7 +3492,7 @@ type AlterTableSpec struct {
 	PartDefinitions []*PartitionDefinition
 	WithValidation  bool
 	Num             uint64
-	Visibility      IndexVisibility
+	Visibility      Visibility
 	TiFlashReplica  *TiFlashReplicaSpec
 	PlacementSpecs  []*PlacementSpec
 	Writeable       bool
@@ -3710,6 +3720,18 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 			}
 		} else {
 			ctx.WriteKeyWord(" DROP DEFAULT")
+		}
+	case AlterTableAlterColumnInvisible:
+		ctx.WriteKeyWord("ALTER COLUMN ")
+		if err := n.NewColumns[0].Restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore AlterTableSpec.NewColumns[0]")
+		}
+		ctx.WriteKeyWord("SET ")
+		switch n.Visibility {
+		case VisibilityVisible:
+			ctx.WriteKeyWord(" VISIBLE")
+		case VisibilityInvisible:
+			ctx.WriteKeyWord(" INVISIBLE")
 		}
 	case AlterTableLock:
 		ctx.WriteKeyWord("LOCK ")
@@ -4028,9 +4050,9 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("ALTER INDEX ")
 		ctx.WriteName(n.IndexName.O)
 		switch n.Visibility {
-		case IndexVisibilityVisible:
+		case VisibilityVisible:
 			ctx.WriteKeyWord(" VISIBLE")
-		case IndexVisibilityInvisible:
+		case VisibilityInvisible:
 			ctx.WriteKeyWord(" INVISIBLE")
 		}
 	case AlterTablePlacement:

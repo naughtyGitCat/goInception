@@ -1863,7 +1863,8 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) LOCAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) LOCAL)"},
 		{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b) PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(`b`) PARTITION BY HASH(`b`))"},
 		{"CREATE TABLE t (a varchar(50), b int, unique global index idx_b(b)  PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, UNIQUE GLOBAL index idx_b(b) PARTITION BY HASH(`b`))"},
-
+		// column visibility option
+		{"CREATE TABLE foo (pump varchar(50), b int visible);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT VISIBLE)"},
 		//parallel option
 		{"CREATE TABLE foo (pump varchar(50), b int) parallel 10;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) PARALLEL 10"},
 		{"CREATE TABLE foo (pump varchar(50), b int) noparallel 1;", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT) NOPARALLEL 10"},
@@ -2222,7 +2223,12 @@ func (s *testParserSuite) TestDDL(c *C) {
 				PARTITION P2 VALUES LESS THAN (2015),
 				PARTITION P3 VALUES LESS THAN MAXVALUE)`, true, "ALTER TABLE `employees` ADD PARTITION (PARTITION `P1` VALUES LESS THAN (2010), PARTITION `P2` VALUES LESS THAN (2015), PARTITION `P3` VALUES LESS THAN (MAXVALUE))"},
 		{"alter table t add partition (partition x values in ((3, 4), (5, 6)))", true, "ALTER TABLE `t` ADD PARTITION (PARTITION `x` VALUES IN ((3, 4), (5, 6)))"},
-
+		// column visibility option
+		{"ALTER TABLE t ADD COLUMN a SMALLINT UNSIGNED visible", true, "ALTER TABLE `t` ADD COLUMN `a` SMALLINT UNSIGNED VISIBLE"},
+		{"ALTER TABLE t ADD COLUMN (a SMALLINT UNSIGNED, b varchar(255) visible)", true, "ALTER TABLE `t` ADD COLUMN (`a` SMALLINT UNSIGNED, `b` VARCHAR(255) VISIBLE)"},
+		{"ALTER TABLE t MODIFY COLUMN a varchar(255) visible", true, "ALTER TABLE `t` MODIFY COLUMN `a` VARCHAR(255) VISIBLE"},
+		{"ALTER TABLE t CHANGE COLUMN a b varchar(255) visible", true, "ALTER TABLE `t` CHANGE COLUMN `a` `b` VARCHAR(255) VISIBLE"},
+		{"ALTER TABLE t ALTER COLUMN a SET visible", true, "ALTER TABLE `t` ALTER COLUMN `a` SET VISIBLE"},
 		// For drop table partition statement.
 		{"alter table t first partition less than (1);", true, "ALTER TABLE `t` FIRST PARTITION LESS THAN (1)"},
 		{"alter table t last partition less than (1);", true, "ALTER TABLE `t` LAST PARTITION LESS THAN (1)"},
