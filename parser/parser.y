@@ -2509,7 +2509,7 @@ ColumnOption:
 	}
 |	Invisible
 	{
-		$$ = &ast.ColumnOption{Visibility: $1.(ast.Visibility),}
+		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionInvisible, Visibility: $1.(ast.Visibility),}
 	}
 
 

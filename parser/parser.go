@@ -11197,7 +11197,7 @@ yynewstate:
 		}
 	case 176:
 		{
-			parser.yyVAL.item = &ast.ColumnOption{Visibility: yyS[yypt-0].item.(ast.Visibility)}
+			parser.yyVAL.item = &ast.ColumnOption{Tp: ast.ColumnOptionInvisible, Visibility: yyS[yypt-0].item.(ast.Visibility)}
 		}
 	case 179:
 		{

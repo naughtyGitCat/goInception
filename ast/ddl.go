@@ -457,6 +457,7 @@ const (
 	ColumnOptionStorage
 	ColumnOptionAutoRandom
 	ColumnOptionSrId
+	ColumnOptionInvisible
 )
 
 var (
@@ -569,6 +570,7 @@ func (n *ColumnOption) Restore(ctx *RestoreCtx) error {
 	case ColumnOptionSrId:
 		ctx.WriteKeyWord("SRID ")
 		ctx.WritePlainf("%d", n.UintValue)
+	case ColumnOptionInvisible:
 		if n.Visibility != VisibilityDefault {
 			switch n.Visibility {
 			case VisibilityVisible:
