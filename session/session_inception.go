@@ -1965,10 +1965,23 @@ func (s *session) mysqlServerVersion() {
 					}
 				}
 
+				// OverWrite version num when connect to OceanBase
+				if s.dbType == DBTypeOceanBase {
+					versionNum := strings.Split(value, "-")[2]
+					if len(versionNum) > 0 {
+						version, _ := strconv.Atoi(versionNum[1:2])
+						s.dbVersion = version
+					}
+				}
 				log.Debug("db version: ", s.dbVersion)
 			case "version_comment":
 				if strings.Contains(strings.ToLower(value), "oceanbase") {
 					s.dbType = DBTypeOceanBase
+					versionNum := strings.Split(value, " ")[1]
+					if len(versionNum) > 0 {
+						value, _ := strconv.Atoi(versionNum[:1])
+						s.dbVersion = value
+					}
 				}
 			case "innodb_large_prefix":
 				emptyInnodbLargePrefix = false
@@ -2513,6 +2526,15 @@ func (s *session) checkTruncateTable(node *ast.TruncateTableStmt, sql string) {
 	if !s.inc.EnableDropTable {
 		s.appendErrorNo(ER_CANT_DROP_TABLE, t.Name)
 	} else {
+		if s.dbType == DBTypeOceanBase {
+			if s.dbVersion == 3 {
+				// Do Nothing, It's OnLine DDL under 3.x
+			} else if s.dbVersion == 4 {
+				// 注释掉：OB 团队 e92160c1 决定 truncate table 不做检查（OB 4.x 实际是 Online DDL）
+				// s.appendErrorNo(ER_CANT_TRUNCATE_TABLE)
+				// 我们也没引入 ER_CANT_TRUNCATE_TABLE 常量（依赖更晚的 commit）
+			}
+		}
 
 		if t.Schema.O == "" {
 			t.Schema = model.NewCIStr(s.dbName)
@@ -2536,6 +2558,14 @@ func (s *session) checkDropTable(node *ast.DropTableStmt, sql string) {
 		if !s.inc.EnableDropTable {
 			s.appendErrorNo(ER_CANT_DROP_TABLE, t.Name)
 			continue
+		} else {
+			if s.dbType == DBTypeOceanBase {
+				if s.dbVersion == 3 {
+					// Do Nothing, It's OnLine DDL under 3.x
+				} else if s.dbVersion == 4 {
+					// s.appendErrorNo(ER_CANT_DROP_TABLE)
+				}
+			}
 		}
 		if node.IsMvView && s.dbType != DBTypeOceanBase {
 			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
@@ -6317,15 +6347,23 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 				// OceanBase offline DDL 检查（来自 oceanbase/Integration b3bf3198）
 				if s.inc.CheckOfflineDDL && isAutoIncrement {
 					if s.dbType == DBTypeOceanBase {
-						s.appendErrorNo(ER_CANT_ADD_AUTO_INCREMENT_COLUMN, nc.Name.Name.String())
-						break
+						if s.dbVersion == 3 {
+							// Do Nothing, It's OnLine DDL under 3.x
+						} else if s.dbVersion == 4 {
+							s.appendErrorNo(ER_CANT_ADD_AUTO_INCREMENT_COLUMN)
+							break
+						}
 					}
 				}
 
 				if s.inc.CheckOfflineDDL && isStore != nil && *isStore {
 					if s.dbType == DBTypeOceanBase {
-						s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN, nc.Name.Name.String())
-						break
+						if s.dbVersion == 3 {
+							// Do Nothing, It's OnLine DDL under 3.x
+						} else if s.dbVersion == 4 {
+							s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN)
+							break
+						}
 					}
 				}
 
@@ -6415,8 +6453,16 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			}
 
 			if c.Position != nil && c.Position.Tp != ast.ColumnPositionNone {
-				s.appendErrorNo(ErCantChangeColumnPosition,
-					fmt.Sprintf("%s.%s", t.Name, nc.Name.Name))
+				if s.dbType == DBTypeOceanBase {
+					if s.dbVersion == 3 {
+						// Do Nothing, It's OnLine DDL under 3.x
+					} else if s.dbVersion == 4 {
+						s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN)
+						break
+					}
+				} else {
+					s.appendErrorNo(ErCantChangeColumnPosition)
+				}
 			}
 
 			if s.opt.Execute {
@@ -6449,8 +6495,12 @@ func checkExistsColumns(t *TableInfo) (count int) {
 func (s *session) checkDropColumn(t *TableInfo, c *ast.AlterTableSpec) {
 	if s.dbType == DBTypeOceanBase {
 		if s.inc.CheckOfflineDDL {
-			s.appendErrorNo(ER_CANT_DROP_COLUMN, fmt.Sprintf("%s", c.OldColumnName.Name.O))
-			return
+			if s.dbVersion == 3 {
+				// Do Nothing, It's OnLine DDL under 3.x
+			} else if s.dbVersion == 4 {
+				s.appendErrorNo(ER_CANT_DROP_COLUMN)
+				return
+			}
 		}
 
 		for _, index := range t.Indexes {
