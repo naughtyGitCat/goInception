@@ -28,11 +28,7 @@ var (
 
 	_ StmtNode = &ProcedureBlock{}
 	_ StmtNode = &ProcedureInfo{}
-	_ StmtNode = &FunctionInfo{}
-	_ StmtNode = &TriggerInfo{}
 	_ StmtNode = &DropProcedureStmt{}
-	_ StmtNode = &DropFunctionStmt{}
-	_ StmtNode = &DropTriggerStmt{}
 	_ StmtNode = &ProcedureElseIfBlock{}
 	_ StmtNode = &ProcedureElseBlock{}
 	_ StmtNode = &ProcedureIfBlock{}
@@ -339,37 +335,6 @@ func (n *DropProcedureStmt) Accept(v Visitor) (Node, bool) {
 		return v.Leave(newNode)
 	}
 	n = newNode.(*DropProcedureStmt)
-	return v.Leave(n)
-}
-
-// DropFunctionStmt represents the ast of `drop function`
-type DropFunctionStmt struct {
-	stmtNode
-
-	IfExists     bool
-	FunctionName *TableName
-}
-
-// Restore implements DropProcedureStmt interface.
-func (n *DropFunctionStmt) Restore(ctx *format.RestoreCtx) error {
-	ctx.WriteKeyWord("DROP FUNCTION ")
-	if n.IfExists {
-		ctx.WriteKeyWord("IF EXISTS ")
-	}
-	err := n.FunctionName.Restore(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// Accept implements Node interface.
-func (n *DropFunctionStmt) Accept(v Visitor) (Node, bool) {
-	newNode, skipChildren := v.Enter(n)
-	if skipChildren {
-		return v.Leave(newNode)
-	}
-	n = newNode.(*DropFunctionStmt)
 	return v.Leave(n)
 }
 

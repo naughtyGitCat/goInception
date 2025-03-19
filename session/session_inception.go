@@ -9089,6 +9089,32 @@ func (s *session) queryTableOptionFromDB(db string, tableName string, reportNotE
 	return rows
 }
 
+func (s *session) queryPartitionFromDB(db string, tableName string, reportNotExists bool) []*PartitionInfo {
+	if s.supportDrds() {
+		return nil
+	}
+
+	var rows []*PartitionInfo
+	sql := fmt.Sprintf("SELECT PARTITION_NAME, PARTITION_METHOD, PARTITION_EXPRESSION, PARTITION_DESCRIPTION, TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME= '%s'", db, tableName)
+	if err := s.rawDB(&rows, sql); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+			s.appendErrorMsg(myErr.Message + ".")
+		} else {
+			s.appendErrorMsg(err.Error() + ".")
+		}
+		return nil
+	}
+	if len(rows) > 0 {
+		first := rows[0]
+		if first.PartName == "" && first.PartMethod == "" {
+			// 非分区表
+			return nil
+		}
+	}
+	return rows
+}
+
 func (s *session) fetchPartitionFromDB(t *TableInfo) error {
 	if s.supportDrds() {
 		return nil
@@ -9505,6 +9531,9 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 		}
 		if rows := s.queryTableRowSize(db, tableName, reportNotExists); rows != 0 {
 			newT.RowSize = rows
+		}
+		if rows := s.queryPartitionFromDB(db, tableName, reportNotExists); rows != nil {
+			newT.Partitions = rows
 		}
 		s.tableCacheList[key] = newT
 
