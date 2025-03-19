@@ -617,6 +617,7 @@ var tokenMap = map[string]int{
 	"TABLES":                   tables,
 	"TABLESAMPLE":              tableSample,
 	"TABLESPACE":               tablespace,
+	"TABLE_MODE":               tableMode,
 	"TEMPLATE":                 template,
 	"TEMPORARY":                temporary,
 	"TEMPTABLE":                temptable,

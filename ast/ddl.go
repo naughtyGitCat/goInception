@@ -2863,6 +2863,7 @@ const (
 	TableOptionBroadcast
 	TableOptionNoParallel
 	TableOptionParallel
+	TableOptionTableMode
 	TableOptionPlacementPrimaryRegion       = TableOptionType(PlacementOptionPrimaryRegion)
 	TableOptionPlacementRegions             = TableOptionType(PlacementOptionRegions)
 	TableOptionPlacementFollowerCount       = TableOptionType(PlacementOptionFollowerCount)
@@ -3145,6 +3146,10 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("SINGLE")
 	case TableOptionBroadcast:
 		ctx.WriteKeyWord("BROADCAST")
+	case TableOptionTableMode:
+		ctx.WriteKeyWord("TABLE_MODE ")
+		ctx.WritePlain("= ")
+		ctx.WriteString(n.StrValue)
 	default:
 		return errors.Errorf("invalid TableOption: %d", n.Tp)
 	}

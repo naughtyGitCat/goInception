@@ -542,6 +542,7 @@ import (
 	tablegroups            "TABLEGROUPS"
 	tables                 "TABLES"
 	tablespace             "TABLESPACE"
+	tableMode              "TABLE_MODE"
 	temporary              "TEMPORARY"
 	temptable              "TEMPTABLE"
 	textType               "TEXT"
@@ -5694,6 +5695,7 @@ UnReservedKeyword:
 |	"TABLEGROUPS"
 |	"TABLES"
 |	"TABLESPACE"
+|	"TABLE_MODE"
 |	"TEXT"
 |	"THAN"
 |	"TIME" %prec lowerThanStringLitToken
@@ -10274,6 +10276,10 @@ TableOption:
 |	"NOPARALLEL" EqOpt LengthNum
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionNoParallel, UintValue: $3.(uint64)}
+	}
+|	"TABLE_MODE" eq StringName
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionTableMode, StrValue: $3.(string)}
 	}
 
 ForceOpt:

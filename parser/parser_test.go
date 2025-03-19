@@ -1767,6 +1767,7 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"drop global temporary table t", true, "DROP GLOBAL TEMPORARY TABLE `t`"},
 		{"drop temporary table t", true, "DROP TEMPORARY TABLE `t`"},
 		//
+		{"CREATE TABLE foo (a varchar(50), b int) TABLE_MODE = 'queuing';", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) TABLE_MODE = 'queuing'"},
 		{"CREATE TABLE foo (a varchar(50), b int) SINGLE;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) SINGLE"},
 		{"CREATE TABLE foo (a varchar(50), b int) BROADCAST;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) BROADCAST"},
 		// for create partition table
