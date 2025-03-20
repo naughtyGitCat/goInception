@@ -1592,7 +1592,7 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 	return v.Leave(n)
 }
 
-// UnionSelectList represents the select list in a union statement.
+// SetOprSelectList represents the SelectStmt/TableStmt/ValuesStmt list in a union statement.
 type SetOprSelectList struct {
 	node
 

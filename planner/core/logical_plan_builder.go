@@ -648,7 +648,7 @@ func unionJoinFieldType(a, b *types.FieldType) *types.FieldType {
 
 func (b *PlanBuilder) buildProjection4Union(u *LogicalUnionAll) {
 	unionCols := make([]*expression.Column, 0, u.children[0].Schema().Len())
-
+	//names := make([]*types.FieldName, 0, u.children[0].Schema().Len())
 	// Infer union result types by its children's schema.
 	for i, col := range u.children[0].Schema().Columns {
 		resultTp := col.RetType
@@ -656,6 +656,7 @@ func (b *PlanBuilder) buildProjection4Union(u *LogicalUnionAll) {
 			childTp := u.children[j].Schema().Columns[i].RetType
 			resultTp = unionJoinFieldType(resultTp, childTp)
 		}
+
 		unionCols = append(unionCols, &expression.Column{
 			ColName:  col.ColName,
 			TblName:  col.TblName,
@@ -680,6 +681,10 @@ func (b *PlanBuilder) buildProjection4Union(u *LogicalUnionAll) {
 		b.optFlag |= flagEliminateProjection
 		proj := LogicalProjection{Exprs: exprs}.init(b.ctx)
 		proj.SetSchema(expression.NewSchema(unionCols...))
+		// reset the schema type to make the "not null" flag right.
+		for i, expr := range exprs {
+			proj.schema.Columns[i].RetType = expr.GetType()
+		}
 		proj.SetChildren(child)
 		u.children[childID] = proj
 	}
@@ -2487,7 +2492,7 @@ func (b *PlanBuilder) buildIntersect(selects []ast.Node) (LogicalPlan, *ast.SetO
 		leftPlan, err = b.buildSelect(x)
 	case *ast.SetOprSelectList:
 		afterSetOperator = x.AfterSetOperator
-		leftPlan, err = b.buildSetOpr(&ast.SetOprStmt{SelectList: x})
+		leftPlan, err = b.buildSetOpr(&ast.SetOprStmt{SelectList: x, With: x.With, Limit: x.Limit, OrderBy: x.OrderBy})
 	}
 	if err != nil {
 		return nil, nil, err
@@ -2509,7 +2514,7 @@ func (b *PlanBuilder) buildIntersect(selects []ast.Node) (LogicalPlan, *ast.SetO
 			if *x.AfterSetOperator == ast.IntersectAll {
 				return nil, nil, errors.Errorf("TiDB do not support intersect all")
 			}
-			rightPlan, err = b.buildSetOpr(&ast.SetOprStmt{SelectList: x})
+			rightPlan, err = b.buildSetOpr(&ast.SetOprStmt{SelectList: x, With: x.With, Limit: x.Limit, OrderBy: x.OrderBy})
 		}
 		if err != nil {
 			return nil, nil, err
@@ -2545,6 +2550,9 @@ func (b *PlanBuilder) buildExcept(selects []LogicalPlan, afterSetOpts []*ast.Set
 			}
 			unionPlans = []LogicalPlan{leftPlan}
 			tmpAfterSetOpts = []*ast.SetOprType{nil}
+		} else if *afterSetOpts[i] == ast.ExceptAll {
+			// TODO: support except all.
+			return nil, errors.Errorf("TiDB do not support except all")
 		} else {
 			unionPlans = append(unionPlans, rightPlan)
 			tmpAfterSetOpts = append(tmpAfterSetOpts, afterSetOpts[i])
