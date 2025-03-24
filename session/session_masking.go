@@ -160,7 +160,7 @@ func (s *masking) checkSubSelectItem(node *ast.SelectStmt, level int) (tableInfo
 					t.AsName = tblSource.AsName.O
 					tableInfoList = append(tableInfoList, t.copy())
 				} else {
-					tableInfoList = append(tableInfoList, t)
+					tableInfoList = append(tableInfoList, t.copy())
 				}
 			} else {
 				tableInfoList = append(tableInfoList, &TableInfo{

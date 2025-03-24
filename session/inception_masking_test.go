@@ -118,4 +118,8 @@ func (s *testSessionMaskingSuite) TestQuery(c *C) {
 	c.Assert(row[2], Equals, "0", Commentf("%v", row))
 	c.Assert(row[3], Equals, `[{"index":0,"field":"id","type":"int(11)","table":"t1","schema":"test_inc","alias":"id"},{"index":1,"field":"c1","type":"int(11)","table":"t1","schema":"test_inc","alias":"c1"},{"index":2,"field":"id","type":"int(11)","table":"t1","schema":"test_inc","alias":"id"},{"index":3,"field":"id","type":"int(11)","table":"t2","schema":"test_inc","alias":"id"},{"index":4,"field":"c1","type":"int(11)","table":"t2","schema":"test_inc","alias":"c1"},{"index":5,"field":"c2","type":"int(11)","table":"t2","schema":"test_inc","alias":"c2"}]`, Commentf("%v", row))
 
+	res = s.makeSQL(`select a.id,b.id from (select * from t1) a , t1 b where a.id=b.id;`)
+	row = res.Rows()[int(s.tk.Se.AffectedRows())-1]
+	c.Assert(row[2], Equals, "0", Commentf("%v", row))
+	c.Assert(row[3], Equals, `[{"index":0,"field":"id","type":"int(11)","table":"t1","schema":"test_inc","alias":"id"},{"index":1,"field":"id","type":"int(11)","table":"t1","schema":"test_inc","alias":"id"}]`, Commentf("%v", row))
 }
