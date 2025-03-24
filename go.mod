@@ -10,6 +10,8 @@ replace google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
 replace github.com/go-sql-driver/mysql => github.com/go-sql-driver/mysql v1.7.1
 
+replace github.com/etcd-io/gofail => go.etcd.io/gofail v0.0.0-20180808172546-51ce9a71510a
+
 // replace github.com/hanchuanchuan/gh-ost => ../gh-ost
 
 require (
@@ -20,6 +22,7 @@ require (
 	github.com/cznic/sortutil v0.0.0-20181122101858-f5f958428db8
 	github.com/cznic/strutil v0.0.0-20181122101858-275e90344537
 	github.com/cznic/y v0.0.0-20181122101901-b05e8c2e8d7b
+	github.com/etcd-io/gofail v0.0.0-00010101000000-000000000000
 	github.com/go-mysql-org/go-mysql v1.9.1
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/gofrs/uuid v4.4.0+incompatible

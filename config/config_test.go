@@ -146,7 +146,7 @@ binlog-socket = ""
 	c.Assert(conf.Load(configFile), IsNil)
 
 	conf.Inc.Version = strings.TrimRight(mysql.TiDBReleaseVersion, "-dirty")
-
+	GetGlobalConfig().ConfigPath = configFile
 	// fmt.Println(conf)
 	// fmt.Println(GetGlobalConfig())
 	// Make sure the example config is the same as default config.
