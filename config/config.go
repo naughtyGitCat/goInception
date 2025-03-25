@@ -316,8 +316,6 @@ type Inc struct {
 	EnableSqlStatistic bool `toml:"enable_sql_statistic" json:"enable_sql_statistic"`
 	// 在MySQL8.0检测是否支持 ALGORITHM=INSTANT, 当支持时自动关闭pt-osc/gh-ost.
 	EnableDDLInstant bool `toml:"enable_ddl_instant" json:"enable_ddl_instant"`
-	// oceanbase开启binlog模式下执行DML备份
-	EnableObBinlog bool `toml:"enable_ob_binlog" json:"enable_ob_binlog"`
 	// explain判断受影响行数时使用的规则, 默认值"first"
 	// 可选值: "first", "max"
 	// 		"first": 	使用第一行的explain结果作为受影响行数

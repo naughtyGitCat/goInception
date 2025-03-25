@@ -632,7 +632,7 @@ func (s *session) checkBackupTableHostMaxLength(dbname string) (length int) {
 }
 
 func (s *session) needTransactionMark() bool {
-	return s.dbType == DBTypeOceanBase && s.inc.EnableObBinlog
+	return s.dbType == DBTypeOceanBase
 }
 
 type transactionMarkType int
