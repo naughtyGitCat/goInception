@@ -122,4 +122,9 @@ func (s *testSessionMaskingSuite) TestQuery(c *C) {
 	row = res.Rows()[int(s.tk.Se.AffectedRows())-1]
 	c.Assert(row[2], Equals, "0", Commentf("%v", row))
 	c.Assert(row[3], Equals, `[{"index":0,"field":"id","type":"int(11)","table":"t1","schema":"test_inc","alias":"id"},{"index":1,"field":"id","type":"int(11)","table":"t1","schema":"test_inc","alias":"id"}]`, Commentf("%v", row))
+
+	res = s.makeSQL(`select * from (select c1 from t1 where id =1 union select c1 from t1 where id =2) c;`)
+	row = res.Rows()[int(s.tk.Se.AffectedRows())-1]
+	c.Assert(row[2], Equals, "0", Commentf("%v", row))
+	c.Assert(row[3], Equals, `[{"index":0,"field":"c1","type":"int(11)","table":"t1","schema":"test_inc","alias":"c1"}]`, Commentf("%v", row))
 }

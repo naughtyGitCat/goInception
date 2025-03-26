@@ -202,6 +202,24 @@ func (s *masking) checkSubSelectItem(node *ast.SelectStmt, level int) (tableInfo
 			fields = append(fields, tmpFields...)
 		default:
 			tmpTables, tmpFields := s.checkSelectItem(x, level+1)
+			if tblSource.AsName.L != "" {
+				for _, f := range tmpTables {
+					f.AsName = tblSource.AsName.String()
+				}
+			}
+			for _, f := range tmpFields {
+				if f.Alias == "" {
+					continue
+				}
+				for _, t := range tmpTables {
+					if f.Table == t.Name {
+						if t.maskingFields == nil {
+							t.maskingFields = make([]MaskingFieldInfo, 0)
+						}
+						t.maskingFields = append(t.maskingFields, f)
+					}
+				}
+			}
 			tableInfoList = append(tableInfoList, tmpTables...)
 			fields = append(fields, tmpFields...)
 		}
