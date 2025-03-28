@@ -450,9 +450,10 @@ func (s *testSessionIncSuite) TestCreateTable(c *C) {
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ER_INVALID_DEFAULT, "c1"))
 
-	// sql = "create table t1(id int,c1 bit default '');"
-	// s.testErrorCode(c, sql,
-	// 	session.NewErr(session.ER_INVALID_DEFAULT, "c1"))
+	sql = "create table t1(id int,c1 varchar(10), c3 default(c1));"
+	if s.DBVersion > 80000 {
+		s.testErrorCode(c, sql)
+	}
 
 	sql = "create table t1(id int,c1 bit default '0');"
 	s.testErrorCode(c, sql,
@@ -1178,7 +1179,11 @@ func (s *testSessionIncSuite) TestAlterTableAddColumn(c *C) {
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ER_COLUMN_HAVE_NO_COMMENT, "c1", "t1"))
 	config.GetGlobalConfig().Inc.CheckColumnComment = false
-
+	//列默认值表达式检查
+	sql = ("drop table if exists t1;create table t1(id int);alter table t1 add column c1 int default (id);")
+	if s.DBVersion >= 80000 {
+		s.testErrorCode(c, sql)
+	}
 	// 无效默认值
 	sql = ("drop table if exists t1;create table t1(id int);alter table t1 add column c1 int default '';")
 	s.testErrorCode(c, sql,
@@ -1589,6 +1594,12 @@ func (s *testSessionIncSuite) TestAlterTableModifyColumn(c *C) {
 	sql = "alter table t1 modify c1 int not null;alter table t1 add primary key(id,c1);"
 	s.testErrorCode(c, sql)
 
+	s.mustRunExec(c, "drop table if exists t1;create table t1(id int not null,c1 varchar(20), c2 varchar(20));")
+	sql = "alter table t1 modify c2 varchar(20) default (c1);"
+	if s.DBVersion > 80000 {
+		s.testErrorCode(c, sql)
+	}
+
 	config.GetGlobalConfig().Inc.EnableIdentiferKeyword = false
 	s.mustRunExec(c, "drop table if exists t1;create table t1(id int not null,`alter` int);")
 	sql = "alter table t1 modify `alter` bigint;"
@@ -1623,6 +1634,16 @@ func (s *testSessionIncSuite) TestAlterTableChangeColumn(c *C) {
 	sql = "alter table t1 change `alter` `delete` bigint;"
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ER_IDENT_USE_KEYWORD, "delete"))
+
+	sql = "create table t1(id int primary key,c1 varchar(10),c2 varchar(10));alter table t1 change column c2 c2 varchar(10) default(c1)"
+	if s.DBVersion > 80000 {
+		s.testErrorCode(c, sql)
+	}
+
+	sql = "create table t1(id int primary key,c1 varchar(10),c2 varchar(10));alter table t1 change column c2 c3 varchar(10) default(c1)"
+	if s.DBVersion > 80000 {
+		s.testErrorCode(c, sql)
+	}
 }
 
 func (s *testSessionIncSuite) TestAlterTableDropColumn(c *C) {
@@ -1642,6 +1663,12 @@ func (s *testSessionIncSuite) TestAlterTableDropColumn(c *C) {
 	sql = "create table t2 (id int null);alter table t2 drop id;"
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ErrCantRemoveAllFields))
+
+	sql = "create table t2 (id int null, c1 varchar(20), c2 varchar(20) default(c1));alter table t2 drop c1;"
+	if s.DBVersion > 80000 {
+		s.testErrorCode(c, sql,
+			session.NewErr(session.ER_CANT_DROP_DEPENDENCY_COLUMN, "c1", "t1"))
+	}
 }
 
 func (s *testSessionIncSuite) TestInsert(c *C) {

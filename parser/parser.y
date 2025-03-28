@@ -2835,6 +2835,12 @@ BuiltinFunction:
 	{
 		$$ = $2.(*ast.FuncCallExpr)
 	}
+|	identifier
+	{
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+		}
+	}
 |	identifier '(' ')'
 	{
 		$$ = &ast.FuncCallExpr{

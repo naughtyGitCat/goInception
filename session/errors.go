@@ -244,6 +244,7 @@ const (
 	ER_TRIGGER_NOT_EXISTED_ERROR
 	ER_TRIGGER_EXISTS_ERROR
 	ER_TOOL_BASED_UNIQUE_INDEX_WARNING
+	ER_CANT_DROP_DEPENDENCY_COLUMN
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -455,6 +456,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ER_TRIGGER_NOT_ALLOWED:             "Trigger is not allowed.",
 	ER_TRIGGER_EXISTS_ERROR:            "Trigger '%s' already exists.",
 	ER_TOOL_BASED_UNIQUE_INDEX_WARNING: "Existing unique indexes may cause duplicate data loss when executing statements using schema-altering tools. It is recommended to review and assess potential risks.",
+	ER_CANT_DROP_DEPENDENCY_COLUMN:     "Column '%s' of table '%s' has a default value expression dependency and cannot be dropped or renamed.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -657,6 +659,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ER_TRIGGER_NOT_EXISTED_ERROR:           "触发器 '%s' 不存在.",
 	ER_TRIGGER_EXISTS_ERROR:                "触发器 '%s' 已存在.",
 	ER_TOOL_BASED_UNIQUE_INDEX_WARNING:     "存在唯一索引，使用改表工具执行语句可能导致重复数据丢失，建议复查是否存在风险",
+	ER_CANT_DROP_DEPENDENCY_COLUMN:         "表'%s'中的列'%s'存在默认值表达式依赖，因此无法被删除或重命名.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -789,7 +792,8 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ER_CANT_DROP_FUNCTION,
 		ER_CANT_DROP_PROCEDURE,
 		ER_INVALID_NO_GEOMETRY_DEFAULT,
-		ER_CANT_DROP_TRIGGER:
+		ER_CANT_DROP_TRIGGER,
+		ER_CANT_DROP_DEPENDENCY_COLUMN:
 		return 2
 
 	default:
@@ -1236,6 +1240,8 @@ func (e ErrorCode) String() string {
 		return "er_trigger_exists_error"
 	case ER_TOOL_BASED_UNIQUE_INDEX_WARNING:
 		return "er_tool_based_unique_index_warning"
+	case ER_CANT_DROP_DEPENDENCY_COLUMN:
+		return "er_cant_drop_dependency_column"
 	}
 	return ""
 }

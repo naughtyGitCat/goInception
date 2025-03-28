@@ -3418,6 +3418,18 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 					s.appendErrorNo(ER_DUP_FIELDNAME, c.Name.Name)
 				}
 				checkDup[c.Name.Name.L] = true
+				//检查列默认值指定列
+				if s.dbVersion > 80000 {
+					for _, op := range c.Options {
+						if op.Tp == ast.ColumnOptionDefaultValue {
+							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+								if _, ok := checkDup[f.FnName.L]; !ok {
+									s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
+								}
+							}
+						}
+					}
+				}
 			}
 
 			hasComment := false
@@ -4740,6 +4752,8 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 		found := false
 		foundIndexOld := -1
 		var foundField FieldInfo
+		var foundDefaultName string
+		foundDefaultValue := false
 
 		if nc.Name.Schema.L != "" && !strings.EqualFold(nc.Name.Schema.L, t.Schema) {
 			s.appendErrorNo(ER_WRONG_DB_NAME, nc.Name.Schema.O)
@@ -4760,8 +4774,25 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 					foundField = field
 					break
 				}
+				if s.dbVersion > 80000 {
+					for _, op := range nc.Options {
+						if op.Tp == ast.ColumnOptionDefaultValue {
+							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+								if strings.EqualFold(field.Field, f.FnName.L) {
+									foundDefaultValue = true
+								} else {
+									foundDefaultName = f.FnName.L
+								}
+							}
+						}
+					}
+				}
 			}
-
+			if s.dbVersion > 80000 {
+				if !foundDefaultValue {
+					s.appendErrorNo(ER_INVALID_DEFAULT, foundDefaultName)
+				}
+			}
 			if !found {
 				s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name))
 			} else {
@@ -4886,6 +4917,19 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 				if strings.EqualFold(field.Field, nc.Name.Name.L) && !field.IsDeleted {
 					newFound = true
 				}
+				if s.dbVersion > 80000 {
+					for _, op := range nc.Options {
+						if op.Tp == ast.ColumnOptionDefaultValue {
+							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+								if strings.EqualFold(field.Field, f.FnName.L) {
+									foundDefaultValue = true
+								} else {
+									foundDefaultName = f.FnName.L
+								}
+							}
+						}
+					}
+				}
 			}
 
 			// 未变更列名时,列需要存在
@@ -4896,7 +4940,11 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			if !oldFound {
 				s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, c.OldColumnName.Name.O))
 			}
-
+			if s.dbVersion > 80000 {
+				if !foundDefaultValue {
+					s.appendErrorNo(ER_INVALID_DEFAULT, foundDefaultName)
+				}
+			}
 			s.checkKeyWords(nc.Name.Name.O)
 
 			if !s.hasError() {
@@ -5842,7 +5890,9 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 
 	for _, nc := range c.NewColumns {
 		found := false
+		checkDefaultExpr := map[string]bool{}
 		for _, field := range t.Fields {
+			checkDefaultExpr[field.Field] = true
 			if strings.EqualFold(field.Field, nc.Name.Name.O) && !field.IsDeleted {
 				found = true
 				break
@@ -5863,6 +5913,15 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 						isPrimary = true
 					case ast.ColumnOptionUniqKey:
 						isUnique = true
+					case ast.ColumnOptionDefaultValue:
+						//检查列默认值指定列
+						if s.dbVersion > 80000 {
+							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+								if _, ok := checkDefaultExpr[f.FnName.L]; !ok {
+									s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
+								}
+							}
+						}
 					}
 				}
 
@@ -6007,8 +6066,13 @@ func (s *session) checkDropColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			} else {
 				s.appendErrorNo(ErrCantRemoveAllFields)
 			}
-
-			break
+		}
+		if s.dbVersion > 80000 {
+			if field.Default != nil && *field.Default != "" {
+				if strings.EqualFold(strings.Replace(*field.Default, "`", "", -1), c.OldColumnName.Name.O) {
+					s.appendErrorNo(ER_CANT_DROP_DEPENDENCY_COLUMN, c.OldColumnName.Name.O, t.Name)
+				}
+			}
 		}
 	}
 	if !found {
