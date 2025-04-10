@@ -185,6 +185,7 @@ func (tc *testDMLSuite) TestTableSourceRestore(c *C) {
 	testCases := []NodeRestoreTestCase{
 		{"tbl", "`tbl`"},
 		{"tbl as t", "`tbl` AS `t`"},
+		{"(select * from tbl) as t (a)", "(SELECT * FROM `tbl`) AS `t` (`a`)"},
 		{"(select * from tbl) as t", "(SELECT * FROM `tbl`) AS `t`"},
 		{"(select * from a union select * from b) as t", "(SELECT * FROM `a` UNION SELECT * FROM `b`) AS `t`"},
 	}

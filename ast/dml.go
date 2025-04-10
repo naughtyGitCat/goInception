@@ -549,6 +549,8 @@ type TableSource struct {
 
 	// AsName is the alias name of the table source.
 	AsName model.CIStr
+
+	ColNameList []model.CIStr
 }
 
 // Restore implements Node interface.
@@ -571,7 +573,16 @@ func (n *TableSource) Restore(ctx *RestoreCtx) error {
 			ctx.WriteKeyWord(" AS ")
 			ctx.WriteName(asName)
 		}
-
+		if len(n.ColNameList) > 0 {
+			ctx.WritePlain(" (")
+			for j, name := range n.ColNameList {
+				if j != 0 {
+					ctx.WritePlain(", ")
+				}
+				ctx.WriteName(name.String())
+			}
+			ctx.WritePlain(")")
+		}
 		if tn.AsOf != nil {
 			ctx.WritePlain(" ")
 			if err := tn.AsOf.Restore(ctx); err != nil {
@@ -604,6 +615,16 @@ func (n *TableSource) Restore(ctx *RestoreCtx) error {
 		if asName := n.AsName.String(); asName != "" {
 			ctx.WriteKeyWord(" AS ")
 			ctx.WriteName(asName)
+		}
+		if len(n.ColNameList) > 0 {
+			ctx.WritePlain(" (")
+			for j, name := range n.ColNameList {
+				if j != 0 {
+					ctx.WritePlain(", ")
+				}
+				ctx.WriteName(name.String())
+			}
+			ctx.WritePlain(")")
 		}
 	}
 

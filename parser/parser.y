@@ -8252,23 +8252,34 @@ TableRef:
 |	JoinTable
 
 TableFactor:
-	TableName PartitionNameListOpt TableAsNameOpt AsOfClauseOpt IndexHintListOpt TableSampleOpt
+	TableName PartitionNameListOpt TableAsNameOpt IdentListWithParenOpt AsOfClauseOpt IndexHintListOpt TableSampleOpt
 	{
 		tn := $1.(*ast.TableName)
 		tn.PartitionNames = $2.([]model.CIStr)
-		tn.IndexHints = $5.([]*ast.IndexHint)
-		if $6 != nil {
-			tn.TableSample = $6.(*ast.TableSample)
+		tn.IndexHints = $6.([]*ast.IndexHint)
+		if $7 != nil {
+			tn.TableSample = $7.(*ast.TableSample)
 		}
+		if $5 != nil {
+			tn.AsOf = $5.(*ast.AsOfClause)
+		}
+		ts := &ast.TableSource{}
+		ts.Source = tn
+		ts.AsName = $3.(model.CIStr)
 		if $4 != nil {
-			tn.AsOf = $4.(*ast.AsOfClause)
+			ts.ColNameList = $4.([]model.CIStr)
 		}
-		$$ = &ast.TableSource{Source: tn, AsName: $3.(model.CIStr)}
+		$$ = ts
 	}
-|	SubSelect TableAsNameOpt
+|	SubSelect TableAsNameOpt IdentListWithParenOpt
 	{
-		resultNode := $1.(*ast.SubqueryExpr).Query
-		$$ = &ast.TableSource{Source: resultNode, AsName: $2.(model.CIStr)}
+		ts := &ast.TableSource{}
+		ts.Source = $1.(*ast.SubqueryExpr).Query
+		ts.AsName = $2.(model.CIStr)
+		if $3 != nil {
+			ts.ColNameList = $3.([]model.CIStr)
+		}
+		$$ = ts
 	}
 |	'(' TableRefs ')'
 	{	
