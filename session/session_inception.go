@@ -6409,107 +6409,117 @@ func (s *session) checkCreateView(node *ast.CreateViewStmt, sql string) {
 		return
 	}
 
-	fieldCount := len(node.Cols)
-	// 校验列是否重复指定
-	if fieldCount > 0 {
-		checkDup := map[string]bool{}
-		for _, c := range node.Cols {
-			if _, ok := checkDup[c.L]; ok {
-				s.appendErrorNo(ER_FIELD_SPECIFIED_TWICE,
-					c.String(), node.ViewName.Name.String())
-			}
-			checkDup[c.L] = true
+	view := s.getTableFromCache(node.ViewName.Schema.O, node.ViewName.Name.O, false)
+
+	if view != nil {
+		if !node.OrReplace {
+			s.appendErrorNo(ER_TABLE_EXISTS_ERROR, node.ViewName.Name.O)
 		}
-	}
+		s.myRecord.DBName = node.ViewName.Schema.O
+		s.myRecord.TableName = node.ViewName.Name.O
+	} else {
+		fieldCount := len(node.Cols)
+		// 校验列是否重复指定
+		if fieldCount > 0 {
+			checkDup := map[string]bool{}
+			for _, c := range node.Cols {
+				if _, ok := checkDup[c.L]; ok {
+					s.appendErrorNo(ER_FIELD_SPECIFIED_TWICE,
+						c.String(), node.ViewName.Name.String())
+				}
+				checkDup[c.L] = true
+			}
+		}
 
-	switch selectNode := node.Select.(type) {
-	case *ast.SetOprStmt:
-		for _, sel := range selectNode.SelectList.Selects {
-			// 是否有星号列
-			switch selectStmt := sel.(type) {
-			case *ast.SelectStmt:
-				hasWildCard := false
-				if selectStmt.Fields != nil {
-					for _, field := range selectStmt.Fields.Fields {
-						if field.WildCard != nil {
-							hasWildCard = true
+		switch selectNode := node.Select.(type) {
+		case *ast.SetOprStmt:
+			for _, sel := range selectNode.SelectList.Selects {
+				// 是否有星号列
+				switch selectStmt := sel.(type) {
+				case *ast.SelectStmt:
+					hasWildCard := false
+					if selectStmt.Fields != nil {
+						for _, field := range selectStmt.Fields.Fields {
+							if field.WildCard != nil {
+								hasWildCard = true
+							}
 						}
-					}
 
-					if hasWildCard {
-						s.appendErrorNo(ER_SELECT_ONLY_STAR)
+						if hasWildCard {
+							s.appendErrorNo(ER_SELECT_ONLY_STAR)
 
-						selectColumnCount, err := s.subSelectColumns(sel)
-						if err == nil && fieldCount > 0 && fieldCount != selectColumnCount {
+							selectColumnCount, err := s.subSelectColumns(sel)
+							if err == nil && fieldCount > 0 && fieldCount != selectColumnCount {
+								s.appendErrorNo(ErrViewColumnCount)
+							}
+						} else if fieldCount > 0 && fieldCount != len(selectStmt.Fields.Fields) {
+							// 判断字段数是否匹配
 							s.appendErrorNo(ErrViewColumnCount)
 						}
-					} else if fieldCount > 0 && fieldCount != len(selectStmt.Fields.Fields) {
-						// 判断字段数是否匹配
+					}
+				}
+
+			}
+			s.checkSelectItem(selectNode, nil, false)
+
+		case *ast.SelectStmt:
+			if selectNode.Fields != nil {
+				// 是否有星号列
+				hasWildCard := false
+				for _, field := range selectNode.Fields.Fields {
+					if field.WildCard != nil {
+						hasWildCard = true
+					}
+				}
+				if hasWildCard {
+					s.appendErrorNo(ER_SELECT_ONLY_STAR)
+
+					selectColumnCount, err := s.subSelectColumns(selectNode)
+					if err == nil && fieldCount > 0 && fieldCount != selectColumnCount {
 						s.appendErrorNo(ErrViewColumnCount)
+					}
+				} else if fieldCount > 0 && fieldCount != len(selectNode.Fields.Fields) {
+					s.appendErrorNo(ErrViewColumnCount)
+				}
+			}
+			s.checkSelectItem(selectNode, nil, false)
+		}
+
+		if !s.hasError() {
+			table := &TableInfo{
+				Schema: node.ViewName.Schema.String(),
+				Name:   node.ViewName.Name.String(),
+				Fields: make([]FieldInfo, len(node.Cols)),
+				IsNew:  true,
+			}
+			if table.Schema == "" {
+				table.Schema = s.dbName
+			}
+
+			if len(node.Cols) > 0 {
+				for index, field := range node.Cols {
+					table.Fields[index] = FieldInfo{
+						Field: field.String(),
+						IsNew: true,
+					}
+				}
+			} else {
+				cols := s.getSubSelectColumns(node.Select)
+				table.Fields = make([]FieldInfo, len(cols))
+				for index, field := range cols {
+					table.Fields[index] = FieldInfo{
+						Field: field,
+						IsNew: true,
 					}
 				}
 			}
 
-		}
-		s.checkSelectItem(selectNode, nil, false)
+			s.cacheNewTable(table)
+			s.myRecord.TableInfo = table
 
-	case *ast.SelectStmt:
-		if selectNode.Fields != nil {
-			// 是否有星号列
-			hasWildCard := false
-			for _, field := range selectNode.Fields.Fields {
-				if field.WildCard != nil {
-					hasWildCard = true
-				}
+			if s.opt.Execute {
+				s.myRecord.DDLRollback = fmt.Sprintf("DROP VIEW `%s`.`%s`;", table.Schema, table.Name)
 			}
-			if hasWildCard {
-				s.appendErrorNo(ER_SELECT_ONLY_STAR)
-
-				selectColumnCount, err := s.subSelectColumns(selectNode)
-				if err == nil && fieldCount > 0 && fieldCount != selectColumnCount {
-					s.appendErrorNo(ErrViewColumnCount)
-				}
-			} else if fieldCount > 0 && fieldCount != len(selectNode.Fields.Fields) {
-				s.appendErrorNo(ErrViewColumnCount)
-			}
-		}
-		s.checkSelectItem(selectNode, nil, false)
-	}
-
-	if !s.hasError() {
-		table := &TableInfo{
-			Schema: node.ViewName.Schema.String(),
-			Name:   node.ViewName.Name.String(),
-			Fields: make([]FieldInfo, len(node.Cols)),
-			IsNew:  true,
-		}
-		if table.Schema == "" {
-			table.Schema = s.dbName
-		}
-
-		if len(node.Cols) > 0 {
-			for index, field := range node.Cols {
-				table.Fields[index] = FieldInfo{
-					Field: field.String(),
-					IsNew: true,
-				}
-			}
-		} else {
-			cols := s.getSubSelectColumns(node.Select)
-			table.Fields = make([]FieldInfo, len(cols))
-			for index, field := range cols {
-				table.Fields[index] = FieldInfo{
-					Field: field,
-					IsNew: true,
-				}
-			}
-		}
-
-		s.cacheNewTable(table)
-		s.myRecord.TableInfo = table
-
-		if s.opt.Execute {
-			s.myRecord.DDLRollback = fmt.Sprintf("DROP VIEW `%s`.`%s`;", table.Schema, table.Name)
 		}
 	}
 }
