@@ -274,24 +274,24 @@ func (s *session) printSubSelectItem(node *ast.SelectStmt) bool {
 	if node.Fields != nil {
 		for _, field := range node.Fields.Fields {
 			if field.WildCard == nil {
-				s.checkItem(field.Expr, tableInfoList)
+				s.checkItem(field.Expr, tableInfoList, "")
 			}
 		}
 	}
 
 	if node.GroupBy != nil {
 		for _, item := range node.GroupBy.Items {
-			s.checkItem(item.Expr, tableInfoList)
+			s.checkItem(item.Expr, tableInfoList, "")
 		}
 	}
 
 	if node.Having != nil {
-		s.checkItem(node.Having.Expr, tableInfoList)
+		s.checkItem(node.Having.Expr, tableInfoList, "")
 	}
 
 	if node.OrderBy != nil {
 		for _, item := range node.OrderBy.Items {
-			s.checkItem(item.Expr, tableInfoList)
+			s.checkItem(item.Expr, tableInfoList, "")
 		}
 	}
 

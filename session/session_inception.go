@@ -608,7 +608,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 				}
 			}
 		}
-		s.checkSelectItem(node, nil, false)
+		s.checkSelectItem(node, nil, false, "")
 		if s.opt.Execute {
 			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		}
@@ -621,7 +621,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 				}
 			}
 		}
-		s.checkSelectItem(node, nil, false)
+		s.checkSelectItem(node, nil, false, "")
 		if s.opt.Execute {
 			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		}
@@ -3697,7 +3697,7 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 			if s.enforeGtidConsistency {
 				s.appendErrorMsg("Statement violates GTID consistency: CREATE TABLE ... SELECT.")
 			} else {
-				s.checkSelectItem(node.Select, nil, false)
+				s.checkSelectItem(node.Select, nil, false, "")
 
 				if s.myRecord.ErrLevel < 2 {
 					table = &TableInfo{
@@ -6460,7 +6460,7 @@ func (s *session) checkCreateView(node *ast.CreateViewStmt, sql string) {
 				}
 
 			}
-			s.checkSelectItem(selectNode, nil, false)
+			s.checkSelectItem(selectNode, nil, false, "")
 
 		case *ast.SelectStmt:
 			if selectNode.Fields != nil {
@@ -6482,7 +6482,7 @@ func (s *session) checkCreateView(node *ast.CreateViewStmt, sql string) {
 					s.appendErrorNo(ErrViewColumnCount)
 				}
 			}
-			s.checkSelectItem(selectNode, nil, false)
+			s.checkSelectItem(selectNode, nil, false, "")
 		}
 
 		if !s.hasError() {
@@ -6753,7 +6753,7 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 			}
 
 			for colIndex, vv := range list {
-				s.checkItem(vv, []*TableInfo{table})
+				s.checkItem(vv, []*TableInfo{table}, "")
 
 				if v, ok := vv.(*ast.ValueExpr); ok {
 					// name := node.Columns[colIndex].Name.L
@@ -6878,7 +6878,7 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 			if !s.hasError() {
 				// 如果不是新建表时,则直接explain
 				if haveNewTable {
-					s.checkSelectItem(node.Select, nil, sel.Where != nil)
+					s.checkSelectItem(node.Select, nil, sel.Where != nil, "")
 				} else {
 					var selectSql string
 					if table.IsNew || table.IsNewColumns || s.dbVersion < 50600 {
@@ -8696,14 +8696,18 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 				// 	}
 				// }
 
-				s.checkItem(l.Expr, tableInfoList)
+				s.checkItem(l.Expr, tableInfoList, "")
 			}
 
-			s.checkSelectItem(node.TableRefs.TableRefs, nil, node.Where != nil)
+			s.checkSelectItem(node.TableRefs.TableRefs, nil, node.Where != nil, "")
 			// if node.TableRefs.TableRefs.On != nil {
 			// 	s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList)
 			// }
-			s.checkItem(node.Where, tableInfoList)
+			var commonTableInfoList string
+			if node.With != nil {
+				commonTableInfoList = node.With.CTEs[0].Name.O
+			}
+			s.checkItem(node.Where, tableInfoList, commonTableInfoList)
 
 			// 如果没有表结构,或者新增表 or 新增列时,不做explain
 			if !s.hasError() && !s.myRecord.TableInfo.IsNew && !s.myRecord.TableInfo.IsNewColumns && !haveNewTable {
@@ -8768,7 +8772,7 @@ func (s *session) checkColumnTypeImplicitConversion(e *ast.BinaryOperationExpr, 
 	}
 }
 
-func (s *session) checkItem(expr ast.ExprNode, tables []*TableInfo) bool {
+func (s *session) checkItem(expr ast.ExprNode, tables []*TableInfo, cmmonTable string) bool {
 
 	if expr == nil {
 		return true
@@ -8780,7 +8784,7 @@ func (s *session) checkItem(expr ast.ExprNode, tables []*TableInfo) bool {
 	case *ast.ColumnNameExpr:
 		s.checkFieldItem(e.Name, tables)
 		if e.Refer != nil {
-			s.checkItem(e.Refer.Expr, tables)
+			s.checkItem(e.Refer.Expr, tables, cmmonTable)
 		}
 
 	case *ast.BinaryOperationExpr:
@@ -8788,78 +8792,78 @@ func (s *session) checkItem(expr ast.ExprNode, tables []*TableInfo) bool {
 			s.checkColumnTypeImplicitConversion(e, tables)
 		}
 
-		return s.checkItem(e.L, tables) && s.checkItem(e.R, tables)
+		return s.checkItem(e.L, tables, cmmonTable) && s.checkItem(e.R, tables, cmmonTable)
 
 	case *ast.UnaryOperationExpr:
-		return s.checkItem(e.V, tables)
+		return s.checkItem(e.V, tables, cmmonTable)
 
 	case *ast.FuncCallExpr:
 		return s.checkFuncItem(e, tables)
 
 	case *ast.FuncCastExpr:
-		return s.checkItem(e.Expr, tables)
+		return s.checkItem(e.Expr, tables, cmmonTable)
 
 	case *ast.AggregateFuncExpr:
 		return s.checkAggregateFuncItem(e, tables)
 
 	case *ast.PatternInExpr:
-		s.checkItem(e.Expr, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
 		for _, expr := range e.List {
-			s.checkItem(expr, tables)
+			s.checkItem(expr, tables, cmmonTable)
 		}
 		if e.Sel != nil {
-			s.checkItem(e.Sel, tables)
+			s.checkItem(e.Sel, tables, cmmonTable)
 		}
 	case *ast.PatternLikeExpr:
-		s.checkItem(e.Expr, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
 	case *ast.PatternRegexpExpr:
-		s.checkItem(e.Expr, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
 
 	case *ast.SubqueryExpr:
-		s.checkSelectItem(e.Query, tables, false)
+		s.checkSelectItem(e.Query, tables, false, cmmonTable)
 
 	case *ast.CompareSubqueryExpr:
-		s.checkItem(e.L, tables)
-		s.checkItem(e.R, tables)
+		s.checkItem(e.L, tables, cmmonTable)
+		s.checkItem(e.R, tables, cmmonTable)
 
 	case *ast.ExistsSubqueryExpr:
-		s.checkSelectItem(e.Sel, tables, false)
+		s.checkSelectItem(e.Sel, tables, false, cmmonTable)
 
 	case *ast.IsNullExpr:
-		s.checkItem(e.Expr, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
 	case *ast.IsTruthExpr:
-		s.checkItem(e.Expr, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
 
 	case *ast.BetweenExpr:
-		s.checkItem(e.Expr, tables)
-		s.checkItem(e.Left, tables)
-		s.checkItem(e.Right, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
+		s.checkItem(e.Left, tables, cmmonTable)
+		s.checkItem(e.Right, tables, cmmonTable)
 
 	case *ast.CaseExpr:
-		s.checkItem(e.Value, tables)
+		s.checkItem(e.Value, tables, cmmonTable)
 		for _, when := range e.WhenClauses {
-			s.checkItem(when.Expr, tables)
-			s.checkItem(when.Result, tables)
+			s.checkItem(when.Expr, tables, cmmonTable)
+			s.checkItem(when.Result, tables, cmmonTable)
 		}
-		s.checkItem(e.ElseClause, tables)
+		s.checkItem(e.ElseClause, tables, cmmonTable)
 
 	case *ast.DefaultExpr:
 		// s.checkFieldItem(e.Name, tables)
 		// pass
 
 	case *ast.ParenthesesExpr:
-		s.checkItem(e.Expr, tables)
+		s.checkItem(e.Expr, tables, cmmonTable)
 
 	case *ast.RowExpr:
 		for _, expr := range e.Values {
-			s.checkItem(expr, tables)
+			s.checkItem(expr, tables, cmmonTable)
 		}
 
 	case *ast.ValuesExpr:
 		s.checkFieldItem(e.Column.Name, tables)
 
 	case *ast.VariableExpr:
-		s.checkItem(e.Value, tables)
+		s.checkItem(e.Value, tables, cmmonTable)
 
 	case *ast.ValueExpr, *ast.ParamMarkerExpr, *ast.PositionExpr:
 		// pass
@@ -8940,7 +8944,7 @@ func (s *session) checkFieldItem(name *ast.ColumnName, tables []*TableInfo) bool
 func (s *session) checkFuncItem(f *ast.FuncCallExpr, tables []*TableInfo) bool {
 
 	for _, arg := range f.Args {
-		s.checkItem(arg, tables)
+		s.checkItem(arg, tables, "")
 	}
 
 	// log.Info(f.FnName.L)
@@ -8959,7 +8963,7 @@ func (s *session) checkFuncItem(f *ast.FuncCallExpr, tables []*TableInfo) bool {
 func (s *session) checkAggregateFuncItem(f *ast.AggregateFuncExpr, tables []*TableInfo) bool {
 
 	for _, arg := range f.Args {
-		s.checkItem(arg, tables)
+		s.checkItem(arg, tables, "")
 	}
 
 	// log.Info(f.F)
@@ -9050,13 +9054,17 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	}
 
 	if node.TableRefs.TableRefs.On != nil {
-		s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList)
+		s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList, "")
 	}
 	// if node.BeforeFrom {
 	// 	s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList)
 	// }
 	if s.myRecord.TableInfo != nil && !s.hasError() {
-		s.checkItem(node.Where, tableInfoList)
+		var commonTableInfoList string
+		if node.With != nil {
+			commonTableInfoList = node.With.CTEs[0].Name.O
+		}
+		s.checkItem(node.Where, tableInfoList, commonTableInfoList)
 	}
 
 	if !s.hasError() {
@@ -9773,7 +9781,7 @@ func (s *session) buildNewColumnToCache(t *TableInfo, field *ast.ColumnDef) *Fie
 
 // checkSelectItem 子句递归检查
 func (s *session) checkSelectItem(node ast.ResultSetNode,
-	outerTables []*TableInfo, hasWhere bool) []*TableInfo {
+	outerTables []*TableInfo, hasWhere bool, cmmonTable string) []*TableInfo {
 	if node == nil {
 		return nil
 	}
@@ -9801,14 +9809,26 @@ func (s *session) checkSelectItem(node ast.ResultSetNode,
 		}
 
 	case *ast.SelectStmt:
+		var tableList []*ast.TableSource
+		if x.From != nil {
+			tableList = extractTableList(x.From.TableRefs, tableList)
+			for _, tblSource := range tableList {
+				switch x := tblSource.Source.(type) {
+				case *ast.TableName:
+					if x.Name.O == cmmonTable {
+						return nil
+					}
+				}
+			}
+		}
 		return s.checkSubSelectItem(x, outerTables)
 
 	case *ast.Join:
-		tableInfoList := s.checkSelectItem(x.Left, nil, false)
-		tableInfoList = append(tableInfoList, s.checkSelectItem(x.Right, nil, false)...)
+		tableInfoList := s.checkSelectItem(x.Left, nil, false, cmmonTable)
+		tableInfoList = append(tableInfoList, s.checkSelectItem(x.Right, nil, false, cmmonTable)...)
 
 		if x.On != nil {
-			s.checkItem(x.On.Expr, tableInfoList)
+			s.checkItem(x.On.Expr, tableInfoList, "")
 		} else if x.Right != nil {
 			// 没有任何where条件时
 			if !hasWhere && !x.NaturalJoin && !x.StraightJoin && x.Using == nil {
@@ -9846,7 +9866,7 @@ func (s *session) checkSelectItem(node ast.ResultSetNode,
 			}
 
 		case *ast.SetOprStmt:
-			s.checkSelectItem(tblSource, nil, false)
+			s.checkSelectItem(tblSource, nil, false, cmmonTable)
 
 			cols := s.getSubSelectColumns(tblSource)
 			if cols != nil {
@@ -9863,7 +9883,7 @@ func (s *session) checkSelectItem(node ast.ResultSetNode,
 			}
 
 		default:
-			return s.checkSelectItem(tblSource, nil, false)
+			return s.checkSelectItem(tblSource, nil, false, cmmonTable)
 		}
 
 	default:
@@ -9926,23 +9946,23 @@ func (s *session) checkSubSelectItem(node *ast.SelectStmt, outerTables []*TableI
 			}
 		default:
 			log.Infof("con:%d %T", s.sessionVars.ConnectionID, x)
-			tableInfoList = append(tableInfoList, s.checkSelectItem(tblSource, nil, false)...)
+			tableInfoList = append(tableInfoList, s.checkSelectItem(tblSource, nil, false, "")...)
 		}
 	}
 
 	if node.Fields != nil {
 		for _, field := range node.Fields.Fields {
 			if field.WildCard == nil {
-				s.checkItem(field.Expr, tableInfoList)
+				s.checkItem(field.Expr, tableInfoList, "")
 			}
 		}
 	}
 
 	if node.From != nil && node.From.TableRefs.On != nil {
-		s.checkItem(node.From.TableRefs.On.Expr, tableInfoList)
+		s.checkItem(node.From.TableRefs.On.Expr, tableInfoList, "")
 	}
 
-	s.checkItem(node.Where, append(tableInfoList, outerTables...))
+	s.checkItem(node.Where, append(tableInfoList, outerTables...), "")
 
 	// var outerTableList []*TableInfo
 	// if node.GroupBy != nil ||
@@ -9993,7 +10013,7 @@ func (s *session) checkSubSelectItem(node *ast.SelectStmt, outerTables []*TableI
 	if node.GroupBy != nil {
 		s.checkAmbiguous = false
 		for _, item := range node.GroupBy.Items {
-			s.checkItem(item.Expr, groupTables)
+			s.checkItem(item.Expr, groupTables, "")
 		}
 		s.checkAmbiguous = true
 	}
@@ -10015,13 +10035,13 @@ func (s *session) checkSubSelectItem(node *ast.SelectStmt, outerTables []*TableI
 	}
 
 	if node.Having != nil {
-		s.checkItem(node.Having.Expr, tableInfoList)
+		s.checkItem(node.Having.Expr, tableInfoList, "")
 	}
 
 	if node.OrderBy != nil {
 		s.checkAmbiguous = false
 		for _, item := range node.OrderBy.Items {
-			s.checkItem(item.Expr, tableInfoList)
+			s.checkItem(item.Expr, tableInfoList, "")
 		}
 		s.checkAmbiguous = true
 	}
