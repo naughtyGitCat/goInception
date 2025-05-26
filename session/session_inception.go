@@ -3419,17 +3419,18 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				}
 				checkDup[c.Name.Name.L] = true
 				//检查列默认值指定列
-				if s.dbVersion > 80000 {
-					for _, op := range c.Options {
-						if op.Tp == ast.ColumnOptionDefaultValue {
-							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
-								if _, ok := checkDup[f.FnName.L]; !ok {
-									s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
+				/*
+					if s.dbVersion > 80000 {
+						for _, op := range c.Options {
+							if op.Tp == ast.ColumnOptionDefaultValue {
+								if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+									if _, ok := checkDup[f.FnName.L]; !ok {
+										s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
+									}
 								}
 							}
 						}
-					}
-				}
+					}*/
 			}
 
 			hasComment := false
@@ -6948,7 +6949,7 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 }
 
 // getTableList 根据表对象获取访问的所有表，并判断是否存在新表以避免explain失败
-func (s *session) getTableList(tableList []*ast.TableSource) ([]*TableInfo, bool) {
+func (s *session) getTableList(tableList []*ast.TableSource, cmmonTable string) ([]*TableInfo, bool) {
 	var tableInfoList []*TableInfo
 
 	// 判断select中是否有新表
@@ -6956,6 +6957,16 @@ func (s *session) getTableList(tableList []*ast.TableSource) ([]*TableInfo, bool
 	for _, tblSource := range tableList {
 		tblName, ok := tblSource.Source.(*ast.TableName)
 		if ok {
+			if tblName.Name.O == cmmonTable {
+				t := &TableInfo{
+					Schema: tblName.Schema.O,
+					Name:   tblName.Name.O,
+					AsName: tblSource.AsName.O,
+					IsCte:  true,
+				}
+				tableInfoList = append(tableInfoList, t.copy())
+				return tableInfoList, haveNewTable
+			}
 			t := s.getTableFromCache(tblName.Schema.O, tblName.Name.O, true)
 			if t != nil {
 				if tblSource.AsName.L != "" {
@@ -8575,6 +8586,12 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 	}
 
 	var tableList []*ast.TableSource
+	var commonTableInfoList string
+
+	if node.With != nil {
+		commonTableInfoList = node.With.CTEs[0].Name.O
+	}
+
 	tableList = extractTableList(node.TableRefs.TableRefs, tableList)
 
 	var tableInfoList []*TableInfo
@@ -8599,6 +8616,10 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 				tableInfoList = append(tableInfoList, t)
 			}
 			continue
+		}
+
+		if tblName.Name.O == commonTableInfoList {
+			return
 		}
 
 		t := s.getTableFromCache(tblName.Schema.O, tblName.Name.O, true)
@@ -8703,10 +8724,7 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 			// if node.TableRefs.TableRefs.On != nil {
 			// 	s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList)
 			// }
-			var commonTableInfoList string
-			if node.With != nil {
-				commonTableInfoList = node.With.CTEs[0].Name.O
-			}
+
 			s.checkItem(node.Where, tableInfoList, commonTableInfoList)
 
 			// 如果没有表结构,或者新增表 or 新增列时,不做explain
@@ -8890,7 +8908,9 @@ func (s *session) checkFieldItem(name *ast.ColumnName, tables []*TableInfo) bool
 		} else {
 			tName = t.Name
 		}
-
+		if t.IsCte {
+			return true
+		}
 		if name.Table.L != "" {
 			if name.Table.L != "" && (db == "" || strings.EqualFold(t.Schema, db)) &&
 				(strings.EqualFold(tName, name.Table.L)) {
@@ -8987,6 +9007,12 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	// }
 
 	var tableList []*ast.TableSource
+	var commonTableInfoList string
+
+	if node.With != nil {
+		commonTableInfoList = node.With.CTEs[0].Name.O
+	}
+
 	tableList = extractTableList(node.TableRefs.TableRefs, tableList)
 
 	// var tableInfoList []*TableInfo
@@ -9008,7 +9034,7 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	// 	}
 	// }
 
-	tableInfoList, hasNew := s.getTableList(tableList)
+	tableInfoList, hasNew := s.getTableList(tableList, commonTableInfoList)
 
 	if node.Tables == nil {
 		if s.myRecord.TableInfo == nil && len(tableInfoList) > 0 {
@@ -9054,16 +9080,12 @@ func (s *session) checkDelete(node *ast.DeleteStmt, sql string) {
 	}
 
 	if node.TableRefs.TableRefs.On != nil {
-		s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList, "")
+		s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList, commonTableInfoList)
 	}
 	// if node.BeforeFrom {
 	// 	s.checkItem(node.TableRefs.TableRefs.On.Expr, tableInfoList)
 	// }
 	if s.myRecord.TableInfo != nil && !s.hasError() {
-		var commonTableInfoList string
-		if node.With != nil {
-			commonTableInfoList = node.With.CTEs[0].Name.O
-		}
 		s.checkItem(node.Where, tableInfoList, commonTableInfoList)
 	}
 

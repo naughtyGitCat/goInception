@@ -319,6 +319,7 @@ type TableInfo struct {
 	Options       []*TableOptionInfo
 	// row size limit
 	RowSize int
+	IsCte   bool
 }
 
 // BackupTable 表$_$inception_backup_information$_$相关信息
