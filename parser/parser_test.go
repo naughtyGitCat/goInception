@@ -1113,6 +1113,8 @@ func (s *testParserSuite) TestBuiltin(c *C) {
 		{"SELECT CAST(data AS BINARY)", true, "SELECT CAST(`data` AS BINARY)"},
 		// for cast as JSON
 		{"SELECT *, CAST(data AS JSON) FROM t;", true, "SELECT *,CAST(`data` AS JSON) FROM `t`"},
+		// for cast as number
+		{"SELECT CAST(data AS NUMBER(10,2)) FROM t;", true, "SELECT CAST(`data` AS NUMBER(10,2)) FROM `t`"},
 		//
 		{`SELECT 1 member of (a)`, true, "SELECT 1 MEMBER OF (`a`)"},
 		{`SELECT 1 member of a`, false, ""},

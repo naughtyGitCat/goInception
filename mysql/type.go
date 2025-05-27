@@ -46,6 +46,7 @@ const (
 	TypeString            byte = 0xfe
 	TypeGeometry          byte = 0xff
 	TypeTiDBVectorFloat32 byte = 0xe1
+	TypeNewNumber         byte = 0xe2
 )
 
 // TypeUnspecified is an uninitialized type. TypeDecimal is not used in MySQL.

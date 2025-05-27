@@ -214,6 +214,7 @@ import (
 	noWriteToBinLog   "NO_WRITE_TO_BINLOG"
 	null              "NULL"
 	numericType       "NUMERIC"
+	numberType        "NUMBER"
 	of                "OF"
 	nvarcharType      "NVARCHAR"
 	nthValue          "NTH_VALUE"
@@ -7353,6 +7354,17 @@ CastType:
 	{
 		fopt := $2.(*ast.FloatOpt)
 		x := types.NewFieldType(mysql.TypeNewDecimal)
+		x.Flen = fopt.Flen
+		x.Decimal = fopt.Decimal
+		x.Charset = charset.CharsetBin
+		x.Collate = charset.CollationBin
+		x.Flag |= mysql.BinaryFlag
+		$$ = x
+	}
+|	"NUMBER" FloatOpt
+	{
+		fopt := $2.(*ast.FloatOpt)
+		x := types.NewFieldType(mysql.TypeNewNumber)
 		x.Flen = fopt.Flen
 		x.Decimal = fopt.Decimal
 		x.Charset = charset.CharsetBin
