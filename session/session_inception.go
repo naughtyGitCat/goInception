@@ -981,7 +981,6 @@ func (s *session) executeAllStatement(ctx context.Context) {
 	// 用于事务. 判断是否为DML语句
 	// lastIsDMLTrans := false
 	for i, record := range s.recordSets.All() {
-
 		// 忽略不需要备份的类型
 		switch record.Type.(type) {
 		case *ast.ShowStmt, *ast.ExplainStmt:
@@ -1010,33 +1009,33 @@ func (s *session) executeAllStatement(ctx context.Context) {
 					}
 				}
 
-				// lastIsDMLTrans = true
-			case *ast.UseStmt, *ast.SetStmt:
-				// 环境命令
-				// 事务内部和非事务均需要执行
-				// log.Infof("1111: [%s] [%d] %s,RowsAffected: %d", s.DBName, s.fetchThreadID(), record.Sql, record.AffectedRows)
-				_, err := s.execDDL(record.Sql, true)
-				if err != nil {
-					// log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
-					if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-						s.appendErrorMsg(myErr.Message)
-					} else {
-						s.appendErrorMsg(err.Error())
+			/*	// lastIsDMLTrans = true
+				case *ast.UseStmt, *ast.SetStmt:
+					// 环境命令
+					// 事务内部和非事务均需要执行
+					// log.Infof("1111: [%s] [%d] %s,RowsAffected: %d", s.DBName, s.fetchThreadID(), record.Sql, record.AffectedRows)
+					_, err := s.execDDL(record.Sql, true)
+					if err != nil {
+						// log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+						if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+							s.appendErrorMsg(myErr.Message)
+						} else {
+							s.appendErrorMsg(err.Error())
+						}
+						break
 					}
-					break
-				}
 
-				// s.executeRemoteCommand(record)
+					// s.executeRemoteCommand(record)
 
-				if len(trans) < s.opt.tranBatch {
-					trans = append(trans, record)
-				} else {
-					s.executeTransaction(trans)
+					if len(trans) < s.opt.tranBatch {
+						trans = append(trans, record)
+					} else {
+						s.executeTransaction(trans)
 
-					trans = nil
-					trans = append(trans, record)
-				}
-
+						trans = nil
+						trans = append(trans, record)
+					}
+			*/
 			default:
 				if len(trans) > 0 {
 					s.executeTransaction(trans)
@@ -1109,10 +1108,6 @@ func mysqlSleep(ms int) {
 
 	for end := time.Now().Add(time.Duration(ms) * time.Millisecond); time.Now().Before(end); {
 	}
-
-	return
-
-	// time.Sleep(time.Duration(ms) * time.Millisecond)
 }
 
 func (s *session) executeTransaction(records []*Record) int {
@@ -1356,7 +1351,7 @@ func (s *session) executeRemoteCommand(record *Record, isTran bool) int {
 		*ast.DropMaterializedViewLogStmt,
 		*ast.TriggerInfo,
 		*ast.DropTriggerStmt:
-		s.executeRemoteStatement(record, isTran)
+		s.executeRemoteStatement(record, false)
 
 	default:
 		log.Warnf("无匹配类型: %T\n", node)
