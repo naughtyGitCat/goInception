@@ -68,7 +68,7 @@ func (s *testParserSuite) TestSimple(c *C) {
 		"generated", "virtual", "stored", "usage",
 		"delayed", "high_priority", "low_priority",
 		"rowNumber", "window", "groups", "rows", "over", "cumeDist", "denseRank", "firstValue",
-		"lag", "lastValue", "lead", "nthValue", "ntile", "percentRank", "rank",
+		"lag", "lastValue", "lead", "nthValue", "ntile", "percentRank", "rank", "error",
 		// TODO: support the following keywords
 		// "with",
 	}
@@ -499,7 +499,17 @@ func (s *testParserSuite) TestDMLStmt(c *C) {
 		{"select straight_join * from t1 left join t2 on t1.id = t2.id", true, "SELECT STRAIGHT_JOIN * FROM `t1` LEFT JOIN `t2` ON `t1`.`id`=`t2`.`id`"},
 		{"select straight_join * from t1 right join t2 on t1.id = t2.id", true, "SELECT STRAIGHT_JOIN * FROM `t1` RIGHT JOIN `t2` ON `t1`.`id`=`t2`.`id`"},
 		{"select straight_join * from t1 straight_join t2 on t1.id = t2.id", true, "SELECT STRAIGHT_JOIN * FROM `t1` STRAIGHT_JOIN `t2` ON `t1`.`id`=`t2`.`id`"},
-
+		// for json_table
+		{"SELECT * FROM JSON_TABLE('{\"a\":\"3\"}', '$.*' columns (cc int path '$.c1')) as ts;", true, "SELECT * FROM JSON_TABLE('{\"a\":\"3\"}', '$.*' COLUMNS(cc INT PATH '$.C1')) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc for ordinality)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc FOR ORDINALITY)) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (bx int exists path '$.b')) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(BX INT EXISTS PATH '$.b')) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (nested path '$.b[*]' columns(bpath varchar(10) path '$.c', nested path '$.l[*]' columns (lpath varchar(10) path '$')))) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(NESTED PATH '$.b[*]' COLUMNS(bpath VARCHAR(10) PATH '$.c', NESTED PATH '$.l[*]' COLUMNS (lpath VARCHAR(10) PATH '$')))) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc int path '$.c1' default '{\"a\":123}' on empty)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc INT PATH '$.C1' DEFAULT '{\"a\":123}' ON EMPTY)) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc int path '$.c1' default '{\"a\":123}' on error)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc INT PATH '$.C1' DEFAULT '{\"a\":123}' ON ERROR)) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc int path '$.c1' null on empty)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc INT PATH '$.C1' NULL ON EMPTY)) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc int path '$.c1' null on error)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc INT PATH '$.C1' NULL ON ERROR)) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc int path '$.c1' default '{\"a\":123}' on empty default '{\"a\":123}' on error)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc INT PATH '$.C1' DEFAULT '{\"a\":123}' ON EMPTY DEFAULT '{\"a\":123}' ON ERROR)) AS TS"},
+		{"SELECT * FROM JSON_TABLE('[a]', '$.*' columns (cc int path '$.c1' null on empty null on error)) as ts;", true, "SELECT * FROM JSON_TABLE('[A]', '$.*' COLUMNS(cc INT PATH '$.C1' NULL ON EMPTY NULL ON ERROR)) AS TS"},
 		// delete statement
 		// single table syntax
 		{"DELETE from t1", true, "DELETE FROM `t1`"},

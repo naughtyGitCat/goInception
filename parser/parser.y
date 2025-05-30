@@ -227,6 +227,7 @@ import (
 	out               "OUT"
 	outer             "OUTER"
 	over              "OVER"
+	ordinality        "ORDINALITY"
 	parallel          "PARALLEL"
 	noparallel        "NOPARALLEL"
 	percentRank       "PERCENT_RANK"
@@ -317,6 +318,8 @@ import (
 	zerofill          "ZEROFILL"
 	natural           "NATURAL"
 	global            "GLOBAL"
+	jsonTable    	  "JSON_TABLE"
+	path      		  "PATH"
 	/* The following tokens belong to UnReservedKeyword. */
 	action                 "ACTION"
 	after                  "AFTER"
@@ -403,6 +406,7 @@ import (
 	execute                "EXECUTE"
 	expansion		       "EXPANSION"
 	excluding		       "EXCLUDING"
+	empty   			   "EMPTY"
 	fields                 "FIELDS"
 	first                  "FIRST"
 	fixed                  "FIXED"
@@ -458,6 +462,7 @@ import (
 	next                   "NEXT"
 	nextval                "NEXTVAL"
 	newKwd                 "NEW"
+	nested                 "NESTED"
 	national               "NATIONAL"
 	no                     "NO"
 	nocycle        	       "NOCYCLE"
@@ -571,6 +576,7 @@ import (
 	warnings               "WARNINGS"
 	without                "WITHOUT"
 	identSQLErrors         "ERRORS"
+	errorkwd 			   "ERROR"
 	week                   "WEEK"
 	yearType               "YEAR"
 	wait                   "WAIT"
@@ -853,6 +859,9 @@ import (
 	CollationName                 "Collation name"
 	ColumnDef                     "table column definition"
 	ColumnDefList                 "table column definition list"
+	JsonColumnDef                 "json table column definition"
+	JsonColumnDefList             "json table column definition list"
+	JsonColumnopt          	      "json table column opt"
 	ColumnName                    "column name"
 	ColumnNameList                "column name list"
 	ColumnList                    "column list"
@@ -1222,6 +1231,8 @@ import (
 	Char              "{CHAR|CHARACTER}"
 	CurdateSym        "CURDATE or CURRENT_DATE"
 	DefaultKwdOpt     "optional DEFAULT keyword"
+	ErrorKwdOpt       "optional ERROR keyword"
+	EmptyErrorKwdOpt  "optional EMPTY or ERROR keyword"
 	DatabaseSym       "DATABASE or SCHEMA"
 	ExplainSym        "EXPLAIN or DESCRIBE or DESC"
 	RegexpSym         "REGEXP or RLIKE"
@@ -1292,6 +1303,7 @@ import (
 %precedence remove
 %precedence lowerThenOrder
 %precedence order
+
 
 
 /* A dummy token to force the priority of TableRef production in a join. */
@@ -5656,6 +5668,7 @@ UnReservedKeyword:
 |	"ENGINES"
 |	"ENUM"
 |	"ERRORS"
+| 	"ERROR"
 |	"ESCAPE"
 |	"EXECUTE"
 |	"FIELDS"
@@ -5843,6 +5856,7 @@ UnReservedKeyword:
 |	"AGAINST"
 |	"EXPANSION"
 |	"EXCLUDING"
+|	"EMPTY"
 |	"LANGUAGE"
 |	"BERNOULLI"
 |	"PERCENT"
@@ -5864,6 +5878,7 @@ UnReservedKeyword:
 |	"LASTVAL"
 |	"SETVAL"
 |	"VECTOR"
+|	"NESTED"
 
 TiDBKeyword:
 	"ADMIN"
@@ -8299,6 +8314,74 @@ TableFactor:
 		j.ExplicitParens = true
 		$$ = $2
 	}
+| "JSON_TABLE" '(' Expression ',' Expression "COLUMNS" '(' JsonColumnDefList ')' ')' TableAsNameOpt
+	{	
+		tn := &ast.FuncCallExpr{
+			FnName: model.NewCIStr($1),
+		}
+		ts := &ast.TableSource{}
+		ts.Source = tn
+		ts.AsName = $11.(model.CIStr)
+		$$ = ts
+	}
+
+JsonColumnDefList:
+	JsonColumnDef
+	{
+		$$ = []*ast.ColumnDef{$1.(*ast.ColumnDef)}
+	}
+|	JsonColumnDefList ',' JsonColumnDef
+	{
+		$$ = append($1.([]*ast.ColumnDef), $3.(*ast.ColumnDef))
+	}
+
+JsonColumnDef:
+	ColumnName "FOR" "ORDINALITY"
+	{
+		$$ = &ast.ColumnDef{Name: $1.(*ast.ColumnName)}
+	}
+|	ColumnName Type "PATH" stringLit JsonColumnopt
+	{
+		$$ = &ast.ColumnDef{Name: $1.(*ast.ColumnName), Tp: $2.(*types.FieldType)}
+	}
+|	ColumnName Type "EXISTS" "PATH" stringLit 
+	{
+		$$ = &ast.ColumnDef{Name: $1.(*ast.ColumnName), Tp: $2.(*types.FieldType)}
+	}
+|	"NESTED" "PATH" stringLit "COLUMNS" '(' JsonColumnDefList ')'
+	{
+		$$ = &ast.ColumnDef{}
+	}
+
+
+JsonColumnopt:
+	{}
+|	"DEFAULT" stringLit ErrorKwdOpt "ON" EmptyErrorKwdOpt
+	{
+		$$ = nil
+	}
+|	"DEFAULT" stringLit ErrorKwdOpt "ON" EmptyErrorKwdOpt "DEFAULT" stringLit ErrorKwdOpt "ON" EmptyErrorKwdOpt
+	{
+		$$ = nil
+	}	
+|	"NULL" ErrorKwdOpt "ON" EmptyErrorKwdOpt
+	{
+		$$ = nil
+	}
+|	"NULL" ErrorKwdOpt "ON" EmptyErrorKwdOpt "NULL" ErrorKwdOpt "ON" EmptyErrorKwdOpt
+	{
+		$$ = nil
+	}
+
+EmptyErrorKwdOpt:
+	{}
+|	"ERROR"
+|	"EMPTY"
+
+
+ErrorKwdOpt:
+	{}
+|	"ERROR"
 
 PartitionNameListOpt:
 	/* empty */
