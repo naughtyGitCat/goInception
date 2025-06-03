@@ -3414,18 +3414,20 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				}
 				checkDup[c.Name.Name.L] = true
 				//检查列默认值指定列
-				/*
-					if s.dbVersion > 80000 {
-						for _, op := range c.Options {
-							if op.Tp == ast.ColumnOptionDefaultValue {
-								if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+
+				if s.dbVersion > 80000 {
+					for _, op := range c.Options {
+						if op.Tp == ast.ColumnOptionDefaultValue {
+							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
+								if !IsCurrentTimestampExpr(op.Expr) {
 									if _, ok := checkDup[f.FnName.L]; !ok {
 										s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
 									}
 								}
 							}
 						}
-					}*/
+					}
+				}
 			}
 
 			hasComment := false
@@ -4784,8 +4786,9 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 					}
 				}
 			}
+
 			if s.dbVersion > 80000 {
-				if !foundDefaultValue {
+				if !foundDefaultValue && foundDefaultName != "" {
 					s.appendErrorNo(ER_INVALID_DEFAULT, foundDefaultName)
 				}
 			}

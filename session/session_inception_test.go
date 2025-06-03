@@ -450,7 +450,7 @@ func (s *testSessionIncSuite) TestCreateTable(c *C) {
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ER_INVALID_DEFAULT, "c1"))
 
-	sql = "create table t1(id int,c1 varchar(10), c3 default(c1));"
+	sql = "create table t1(id int,c1 varchar(10), c3 int default(c1));"
 	if s.DBVersion > 80000 {
 		s.testErrorCode(c, sql)
 	}
