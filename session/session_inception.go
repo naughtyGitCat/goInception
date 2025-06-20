@@ -5916,8 +5916,10 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 						//检查列默认值指定列
 						if s.dbVersion > 80000 {
 							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
-								if _, ok := checkDefaultExpr[f.FnName.L]; !ok {
-									s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
+								if !IsCurrentTimestampExpr(op.Expr) {
+									if _, ok := checkDefaultExpr[f.FnName.L]; !ok {
+										s.appendErrorNo(ER_INVALID_DEFAULT, f.FnName.L)
+									}
 								}
 							}
 						}

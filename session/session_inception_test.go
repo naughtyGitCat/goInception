@@ -1343,6 +1343,11 @@ func (s *testSessionIncSuite) TestAlterTableAddColumn(c *C) {
 		alter table t1 add column c2 int auto_increment;`
 	s.testErrorCode(c, sql,
 		session.NewErrf("Incorrect table definition; there can be only one auto column and it must be defined as a key."))
+
+	sql = `drop table if exists t1;
+		create table t1(id int);
+		alter table t1 add column c1 datetime default current_timestamp;`
+	s.testErrorCode(c, sql)
 }
 
 func (s *testSessionIncSuite) TestAlterTableRenameColumn(c *C) {
@@ -1603,6 +1608,14 @@ func (s *testSessionIncSuite) TestAlterTableModifyColumn(c *C) {
 	config.GetGlobalConfig().Inc.EnableIdentiferKeyword = false
 	s.mustRunExec(c, "drop table if exists t1;create table t1(id int not null,`alter` int);")
 	sql = "alter table t1 modify `alter` bigint;"
+	s.testErrorCode(c, sql)
+
+	s.mustRunExec(c, "drop table if exists t1;create table t1(c1 varchar(10));")
+	sql = "alter table t1 modify column c1 varchar(10) not null default '';"
+	s.testErrorCode(c, sql)
+
+	s.mustRunExec(c, "drop table if exists t1;create table t1(c1 datetime);")
+	sql = "alter table t1 modify column c1 datetime not null default current_timestamp;"
 	s.testErrorCode(c, sql)
 }
 
