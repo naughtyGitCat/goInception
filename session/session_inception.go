@@ -4776,10 +4776,12 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 					for _, op := range nc.Options {
 						if op.Tp == ast.ColumnOptionDefaultValue {
 							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
-								if strings.EqualFold(field.Field, f.FnName.L) {
-									foundDefaultValue = true
-								} else {
-									foundDefaultName = f.FnName.L
+								if !IsCurrentTimestampExpr(op.Expr) {
+									if strings.EqualFold(field.Field, f.FnName.L) {
+										foundDefaultValue = true
+									} else {
+										foundDefaultName = f.FnName.L
+									}
 								}
 							}
 						}
@@ -4920,10 +4922,12 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 					for _, op := range nc.Options {
 						if op.Tp == ast.ColumnOptionDefaultValue {
 							if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
-								if strings.EqualFold(field.Field, f.FnName.L) {
-									foundDefaultValue = true
-								} else {
-									foundDefaultName = f.FnName.L
+								if !IsCurrentTimestampExpr(op.Expr) {
+									if strings.EqualFold(field.Field, f.FnName.L) {
+										foundDefaultValue = true
+									} else {
+										foundDefaultName = f.FnName.L
+									}
 								}
 							}
 						}
@@ -4939,7 +4943,7 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			if !oldFound {
 				s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", t.Name, c.OldColumnName.Name.O))
 			}
-			if s.dbVersion > 80000 {
+			if s.dbVersion > 80000 && foundDefaultName != "" {
 				if !foundDefaultValue {
 					s.appendErrorNo(ER_INVALID_DEFAULT, foundDefaultName)
 				}
