@@ -1800,7 +1800,13 @@ func (s *session) executeRemoteStatementAndBackup(record *Record) {
 func (s *session) mysqlFetchMasterBinlogPosition() *MasterStatus {
 	log.Debug("mysqlFetchMasterBinlogPosition")
 
-	sql := "SHOW MASTER STATUS;"
+	var sql string
+	if s.dbVersion > 80400 {
+		sql = "SHOW BINARY LOG STATUS;"
+	} else {
+		sql = "SHOW MASTER STATUS;"
+	}
+
 	if s.isMiddleware() {
 		sql = s.opt.middlewareExtend + sql
 	}
