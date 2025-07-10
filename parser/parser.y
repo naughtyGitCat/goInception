@@ -390,6 +390,7 @@ import (
 	discard                "DISCARD"
 	do                     "DO"
 	duplicate              "DUPLICATE"
+	duplicateScope         "DUPLICATE_SCOPE"
 	dynamic                "DYNAMIC"
 	last				   "LAST"
 	lastval                "LASTVAL"
@@ -5662,6 +5663,7 @@ UnReservedKeyword:
 |	"DEALLOCATE"
 |	"DO"
 |	"DUPLICATE"
+|   "DUPLICATE_SCOPE"
 |	"DYNAMIC"
 |	"END"
 |	"ENGINE"
@@ -10392,6 +10394,10 @@ TableOption:
 |	"TABLE_MODE" eq StringName
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionTableMode, StrValue: $3.(string)}
+	}
+|	"DUPLICATE_SCOPE" eq StringName
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionDuplicateScope, StrValue: $3.(string)}
 	}
 
 ForceOpt:

@@ -2864,6 +2864,7 @@ const (
 	TableOptionNoParallel
 	TableOptionParallel
 	TableOptionTableMode
+	TableOptionDuplicateScope
 	TableOptionPlacementPrimaryRegion       = TableOptionType(PlacementOptionPrimaryRegion)
 	TableOptionPlacementRegions             = TableOptionType(PlacementOptionRegions)
 	TableOptionPlacementFollowerCount       = TableOptionType(PlacementOptionFollowerCount)
@@ -3148,6 +3149,10 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("BROADCAST")
 	case TableOptionTableMode:
 		ctx.WriteKeyWord("TABLE_MODE ")
+		ctx.WritePlain("= ")
+		ctx.WriteString(n.StrValue)
+	case TableOptionDuplicateScope:
+		ctx.WriteKeyWord("DUPLICATE_SCOPE ")
 		ctx.WritePlain("= ")
 		ctx.WriteString(n.StrValue)
 	default:

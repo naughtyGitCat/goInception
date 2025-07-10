@@ -282,6 +282,7 @@ var tokenMap = map[string]int{
 	"DROP":                     drop,
 	"DUAL":                     dual,
 	"DUPLICATE":                duplicate,
+	"DUPLICATE_SCOPE":          duplicateScope,
 	"DYNAMIC":                  dynamic,
 	"EACH":                     each,
 	"ELSE":                     elseKwd,
