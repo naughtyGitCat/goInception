@@ -840,6 +840,19 @@ primary key(id)) comment 'test';`
 		sql = `CREATE TABLE t1(c1 json COMMENT '日志记录') ENGINE = InnoDB DEFAULT CHARSET = utf8 COMMENT ='xxx';`
 		s.testErrorCode(c, sql)
 	}
+	// 检查空间数据类似默认值
+	sql = `CREATE TABLE t1(c1 geometry DEFAULT '') ENGINE = InnoDB DEFAULT CHARSET = utf8 COMMENT ='xxx';`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_BLOB_CANT_HAVE_DEFAULT, "c1"))
+	sql = `CREATE TABLE t1(c1 point DEFAULT '') ENGINE = InnoDB DEFAULT CHARSET = utf8 COMMENT ='xxx';`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_BLOB_CANT_HAVE_DEFAULT, "c1"))
+	sql = `CREATE TABLE t1(c1 linestring DEFAULT '') ENGINE = InnoDB DEFAULT CHARSET = utf8 COMMENT ='xxx';`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_BLOB_CANT_HAVE_DEFAULT, "c1"))
+	sql = `CREATE TABLE t1(c1 polygon DEFAULT '') ENGINE = InnoDB DEFAULT CHARSET = utf8 COMMENT ='xxx';`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ER_BLOB_CANT_HAVE_DEFAULT, "c1"))
 
 	config.GetGlobalConfig().Inc.EnableNullable = false
 	sql = `drop table if exists t1;CREATE TABLE t1(c1 int);`

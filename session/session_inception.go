@@ -5446,7 +5446,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 	}
 
 	//不可设置default值的部分字段类型
-	if hasDefaultValue && !defaultValue.IsNull() && (field.Tp.Tp == mysql.TypeJSON || types.IsTypeBlob(field.Tp.Tp)) {
+	if hasDefaultValue && !defaultValue.IsNull() && (field.Tp.Tp == mysql.TypeJSON || field.Tp.Tp == mysql.TypeGeometry || types.IsTypeBlob(field.Tp.Tp)) {
 		s.appendErrorNo(ER_BLOB_CANT_HAVE_DEFAULT, field.Name.Name.O)
 	}
 	//是否使用 text\blob\json 字段类型
