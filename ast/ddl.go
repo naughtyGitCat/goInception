@@ -205,7 +205,9 @@ type IndexPartSpecification struct {
 
 	Column *ColumnName
 	Length int
-	Expr   ExprNode
+	// Order is parsed but should be ignored because MySQL v5.7 doesn't support it.
+	Desc bool
+	Expr ExprNode
 }
 
 // Restore implements Node interface.
@@ -216,6 +218,9 @@ func (n *IndexPartSpecification) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing IndexPartSpecifications")
 		}
 		ctx.WritePlain(")")
+		if n.Desc {
+			ctx.WritePlain(" DESC")
+		}
 		return nil
 	}
 	if err := n.Column.Restore(ctx); err != nil {
@@ -223,6 +228,9 @@ func (n *IndexPartSpecification) Restore(ctx *RestoreCtx) error {
 	}
 	if n.Length > 0 {
 		ctx.WritePlainf("(%d)", n.Length)
+	}
+	if n.Desc {
+		ctx.WritePlain(" DESC")
 	}
 	return nil
 }

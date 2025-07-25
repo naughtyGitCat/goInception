@@ -6286,6 +6286,10 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 						s.appendErrorMsg("All parts of a SPATIAL index must be NOT NULL")
 					}
 				}
+				if col.Desc && s.dbType == DBTypeOceanBase {
+					s.appendErrorMsg("OceanBase Desc index not supported")
+
+				}
 			}
 		}
 	}

@@ -3072,11 +3072,11 @@ IndexPartSpecification:
 	ColumnName OptFieldLen Order
  	{
 		// Order is parsed but just ignored as MySQL did.
-		$$ = &ast.IndexPartSpecification{Column: $1.(*ast.ColumnName), Length: $2.(int)}
+		$$ = &ast.IndexPartSpecification{Column: $1.(*ast.ColumnName), Length: $2.(int), Desc: $3.(bool)}
  	}
 |	'(' Expression ')' Order
  	{
-		$$ = &ast.IndexPartSpecification{Expr: $2}
+		$$ = &ast.IndexPartSpecification{Expr: $2, Desc: $4.(bool)}
  	}
 
 IndexLockAndAlgorithmOpt:
