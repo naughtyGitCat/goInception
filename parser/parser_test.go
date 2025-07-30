@@ -1787,6 +1787,12 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE TABLE foo (a varchar(50), b int) TABLE_MODE = 'queuing';", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) TABLE_MODE = 'queuing'"},
 		{"CREATE TABLE foo (a varchar(50), b int) SINGLE;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) SINGLE"},
 		{"CREATE TABLE foo (a varchar(50), b int) BROADCAST;", true, "CREATE TABLE `foo` (`a` VARCHAR(50),`b` INT) BROADCAST"},
+
+		{"create table t (a int default(1))", true, "CREATE TABLE `t` (`a` INT DEFAULT 1)"},
+		{"create table t (a int default((1)))", true, "CREATE TABLE `t` (`a` INT DEFAULT 1)"},
+		{"create table t (a int default(\"1\"))", true, "CREATE TABLE `t` (`a` INT DEFAULT _UTF8MB4'1')"},
+		{"create table t (a int default (_utf8mb4'1'))", true, "CREATE TABLE `t` (`a` INT DEFAULT _UTF8MB4'1')"},
+
 		// for create partition table
 		{"CREATE PARTITION TABLE t (a varchar(50), b int);", true, "CREATE PARTITION TABLE `t` (`a` VARCHAR(50),`b` INT)"},
 		// for create materialized view
