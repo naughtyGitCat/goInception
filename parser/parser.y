@@ -581,6 +581,7 @@ import (
 	week                   "WEEK"
 	yearType               "YEAR"
 	wait                   "WAIT"
+	enforced			   "ENFORCED"
 
 	/* The following tokens belong to NotKeywordToken. */
 	addDate          "ADDDATE"
@@ -1172,6 +1173,9 @@ import (
 	SignedNum              		  "Signed num(int64)"
 	TableOptimizerHints           "Table level optimizer hints"
 	TableOptimizerHintsOpt        "Table level optimizer hints option"
+	EnforcedOrNot				  "{ENFORCED|NOT ENFORCED}"
+	EnforcedOrNotOpt			  "Optional {ENFORCED|NOT ENFORCED}"
+	EnforcedOrNotOrNotNullOpt	  "{[ENFORCED|NOT ENFORCED|NOT NULL]}"
 	SpOptInout                    "Optional procedure param type"
 	OptSpPdparams                 "Optional procedure param list"
 	SpPdparams                    "Procedure params"
@@ -1331,6 +1335,7 @@ import (
 %left '*' '/' '%' div mod
 %left '^'
 %left '~' neg
+%precedence lowerThanNot
 %right not not2
 %right collate
 %left interval
@@ -1696,6 +1701,18 @@ AlterTableSpec:
 |	"ALTER" ColumnKeywordOpt ColumnName "SET" "DEFAULT" SignedLiteral
 	{
 		option := &ast.ColumnOption{Expr: $6}
+		colDef := &ast.ColumnDef{
+			Name:    $3.(*ast.ColumnName),
+			Options: []*ast.ColumnOption{option},
+		}
+		$$ = &ast.AlterTableSpec{
+			Tp:         ast.AlterTableAlterColumn,
+			NewColumns: []*ast.ColumnDef{colDef},
+		}
+	}
+|	"ALTER" ColumnKeywordOpt ColumnName "SET" "DEFAULT" '(' Expression ')'
+	{
+		option := &ast.ColumnOption{Expr: $7}
 		colDef := &ast.ColumnDef{
 			Name:    $3.(*ast.ColumnName),
 			Options: []*ast.ColumnOption{option},
@@ -2431,6 +2448,42 @@ PrimaryOpt:
 	{}
 |	"PRIMARY"
 
+EnforcedOrNot:
+	"ENFORCED"
+	{
+		$$ = true
+	}
+|	"NOT" "ENFORCED"
+	{
+		$$ = false
+	}
+
+EnforcedOrNotOpt:
+	{
+		$$ = true
+	} %prec lowerThanNot
+|	EnforcedOrNot
+	{
+		$$ = $1
+	}
+
+EnforcedOrNotOrNotNullOpt:
+//	 This branch is needed to workaround the need of a lookahead of 2 for the grammar:
+//
+//	  { [NOT] NULL | CHECK(...) [NOT] ENFORCED } ...
+	"NOT" "NULL"
+	{
+		$$ = 0
+	}
+|	EnforcedOrNotOpt
+	{
+		if ($1.(bool)) {
+			$$ = 1
+		} else {
+			$$ = 2
+		}
+	}
+
 NotSym:
 	not
 |	not2
@@ -2485,11 +2538,26 @@ ColumnOption:
 	{
 		$$ = &ast.ColumnOption{Tp: ast.ColumnOptionComment, Expr: ast.NewValueExpr($2)}
 	}
-|	"CHECK" '(' Expression ')'
+|	"CHECK" '(' Expression ')' EnforcedOrNotOrNotNullOpt
 	{
 		// See https://dev.mysql.com/doc/refman/5.7/en/create-table.html
 		// The CHECK clause is parsed but ignored by all storage engines.
-		$$ = &ast.ColumnOption{}
+		optionCheck := &ast.ColumnOption{
+			Tp: ast.ColumnOptionCheck,
+			Expr: $3,
+			Enforced: true,
+		}
+		switch $5.(int) {
+			case 0:
+				$$ = []*ast.ColumnOption{optionCheck, {Tp: ast.ColumnOptionNotNull}}
+			case 1:
+				optionCheck.Enforced = true
+				$$ = optionCheck
+			case 2:
+				optionCheck.Enforced = false
+				$$ = optionCheck
+			default:
+		}
 	}
 |	GeneratedAlways "AS" '(' Expression ')' VirtualOrStored
 	{
@@ -2549,11 +2617,19 @@ VirtualOrStored:
 ColumnOptionList:
 	ColumnOption
 	{
-		$$ = []*ast.ColumnOption{$1.(*ast.ColumnOption)}
+		if columnOption,ok := $1.(*ast.ColumnOption); ok {
+			$$ = []*ast.ColumnOption{columnOption}
+		} else {
+			$$ = $1
+		}
 	}
 |	ColumnOptionList ColumnOption
 	{
-		$$ = append($1.([]*ast.ColumnOption), $2.(*ast.ColumnOption))
+		if columnOption,ok := $2.(*ast.ColumnOption); ok {
+			$$ = append($1.([]*ast.ColumnOption), columnOption)
+		} else {
+			$$ = append($1.([]*ast.ColumnOption), $2.([]*ast.ColumnOption)...)
+		}
 	}
 
 ColumnOptionListOpt:
@@ -2728,6 +2804,14 @@ ConstraintElemInner:
 			Keys:        $6.([]*ast.IndexPartSpecification),
 			Name:        $4.(string),
 			Refer:       $8.(*ast.ReferenceDef),
+		}
+	}
+|	"CHECK" '(' Expression ')' EnforcedOrNotOpt
+	{
+		$$ = &ast.Constraint{
+			Tp:		ast.ConstraintCheck,
+			Expr:		$3.(ast.ExprNode),
+			Enforced:	$5.(bool),
 		}
 	}
 
@@ -5674,6 +5758,7 @@ UnReservedKeyword:
 |   "DUPLICATE_SCOPE"
 |	"DYNAMIC"
 |	"END"
+|	"ENFORCED"
 |	"ENGINE"
 |	"ENGINES"
 |	"ENUM"
@@ -10205,11 +10290,6 @@ TableElement:
 |	Constraint PartitionOpt
 	{
 		$$ = $1.(*ast.Constraint)
-	}
-|	"CHECK" '(' Expression ')'
-	{
-		/* Nothing to do now */
-		$$ = nil
 	}
 
 TableElementList:

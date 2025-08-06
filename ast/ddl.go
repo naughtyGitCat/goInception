@@ -494,6 +494,8 @@ type ColumnOption struct {
 	AutoRandomBitLength int
 	PrimaryKeyTp        model.PrimaryKeyType
 	Visibility          Visibility
+	// Enforced is only for Check, default is true.
+	Enforced bool
 }
 
 // Restore implements Node interface.
@@ -586,6 +588,18 @@ func (n *ColumnOption) Restore(ctx *RestoreCtx) error {
 			case VisibilityInvisible:
 				ctx.WriteKeyWord("INVISIBLE")
 			}
+		}
+	case ColumnOptionCheck:
+		ctx.WriteKeyWord("CHECK")
+		ctx.WritePlain("(")
+		if err := n.Expr.Restore(ctx); err != nil {
+			return errors.Trace(err)
+		}
+		ctx.WritePlain(")")
+		if n.Enforced {
+			ctx.WriteKeyWord(" ENFORCED")
+		} else {
+			ctx.WriteKeyWord(" NOT ENFORCED")
 		}
 	default:
 		return errors.New("An error occurred while splicing ColumnOption")
@@ -798,8 +812,25 @@ func (n *Constraint) Restore(ctx *RestoreCtx) error {
 		ctx.WriteKeyWord("GLOBAL")
 	case ConstraintUniqueGlobal:
 		ctx.WriteKeyWord("UNIQUE GLOBAL")
+	case ConstraintCheck:
+		if n.Name != "" {
+			ctx.WriteKeyWord("CONSTRAINT ")
+			ctx.WriteName(n.Name)
+			ctx.WritePlain(" ")
+		}
+		ctx.WriteKeyWord("CHECK")
+		ctx.WritePlain("(")
+		if err := n.Expr.Restore(ctx); err != nil {
+			return errors.Trace(err)
+		}
+		ctx.WritePlain(") ")
+		if n.Enforced {
+			ctx.WriteKeyWord("ENFORCED")
+		} else {
+			ctx.WriteKeyWord("NOT ENFORCED")
+		}
+		return nil
 	}
-
 	if n.Tp == ConstraintForeignKey {
 		ctx.WriteKeyWord("CONSTRAINT ")
 		if n.Name != "" {
@@ -3735,8 +3766,16 @@ func (n *AlterTableSpec) Restore(ctx *format.RestoreCtx) error {
 		if len(n.NewColumns[0].Options) == 1 {
 			ctx.WriteKeyWord("SET DEFAULT ")
 			expr := n.NewColumns[0].Options[0].Expr
-			if err := expr.Restore(ctx); err != nil {
-				return errors.Annotate(err, "An error occurred while restore AlterTableSpec.NewColumns[0].Options[0].Expr")
+			if valueExpr, ok := expr.(*ValueExpr); ok {
+				if err := valueExpr.Restore(ctx); err != nil {
+					return errors.Annotate(err, "An error occurred while restore AlterTableSpec.NewColumns[0].Options[0].Expr")
+				}
+			} else {
+				ctx.WritePlain("(")
+				if err := expr.Restore(ctx); err != nil {
+					return errors.Annotate(err, "An error occurred while restore AlterTableSpec.NewColumns[0].Options[0].Expr")
+				}
+				ctx.WritePlain(")")
 			}
 		} else {
 			ctx.WriteKeyWord(" DROP DEFAULT")
