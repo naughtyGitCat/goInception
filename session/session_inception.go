@@ -792,7 +792,6 @@ func (s *session) executeCommit(ctx context.Context) {
 	}
 
 	s.modifyWaitTimeout()
-	s.modifyMaxExecutionTime()
 
 	if s.opt.Backup {
 		if !s.checkBinlogIsOn() {
@@ -8427,11 +8426,11 @@ func (s *session) getExplainInfo(sql string, sqlId string) {
 
 // getRealRowCount: 获取真正的受影响行数
 func (s *session) getRealRowCount(sql string, sqlId string) {
-
+	log.Debug("getRealRowCount")
 	if s.hasError() {
 		return
 	}
-
+	s.modifyMaxExecutionTime()
 	// var newRecord *Record
 	// if s.Inc.EnableFingerprint && sqlId != "" {
 	// 	newRecord = &Record{
@@ -8494,7 +8493,7 @@ func (s *session) getRealRowCount(sql string, sqlId string) {
 }
 
 func (s *session) explainOrAnalyzeSql(sql string) {
-
+	log.Debug("explainOrAnalyzeSql")
 	// // 如果没有表结构,或者新增表 or 新增列时,不做explain
 	// if s.myRecord.TableInfo == nil || s.myRecord.TableInfo.IsNew ||
 	// 	s.myRecord.TableInfo.IsNewColumns {
