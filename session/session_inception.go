@@ -2129,16 +2129,24 @@ func (s *session) modifyWaitTimeout() {
 }
 
 func (s *session) modifyMaxExecutionTime() {
-	if s.inc.MaxExecutionTime <= 0 {
+	if s.opt.MaxExecutionTime <= 0 && s.inc.MaxExecutionTime <= 0 {
 		return
 	}
 	log.Debug("modifyMaxExecutionTime")
 
+	// s.opt.MaxExecutionTime 优先级高
+	var maxExecutionTime int
+	if s.opt.MaxExecutionTime > 0 {
+		maxExecutionTime = s.opt.MaxExecutionTime
+	} else if s.inc.MaxExecutionTime > 0 {
+		maxExecutionTime = s.inc.MaxExecutionTime
+	}
+
 	var sql string
 	if s.dbVersion < 50708 || s.dbType == DBTypeMariaDB {
-		sql = fmt.Sprintf("set session max_statement_time=%d;", s.inc.MaxExecutionTime)
+		sql = fmt.Sprintf("set session max_statement_time=%d;", maxExecutionTime)
 	} else {
-		sql = fmt.Sprintf("set session max_execution_time=%d;", s.inc.MaxExecutionTime)
+		sql = fmt.Sprintf("set session max_execution_time=%d;", maxExecutionTime)
 	}
 
 	if _, err := s.exec(sql, true); err != nil {
@@ -2341,6 +2349,8 @@ func (s *session) parseOptions(sql string) {
 
 		split:        viper.GetBool("split"),
 		RealRowCount: viper.GetBool("realRowCount"),
+
+		MaxExecutionTime: viper.GetInt("maxExecutionTime"),
 
 		db: viper.GetString("db"),
 

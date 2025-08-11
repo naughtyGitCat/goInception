@@ -152,7 +152,8 @@ type SourceOptions struct {
 
 	// 使用count(*)计算受影响行数
 	RealRowCount bool
-
+	// SELECT 查询最大执行时间
+	MaxExecutionTime int
 	// 连接的数据库,默认为mysql
 	db string
 
