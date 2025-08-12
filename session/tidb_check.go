@@ -755,6 +755,39 @@ func (s *session) checkPartitionNameUnique(defs []*ast.PartitionDefinition) {
 	}
 }
 
+func (s *session) checkPartitionRangeNotIncreasing(t *TableInfo, defs []*ast.PartitionDefinition) {
+	for _, part := range defs {
+		partDescription := ""
+		switch clause := part.Clause.(type) {
+		case *ast.PartitionDefinitionClauseIn:
+			if clause.Values == nil {
+				continue
+			}
+			partValues := make([]string, 0)
+			for _, values := range clause.Values {
+				for _, v := range values {
+					key := fmt.Sprintf("%v", v.GetValue())
+					partValues = append(partValues, key)
+				}
+			}
+			partDescription = strings.Join(partValues, ",")
+		case *ast.PartitionDefinitionClauseLessThan:
+			partValues := make([]string, 0)
+			for _, v := range clause.Exprs {
+				key := fmt.Sprintf("%v", v.GetValue())
+				partValues = append(partValues, key)
+			}
+			partDescription = strings.Join(partValues, ",")
+		}
+		for _, oldPart := range t.Partitions {
+			if partDescription != "" && oldPart.PartDescription != "" {
+				if strings.Compare(partDescription, oldPart.PartDescription) <= 0 {
+					s.appendErrorNo(ErrRangeNotIncreasing, oldPart.PartDescription)
+				}
+			}
+		}
+	}
+}
 func (s *session) checkPartitionNameExists(t *TableInfo, defs []*ast.PartitionDefinition) {
 	for _, part := range defs {
 		partDescription := ""

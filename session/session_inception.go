@@ -4302,6 +4302,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 				_ = s.fetchPartitionFromDB(table)
 				s.checkPartitionNameUnique(alter.PartDefinitions)
 				s.checkPartitionNameExists(table, alter.PartDefinitions)
+				s.checkPartitionRangeNotIncreasing(table, alter.PartDefinitions)
 			}
 		case ast.AlterTableDropPartition:
 			if !s.inc.EnablePartitionTable {
