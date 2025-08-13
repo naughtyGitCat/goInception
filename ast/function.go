@@ -120,7 +120,12 @@ const (
 	RoutineOptionLanguageSql
 	RoutineOptionDeterministic
 	RoutineOptionNotDeterministic
-	RoutineOptionSqlSecurity
+	RoutineOptionContainsSql
+	RoutineOptionNoSql
+	RoutineOptionReadsSqlData
+	RoutineOptionModifiesSqlData
+	RoutineOptionSqlSecurityDefiner
+	RoutineOptionSqlSecurityInvoker
 )
 
 // RoutineOption is used for parsing procedure and function option from SQL.
@@ -142,6 +147,18 @@ func (n *RoutineOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WriteKeyWord("DETERMINISTIC")
 	case RoutineOptionNotDeterministic:
 		ctx.WriteKeyWord("NOT DETERMINISTIC")
+	case RoutineOptionContainsSql:
+		ctx.WriteKeyWord("CONTAINS SQL")
+	case RoutineOptionNoSql:
+		ctx.WriteKeyWord("NO SQL")
+	case RoutineOptionReadsSqlData:
+		ctx.WriteKeyWord("READS SQL DATA")
+	case RoutineOptionModifiesSqlData:
+		ctx.WriteKeyWord("MODIFIES SQL DATA")
+	case RoutineOptionSqlSecurityDefiner:
+		ctx.WriteKeyWord("SQL SECURITY DEFINER")
+	case RoutineOptionSqlSecurityInvoker:
+		ctx.WriteKeyWord("SQL SECURITY INVOKER")
 	default:
 		return errors.Errorf("invalid RoutineOption: %d", n.Tp)
 	}

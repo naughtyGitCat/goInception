@@ -110,6 +110,8 @@ import (
 	cursor            "CURSOR"
 	cumeDist          "CUME_DIST"
 	computation       "COMPUTATION"
+	contains		  "CONTAINS"
+	deterministic     "DETERMINISTIC"
 	database          "DATABASE"
 	databases         "DATABASES"
 	dayHour           "DAY_HOUR"
@@ -241,6 +243,7 @@ import (
 	srid    		  "SRID"
 	rangeKwd          "RANGE"
 	read              "READ"
+	reads			  "READS"
 	realType          "REAL"
 	recursive         "RECURSIVE"
 	references        "REFERENCES"
@@ -249,7 +252,6 @@ import (
 	returns           "RETURNS"
 	returnKwd         "RETURN"
 	rewrite           "REWRITE"
-	deterministic     "DETERMINISTIC"
 	repeat            "REPEAT"
 	replace           "REPLACE"
 	restrict          "RESTRICT"
@@ -458,6 +460,7 @@ import (
 	merge                  "MERGE"
 	minRows                "MIN_ROWS"
 	minValue        	   "MINVALUE"
+	modifies		   	   "MODIFIES"
 	names                  "NAMES"
 	never                  "NEVER"
 	next                   "NEXT"
@@ -5964,6 +5967,7 @@ UnReservedKeyword:
 | 	"INCREMENT"
 |	"INCLUDING"
 |	"MINVALUE"
+|	"MODIFIES"
 |	"NOMAXVALUE"
 |	"NOMINVALUE"
 |	"CYCLE"
@@ -12386,6 +12390,30 @@ RoutineOpt:
 |	"NOT" "DETERMINISTIC"
 	{
 		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionNotDeterministic}
+	}
+|	"CONTAINS" "SQL"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionContainsSql}
+	}
+|	"NO" "SQL"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionNoSql}
+	}
+|	"READS" "SQL" "DATA"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionReadsSqlData}
+	}
+|	"MODIFIES" "SQL" "DATA"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionModifiesSqlData}
+	}
+|	"SQL" "SECURITY" "DEFINER"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionSqlSecurityDefiner}
+	}
+|	"SQL" "SECURITY" "INVOKER"
+	{
+		$$ = &ast.RoutineOption{Tp: ast.RoutineOptionSqlSecurityInvoker}
 	}
 
 
