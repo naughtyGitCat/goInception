@@ -4720,7 +4720,11 @@ func (s *session) checkAlterTableRenameIndex(t *TableInfo, c *ast.AlterTableSpec
 }
 
 func (s *session) checkAlterTableRenameTable(t *TableInfo, c *ast.AlterTableSpec) {
-	// log.Info("checkAlterTableRenameTable")
+	log.Info("checkAlterTableRenameTable")
+
+	if !s.checkDBExists(c.NewTable.Schema.O, true) {
+		return
+	}
 
 	table := s.getTableFromCache(c.NewTable.Schema.O, c.NewTable.Name.O, false)
 	if table != nil {
