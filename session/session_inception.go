@@ -6317,7 +6317,7 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 		// 未开启innodbLargePrefix时,单列长度不能超过767
 		// 大部分情况下,总长度不能超过3072，但全文索引允许
 		if keyMaxLen > maxKeyLength57 && strings.ToLower(s.databaseCharset) == "utf8mb4" &&
-			tp != ast.ConstraintFulltext {
+			tp != ast.ConstraintFulltext && s.dbType != DBTypeOceanBase {
 			s.appendErrorNo(ER_TOO_LONG_KEY, IndexName, maxKeyLength57)
 		}
 
