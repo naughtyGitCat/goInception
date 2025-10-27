@@ -4183,16 +4183,26 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 		ignoreOsc := false
 		for _, alter := range node.Specs {
 			ignoreOsc = false
+			isConvert := false
 			switch alter.Tp {
 			case ast.AlterTableOption:
 				for _, opt := range alter.Options {
 					switch opt.Tp {
 					case ast.TableOptionCharset:
-						if opt.UintValue == ast.TableOptionCharsetWithoutConvertTo {
+						switch opt.UintValue {
+						case ast.TableOptionCharsetWithoutConvertTo:
+							ignoreOsc = true
+						case ast.TableOptionCharsetWithConvertTo:
+							ignoreOsc = false
+							isConvert = true
+						}
+					case ast.TableOptionCollate:
+						if isConvert {
+							ignoreOsc = false
+						} else {
 							ignoreOsc = true
 						}
-					case ast.TableOptionCollate,
-						ast.TableOptionComment:
+					case ast.TableOptionComment:
 						ignoreOsc = true
 					}
 				}
