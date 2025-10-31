@@ -2931,6 +2931,12 @@ DefaultValueExpr:
 |	SignedLiteralParentheses
 |	NextValueForSequenceParentheses
 |	BuiltinFunction
+|	'(' Identifier ')'
+	{
+		$$ = &ast.ColumnNameExpr{Name: &ast.ColumnName{
+			Name: model.NewCIStr($2),
+		}}
+	}
 
 SignedLiteralParentheses:
 	'(' SignedLiteralParentheses ')'
@@ -2943,12 +2949,6 @@ BuiltinFunction:
 	'(' BuiltinFunction ')'
 	{
 		$$ = $2.(*ast.FuncCallExpr)
-	}
-|	identifier
-	{
-		$$ = &ast.FuncCallExpr{
-			FnName: model.NewCIStr($1),
-		}
 	}
 |	identifier '(' ')'
 	{
