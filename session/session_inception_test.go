@@ -1069,7 +1069,21 @@ primary key(id)) comment 'test';`
 			PARTITION BY RANGE (c1) (
 				PARTITION p0 VALUES LESS THAN (1));`
 	s.testErrorCode(c, sql,
-		session.NewErr(session.ErrNotAllowedTypeInPartition, "c1"))
+		session.NewErr(session.ErrFieldTypeNotAllowedAsPartitionField, "c1"))
+	sql = `CREATE TABLE t1 (
+			c1  VARCHAR(10)
+			)
+			PARTITION BY RANGE (c1) (
+				PARTITION p0 VALUES LESS THAN ('1'));`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrValuesIsNotIntType, "p0"))
+	sql = `CREATE TABLE t1 (
+			c1  VARCHAR(10)
+			)
+			PARTITION BY RANGE COLUMNS (c1) (
+				PARTITION p0 VALUES LESS THAN (1));`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrWrongTypeColumnValue, "p0"))
 	// 检查主键,唯一键必需包含所有分区键
 	config.GetGlobalConfig().Inc.EnablePartitionTable = true
 	sql = `CREATE TABLE t1 (
