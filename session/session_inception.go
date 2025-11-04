@@ -3391,6 +3391,7 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 	if table != nil {
 		if !node.IfNotExists {
 			s.appendErrorNo(ER_TABLE_EXISTS_ERROR, node.Table.Name.O)
+			return
 		}
 		s.myRecord.DBName = node.Table.Schema.O
 		s.myRecord.TableName = node.Table.Name.O
@@ -3638,13 +3639,14 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 
 					if field.Tp.Tp == mysql.TypeTimestamp && s.inc.EnableTimeStampType {
 						for _, op := range field.Options {
-							if op.Tp == ast.ColumnOptionDefaultValue {
+							switch op.Tp {
+							case ast.ColumnOptionDefaultValue:
 								if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
 									if f.FnName.L == ast.CurrentTimestamp {
 										currentTimestampCount += 1
 									}
 								}
-							} else if op.Tp == ast.ColumnOptionOnUpdate {
+							case ast.ColumnOptionOnUpdate:
 								if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
 									if f.FnName.L == ast.CurrentTimestamp {
 										onUpdateTimestampCount += 1
@@ -3656,13 +3658,14 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 
 					if field.Tp.Tp == mysql.TypeDatetime {
 						for _, op := range field.Options {
-							if op.Tp == ast.ColumnOptionDefaultValue {
+							switch op.Tp {
+							case ast.ColumnOptionDefaultValue:
 								if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
 									if f.FnName.L == ast.CurrentTimestamp {
 										currentDatetimeCount += 1
 									}
 								}
-							} else if op.Tp == ast.ColumnOptionOnUpdate {
+							case ast.ColumnOptionOnUpdate:
 								if f, ok := op.Expr.(*ast.FuncCallExpr); ok {
 									if f.FnName.L == ast.CurrentTimestamp {
 										onUpdateDatetimeCount += 1
@@ -3786,8 +3789,9 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 			s.appendErrorNo(ER_PARTITION_NOT_ALLOWED)
 		} else {
 			s.checkPartitionNameUnique(node.Partition.Definitions)
-			s.checkPartitionFuncType(node)
+			s.checkPartitionValuesType(table, node.Partition)
 			s.checkRangePartitioningKeysConstraints(node)
+			s.checkPartitionRangeNotIncreasing(table, node.Partition.Definitions)
 			if !s.hasError() {
 				s.buildPartitionInfo(node.Partition, table)
 			}
@@ -4313,6 +4317,7 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 				s.checkPartitionNameUnique(alter.PartDefinitions)
 				s.checkPartitionNameExists(table, alter.PartDefinitions)
 				s.checkPartitionRangeNotIncreasing(table, alter.PartDefinitions)
+				s.checkPartitionValuesType(table, alter.Partition)
 			}
 		case ast.AlterTableDropPartition:
 			if !s.inc.EnablePartitionTable {
@@ -6453,6 +6458,7 @@ func (s *session) checkCreateView(node *ast.CreateViewStmt, sql string) {
 	if view != nil {
 		if !node.OrReplace {
 			s.appendErrorNo(ER_TABLE_EXISTS_ERROR, node.ViewName.Name.O)
+			return
 		}
 		s.myRecord.DBName = node.ViewName.Schema.O
 		s.myRecord.TableName = node.ViewName.Name.O
@@ -9319,9 +9325,10 @@ func (s *session) appendErrorMsg(msg string) {
 func (s *session) appendErrorMsgf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	if s.stage != StageCheck && s.recordSets.MaxLevel != 2 {
-		if s.stage == StageBackup {
+		switch s.stage {
+		case StageBackup:
 			s.myRecord.Buf.WriteString("Backup: ")
-		} else if s.stage == StageExec {
+		case StageExec:
 			s.myRecord.Buf.WriteString("Execute: ")
 		}
 	}

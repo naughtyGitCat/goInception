@@ -756,6 +756,7 @@ func (s *session) checkPartitionNameUnique(defs []*ast.PartitionDefinition) {
 }
 
 func (s *session) checkPartitionRangeNotIncreasing(t *TableInfo, defs []*ast.PartitionDefinition) {
+	partDescValues := make([]string, 0)
 	for _, part := range defs {
 		partDescription := ""
 		switch clause := part.Clause.(type) {
@@ -773,16 +774,146 @@ func (s *session) checkPartitionRangeNotIncreasing(t *TableInfo, defs []*ast.Par
 			partDescription = strings.Join(partValues, ",")
 		case *ast.PartitionDefinitionClauseLessThan:
 			partValues := make([]string, 0)
-			for _, v := range clause.Exprs {
-				key := fmt.Sprintf("%v", v.GetValue())
-				partValues = append(partValues, key)
+			for _, op := range clause.Exprs {
+				switch v := op.(type) {
+				case *ast.FuncCallExpr:
+					value := v.Args[0]
+					key := fmt.Sprintf("%v", value.GetValue())
+					partValues = append(partValues, key)
+				case *ast.ValueExpr:
+					key := fmt.Sprintf("%v", v.GetValue())
+					partValues = append(partValues, key)
+				case *ast.MaxValueExpr:
+					partValues = append(partValues, "MAXVALUE")
+				}
 			}
 			partDescription = strings.Join(partValues, ",")
+			partDescValues = append(partDescValues, partDescription)
 		}
-		for _, oldPart := range t.Partitions {
-			if partDescription != "" && oldPart.PartDescription != "" {
-				if strings.Compare(partDescription, oldPart.PartDescription) <= 0 {
-					s.appendErrorNo(ErrRangeNotIncreasing, oldPart.PartDescription)
+		if t.Partitions != nil {
+			for _, oldPart := range t.Partitions {
+				if partDescription != "" && oldPart.PartDescription != "" {
+					if strings.Compare(partDescription, oldPart.PartDescription) <= 0 {
+						s.appendErrorNo(ErrRangeNotIncreasing, oldPart.PartDescription)
+					}
+				}
+			}
+		}
+	}
+
+	if partDescValues != nil {
+		for i := 0; i < len(partDescValues); i++ {
+			// 检查MAXVALUE是否只在最后一个分区定义中使用
+			if strings.Contains(partDescValues[i], "MAXVALUE") && i != len(partDescValues)-1 {
+				s.appendErrorMsg("MAXVALUE can only be used in last partition definition")
+				return
+			}
+
+			// 检查分区描述是否按递增顺序排列（从第二个分区开始比较）
+			if i > 0 && strings.Compare(partDescValues[i-1], partDescValues[i]) >= 0 {
+				s.appendErrorNo(ErrRangeNotIncreasing, partDescValues[i])
+				break
+			}
+		}
+	}
+}
+
+func (s *session) checkPartitionValuesType(t *TableInfo, opts *ast.PartitionOptions) {
+	if opts == nil {
+		return
+	}
+	var partkeys string
+	var colType byte
+	var rangeType bool = true
+
+	if opts.ColumnNames != nil {
+		for _, key := range opts.ColumnNames {
+			partkeys = key.Name.L
+		}
+		rangeType = false
+	}
+
+	op := opts.PartitionMethod
+	switch e := op.Expr.(type) {
+	case *ast.ColumnNameExpr:
+		partkeys = e.Name.Name.L
+	case *ast.FuncCallExpr:
+		value := e.Args[0]
+		switch e := value.(type) {
+		case *ast.ColumnNameExpr:
+			partkeys = e.Name.Name.L
+		}
+	}
+
+	for _, field := range t.Fields {
+		if strings.EqualFold(field.Field, partkeys) {
+			colType = field.Tp.Tp
+
+		}
+	}
+
+	for _, part := range opts.Definitions {
+		switch clause := part.Clause.(type) {
+		case *ast.PartitionDefinitionClauseIn:
+			if clause.Values == nil {
+				continue
+			}
+			for _, values := range clause.Values {
+				for _, v := range values {
+					if types.IsTypeVarchar(colType) {
+						if !types.IsTypeVarchar(v.GetType().Tp) {
+							s.appendErrorNo(ErrFieldTypeNotAllowedAsPartitionField, partkeys)
+							break
+						}
+					}
+					if types.IsTypeNumeric(colType) {
+						if !types.IsTypeNumeric(v.GetType().Tp) {
+							s.appendErrorNo(ErrValuesIsNotIntType, part.Name.O)
+							break
+						}
+					}
+				}
+			}
+		case *ast.PartitionDefinitionClauseLessThan:
+			for _, op := range clause.Exprs {
+				switch v := op.(type) {
+				case *ast.FuncCallExpr:
+					value := v.Args[0]
+					if types.IsTypeVarchar(colType) {
+						if !types.IsTypeVarchar(value.GetType().Tp) {
+							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
+							break
+						}
+					}
+					if types.IsTypeNumeric(colType) {
+						if !types.IsTypeNumeric(value.GetType().Tp) {
+							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
+							break
+						}
+					}
+				case *ast.ValueExpr:
+					if rangeType {
+						if types.IsTypeVarchar(v.Type.Tp) {
+							s.appendErrorNo(ErrValuesIsNotIntType, part.Name.O)
+							break
+						}
+						if types.IsTypeVarchar(colType) {
+							s.appendErrorNo(ErrFieldTypeNotAllowedAsPartitionField, partkeys)
+							break
+						}
+					}
+					if types.IsTypeVarchar(colType) {
+						if !types.IsTypeVarchar(v.GetType().Tp) {
+							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
+							break
+						}
+					}
+					if types.IsTypeNumeric(colType) {
+						if !types.IsTypeNumeric(v.Type.Tp) {
+							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
+							break
+						}
+					}
 				}
 			}
 		}
@@ -865,21 +996,18 @@ func (s *session) checkPartitionRemove(t *TableInfo) {
 }
 
 // checkPartitionFuncType checks partition function return type.
-func (s *session) checkPartitionFuncType(table *ast.CreateTableStmt) {
+func (s *session) checkPartitionFuncType(t *TableInfo, table *ast.CreateTableStmt) {
 	if table.Partition.Expr == nil {
 		return
 	}
-	buf := new(bytes.Buffer)
-	table.Partition.Expr.Format(buf)
-	exprStr := buf.String()
+
 	if table.Partition.Tp == model.PartitionTypeRange {
 		// if partition by columnExpr, check the column type
-		if _, ok := table.Partition.Expr.(*ast.ColumnNameExpr); ok {
+		if c, ok := table.Partition.Expr.(*ast.ColumnNameExpr); ok {
 			for _, col := range table.Cols {
-				name := strings.Replace(col.Name.String(), ".", "`.`", -1)
 				// Range partitioning key supported types: tinyint, smallint, mediumint, int and bigint.
-				if !validRangePartitionType(col) && fmt.Sprintf("`%s`", name) == exprStr {
-					s.appendErrorNo(ErrNotAllowedTypeInPartition, name)
+				if !validRangePartitionType(col) && c.Name.Name.O == col.Name.Name.O {
+					s.appendErrorNo(ErrFieldTypeNotAllowedAsPartitionField, col.Name.Name.O)
 				}
 			}
 		}
