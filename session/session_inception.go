@@ -799,6 +799,11 @@ func (s *session) executeCommit(ctx context.Context) {
 			return
 		}
 
+		if !s.checkOceanBaseBinlogIsOn() {
+			s.appendErrorMsg("binlog日志未开启,无法备份!")
+			return
+		}
+
 		if !s.checkBinlogFormatIsRow() {
 			s.modifyBinlogFormatRow()
 		}
@@ -2241,6 +2246,28 @@ func (s *session) checkBinlogIsOn() bool {
 	}
 
 	return format == "ON" || format == "1"
+}
+
+func (s *session) checkOceanBaseBinlogIsOn() bool {
+	log.Debug("checkOceanBaseBinlogIsOn")
+
+	sql := "SHOW MASTER STATUS;"
+
+	rows, err := s.raw(sql)
+	if rows != nil {
+		defer rows.Close()
+	}
+	if err != nil {
+		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			if myErr.Number == 1064 {
+				return false
+			}
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	}
+	return true
 }
 
 func (s *session) isReadOnly() bool {
