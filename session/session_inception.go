@@ -799,11 +799,6 @@ func (s *session) executeCommit(ctx context.Context) {
 			return
 		}
 
-		if !s.checkOceanBaseBinlogIsOn() {
-			s.appendErrorMsg("binlog日志未开启,无法备份!")
-			return
-		}
-
 		if !s.checkBinlogFormatIsRow() {
 			s.modifyBinlogFormatRow()
 		}
@@ -2248,28 +2243,6 @@ func (s *session) checkBinlogIsOn() bool {
 	return format == "ON" || format == "1"
 }
 
-func (s *session) checkOceanBaseBinlogIsOn() bool {
-	log.Debug("checkOceanBaseBinlogIsOn")
-
-	sql := "SHOW MASTER STATUS;"
-
-	rows, err := s.raw(sql)
-	if rows != nil {
-		defer rows.Close()
-	}
-	if err != nil {
-		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
-		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-			if myErr.Number == 1064 {
-				return false
-			}
-		} else {
-			s.appendErrorMsg(err.Error())
-		}
-	}
-	return true
-}
-
 func (s *session) isReadOnly() bool {
 	if !s.inc.CheckReadOnly {
 		return false
@@ -2514,9 +2487,6 @@ func (s *session) checkTruncateTable(node *ast.TruncateTableStmt, sql string) {
 
 	log.Debug("checkTruncateTable")
 
-	if s.supportDrds() {
-		return
-	}
 	t := node.Table
 
 	if !s.inc.EnableDropTable {
@@ -2538,11 +2508,8 @@ func (s *session) checkTruncateTable(node *ast.TruncateTableStmt, sql string) {
 }
 
 func (s *session) checkDropTable(node *ast.DropTableStmt, sql string) {
-
 	log.Debug("checkDropTable")
-	if s.supportDrds() {
-		return
-	}
+
 	for _, t := range node.Tables {
 
 		if !s.inc.EnableDropTable {
@@ -9207,9 +9174,6 @@ func (s *session) querySequencesFromDB(db string, sequencesName string, reportNo
 }
 
 func (s *session) queryTableFromDB(db string, tableName string, reportNotExists bool) []FieldInfo {
-	if s.supportDrds() {
-		return nil
-	}
 	if db == "" {
 		db = s.dbName
 	}
@@ -9265,9 +9229,6 @@ func (s *session) queryTableOptionFromDB(db string, tableName string, reportNotE
 }
 
 func (s *session) queryPartitionFromDB(db string, tableName string, reportNotExists bool) []*PartitionInfo {
-	if s.supportDrds() {
-		return nil
-	}
 
 	var rows []*PartitionInfo
 	sql := fmt.Sprintf("SELECT PARTITION_NAME, PARTITION_METHOD, PARTITION_EXPRESSION, PARTITION_DESCRIPTION, TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME= '%s'", db, tableName)
@@ -9291,9 +9252,6 @@ func (s *session) queryPartitionFromDB(db string, tableName string, reportNotExi
 }
 
 func (s *session) fetchPartitionFromDB(t *TableInfo) error {
-	if s.supportDrds() {
-		return nil
-	}
 	if t.IsNew || t.IsDeleted || len(t.Partitions) > 0 {
 		return nil
 	}
