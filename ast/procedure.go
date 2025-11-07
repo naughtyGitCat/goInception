@@ -1253,3 +1253,201 @@ func (n *ProcedureReturn) Accept(v Visitor) (Node, bool) {
 	n = newNode.(*ProcedureReturn)
 	return v.Leave(n)
 }
+
+const (
+	CLASS_ORIGIN = iota
+	SUBCLASS_ORIGIN
+	RETURNED_SQLSTATE
+	MESSAGE_TEXT
+	MYSQL_ERRNO
+	CONSTRAINT_CATALOG
+	CONSTRAINT_SCHEMA
+	CONSTRAINT_NAME
+	CATALOG_NAME
+	COLUMN_NAME
+	CURSOR_NAME
+	SCHEMA_NAME
+	TABLE_NAME
+)
+
+const (
+	PROCEDUR_CURRENT = iota
+	PROCEDUR_STACKED
+)
+
+const (
+	PROCEDUR_NUMBER = iota
+	PROCEDUR_ROW_COUNT
+)
+
+type ProcedureGetDiagnosticsCond struct {
+	stmtNode
+	Name string
+	Num  int
+}
+
+func (n *ProcedureGetDiagnosticsCond) Restore(ctx *format.RestoreCtx) error {
+	if n.Name != "" {
+		ctx.WriteName(n.Name)
+		ctx.WriteKeyWord(" = ")
+		switch n.Num {
+		case CLASS_ORIGIN:
+			ctx.WriteKeyWord("CLASS_ORIGIN")
+		case SUBCLASS_ORIGIN:
+			ctx.WriteKeyWord("SUBCLASS_ORIGIN")
+		case RETURNED_SQLSTATE:
+			ctx.WriteKeyWord("RETURNED_SQLSTATE")
+		case MESSAGE_TEXT:
+			ctx.WriteKeyWord("MESSAGE_TEXT")
+		case MYSQL_ERRNO:
+			ctx.WriteKeyWord("MYSQL_ERRNO")
+		case CONSTRAINT_CATALOG:
+			ctx.WriteKeyWord("CONSTRAINT_CATALOG")
+		case CONSTRAINT_SCHEMA:
+			ctx.WriteKeyWord("CONSTRAINT_SCHEMA")
+		case CONSTRAINT_NAME:
+			ctx.WriteKeyWord("CONSTRAINT_NAME")
+		case CATALOG_NAME:
+			ctx.WriteKeyWord("CATALOG_NAME")
+		case COLUMN_NAME:
+			ctx.WriteKeyWord("COLUMN_NAME")
+		case CURSOR_NAME:
+			ctx.WriteKeyWord("CURSOR_NAME")
+		case SCHEMA_NAME:
+			ctx.WriteKeyWord("SCHEMA_NAME")
+		case TABLE_NAME:
+			ctx.WriteKeyWord("TABLE_NAME")
+		}
+	}
+
+	return nil
+}
+
+func (n *ProcedureGetDiagnosticsCond) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ProcedureGetDiagnosticsCond)
+	return v.Leave(n)
+}
+
+type ProcedureGetDiagnosticsState struct {
+	stmtNode
+	Name string
+	Num  int
+}
+
+func (n *ProcedureGetDiagnosticsState) Restore(ctx *format.RestoreCtx) error {
+	if n.Name != "" {
+		ctx.WriteName(n.Name)
+		ctx.WriteKeyWord(" = ")
+		switch n.Num {
+		case PROCEDUR_NUMBER:
+			ctx.WriteKeyWord("NUMBER")
+		case PROCEDUR_ROW_COUNT:
+			ctx.WriteKeyWord("ROW_COUNT")
+		}
+
+	}
+	return nil
+}
+
+func (n *ProcedureGetDiagnosticsState) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ProcedureGetDiagnosticsState)
+	return v.Leave(n)
+}
+
+type ProcedureGetDiagnosticCondStmt struct {
+	stmtNode
+	DiagSCond          int
+	Num                int
+	GetDiagnosticsCond []*ProcedureGetDiagnosticsCond
+}
+
+func (n *ProcedureGetDiagnosticCondStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("GET ")
+	switch n.DiagSCond {
+	case PROCEDUR_CURRENT:
+		ctx.WriteKeyWord("CURRENT ")
+	case PROCEDUR_STACKED:
+		ctx.WriteKeyWord("STACKED ")
+	}
+	ctx.WriteKeyWord("DIAGNOSTICS CONDITION ")
+	ctx.WritePlainf(" %d", n.Num)
+	for i, condInfo := range n.GetDiagnosticsCond {
+		err := condInfo.Restore(ctx)
+		if err != nil {
+			return err
+		}
+		if i+1 != len(n.GetDiagnosticsCond) {
+			ctx.WritePlain(", ")
+		}
+	}
+	ctx.WriteKeyWord(";")
+	return nil
+}
+
+func (n *ProcedureGetDiagnosticCondStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ProcedureGetDiagnosticCondStmt)
+	for i, val := range n.GetDiagnosticsCond {
+		node, ok := val.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.GetDiagnosticsCond[i] = node.(*ProcedureGetDiagnosticsCond)
+	}
+	return v.Leave(n)
+}
+
+type ProcedureGetDiagnosticStateStmt struct {
+	stmtNode
+	DiagState           int
+	GetDiagnosticsState []*ProcedureGetDiagnosticsState
+}
+
+func (n *ProcedureGetDiagnosticStateStmt) Restore(ctx *format.RestoreCtx) error {
+	ctx.WriteKeyWord("GET ")
+	switch n.DiagState {
+	case PROCEDUR_CURRENT:
+		ctx.WriteKeyWord("CURRENT ")
+	case PROCEDUR_STACKED:
+		ctx.WriteKeyWord("STACKED ")
+	}
+	ctx.WriteKeyWord("DIAGNOSTICS ")
+	for i, stateInfo := range n.GetDiagnosticsState {
+		err := stateInfo.Restore(ctx)
+		if err != nil {
+			return err
+		}
+		if i+1 != len(n.GetDiagnosticsState) {
+			ctx.WritePlain(", ")
+		}
+	}
+	ctx.WriteKeyWord(";")
+	return nil
+}
+
+func (n *ProcedureGetDiagnosticStateStmt) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
+	n = newNode.(*ProcedureGetDiagnosticStateStmt)
+	for i, val := range n.GetDiagnosticsState {
+		node, ok := val.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.GetDiagnosticsState[i] = node.(*ProcedureGetDiagnosticsState)
+	}
+	return v.Leave(n)
+}

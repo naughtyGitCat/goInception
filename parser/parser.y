@@ -108,9 +108,16 @@ import (
 	currentTs         "CURRENT_TIMESTAMP"
 	currentUser       "CURRENT_USER"
 	cursor            "CURSOR"
+	classOrigin 	  "CLASS_ORIGIN"
+	constraintCatalog "CONSTRAINT_CATALOG"
+	constraintSchema  "CONSTRAINT_SCHEMA"
+	constraintName    "CONSTRAINT_NAME"
+	catalogName       "CATALOG_NAME"
+	cursorName        "CURSOR_NAME"
 	cumeDist          "CUME_DIST"
 	computation       "COMPUTATION"
 	contains		  "CONTAINS"
+	condition         "CONDITION"
 	deterministic     "DETERMINISTIC"
 	database          "DATABASE"
 	databases         "DATABASES"
@@ -132,6 +139,7 @@ import (
 	drop              "DROP"
 	dual              "DUAL"
 	denseRank         "DENSE_RANK"
+	diagnostics       "DIAGNOSTICS"
 	each              "EACH"
 	elseKwd           "ELSE"
 	elseIfKwd         "ELSEIF"
@@ -252,6 +260,7 @@ import (
 	returns           "RETURNS"
 	returnKwd         "RETURN"
 	rewrite           "REWRITE"
+	returnedSqlstate  "RETURNED_SQLSTATE"
 	repeat            "REPEAT"
 	replace           "REPLACE"
 	restrict          "RESTRICT"
@@ -276,7 +285,9 @@ import (
 	sqlwarning        "SQLWARNING"
 	sqlCalcFoundRows  "SQL_CALC_FOUND_ROWS"
 	starting          "STARTING"
+	stacked	          "STACKED"
 	straightJoin      "STRAIGHT_JOIN"
+	subclassOrigin    "SUBCLASS_ORIGIN"
 	tableKwd          "TABLE"
 	tableSample       "TABLESAMPLE"
 	tablegroup        "TABLEGROUP"
@@ -379,6 +390,7 @@ import (
 	current                "CURRENT"
 	cycle           	   "CYCLE"
 	clustered              "CLUSTERED"
+	columnNameKwd          "COLUMN_NAME"
 	day                    "DAY"
 	data                   "DATA"
 	dateType               "DATE"
@@ -461,6 +473,8 @@ import (
 	minRows                "MIN_ROWS"
 	minValue        	   "MINVALUE"
 	modifies		   	   "MODIFIES"
+	messageText            "MESSAGE_TEXT"
+	mysqlErrno         	   "MYSQL_ERRNO"
 	names                  "NAMES"
 	never                  "NEVER"
 	next                   "NEXT"
@@ -548,9 +562,11 @@ import (
 	super                  "SUPER"
 	some                   "SOME"
 	single                 "SINGLE"
+	schemaNameKwd          "SCHEMA_NAME"
 	tablegroupId           "TABLEGROUP_ID"
 	tablegroups            "TABLEGROUPS"
 	tables                 "TABLES"
+	tableNameKwd 		   "TABLE_NAME"
 	tablespace             "TABLESPACE"
 	tableMode              "TABLE_MODE"
 	temporary              "TEMPORARY"
@@ -815,6 +831,8 @@ import (
 	ProcedureBlockContent      "The statement block in procedure expressed with 'Begin ... End'"
 	ProcedureCursorSelectStmt  "The select stmt can used in procedure cursor."
 	ProcedureHcond             "The handler value statement in procedure, expressed by condition_value"
+	ProcedureGetDiag
+	ProcedureGetDiagState
 	ProcedurceCond             "The handler code statement in procedure, expressed by code error num or `sqlstate ...`"
 	ProcedureIfstmt            "The if statement in procedure, expressed by if ... elseif .. else ... end if"
 	ProcedureIf                "The if block in procedure, expressed by expr then statement procedurceElseIfs"
@@ -1209,7 +1227,12 @@ import (
 	ProcedureDecl                 "Procedure variable statement"
 	ProcedureDeclIdents           "Procedure variable name identifiers"
 	ProcedureHandlerType          "Procedure handler operation type"
+	ProcedureDiagCondStateType
+	ProcedureDiagStateType
+	ProcedureGetDiagcond          "The get diagnostics Statement in procedure, expressed by condition_value"
 	ProcedureHcondList            "Procedure handler condition value list"
+	ProcedureGetDiagList
+	ProcedureGetDiagStateList
 	ProcedureOptDefault           "Optional procedure variable default value"
 	ProcedureProcStmt1s           "One more procedure statement"
 	ProcedureDefiner			  "Procedure definer"
@@ -5751,6 +5774,7 @@ UnReservedKeyword:
 |	"COMPLETE"
 |	"COMPRESSED"
 |	"CONSISTENT"
+|	"COLUMN_NAME"
 |	"DATA"
 |	"DATE" %prec lowerThanStringLitToken
 |	"DATETIME"
@@ -5809,9 +5833,11 @@ UnReservedKeyword:
 |	"SYSTEM_TIME"
 |	"SYNCHRONOUS"
 |	"SINGLE"
+|	"SCHEMA_NAME"
 |	"TABLEGROUP_ID"
 |	"TABLEGROUPS"
 |	"TABLES"
+|	"TABLE_NAME"
 |	"TABLESPACE"
 |	"TABLE_MODE"
 |	"TEXT"
@@ -5978,6 +6004,8 @@ UnReservedKeyword:
 |	"SETVAL"
 |	"VECTOR"
 |	"NESTED"
+|	"MESSAGE_TEXT"
+|	"MYSQL_ERRNO"
 
 TiDBKeyword:
 	"ADMIN"
@@ -11963,6 +11991,151 @@ ProcedureDecl:
 			ErrorCon:      $5.([]ast.ErrNode),
 			Operate:       $6.(ast.StmtNode),
 		}
+	}
+|	"GET" ProcedureDiagCondStateType "DIAGNOSTICS" "CONDITION" LengthNum ProcedureGetDiagList
+	{
+		x := &ast.ProcedureGetDiagnosticCondStmt{
+			GetDiagnosticsCond:   $6.([]*ast.ProcedureGetDiagnosticsCond),
+		}
+		if $2 != nil {
+			x.DiagSCond = $2.(int)
+		}
+		$$ = x
+	}
+|	"GET" ProcedureDiagCondStateType "DIAGNOSTICS" ProcedureGetDiagStateList
+	{
+		x := &ast.ProcedureGetDiagnosticStateStmt{
+			GetDiagnosticsState: $4.([]*ast.ProcedureGetDiagnosticsState),
+		}
+		if $2 != nil {
+			x.DiagState = $2.(int)
+		}
+		$$ = x
+	}
+
+ProcedureGetDiagList:
+	ProcedureGetDiag
+	{
+		$$ = []*ast.ProcedureGetDiagnosticsCond{$1.(*ast.ProcedureGetDiagnosticsCond)} 
+	}
+|	ProcedureGetDiagList ',' ProcedureGetDiag
+	{
+		$$ = append($1.([]*ast.ProcedureGetDiagnosticsCond), $3.(*ast.ProcedureGetDiagnosticsCond))
+	}
+
+
+ProcedureGetDiag:
+	/* EMPTY */
+	{
+		$$ = nil
+	}
+|	Identifier "=" ProcedureGetDiagcond
+	{
+		$$ = &ast.ProcedureGetDiagnosticsCond{
+			Name: $1,
+			Num: $3.(int),
+		}
+	}
+
+ProcedureGetDiagcond:
+	"CLASS_ORIGIN"
+	{
+		$$ = ast.CLASS_ORIGIN
+	}
+|	"RETURNED_SQLSTATE"
+	{
+		$$ = ast.RETURNED_SQLSTATE
+	}
+|	"MESSAGE_TEXT"
+	{
+		$$ = ast.MESSAGE_TEXT
+	}
+|	"SUBCLASS_ORIGIN"
+	{
+		$$ = ast.SUBCLASS_ORIGIN
+	}
+|	"MYSQL_ERRNO"
+	{
+		$$ = ast.MYSQL_ERRNO
+	}
+|	"CONSTRAINT_CATALOG"
+	{
+		$$ = ast.CONSTRAINT_CATALOG
+	}
+|	"CONSTRAINT_SCHEMA"
+	{
+		$$ = ast.CONSTRAINT_SCHEMA
+	}
+|	"CONSTRAINT_NAME"
+	{
+		$$ = ast.CONSTRAINT_NAME
+	}
+| 	"CATALOG_NAME"
+	{
+		$$ = ast.CATALOG_NAME
+	}
+|	"CURSOR_NAME"
+	{
+		$$ = ast.CURSOR_NAME
+	}
+|	"SCHEMA_NAME"
+	{
+		$$ = ast.SCHEMA_NAME
+	}
+|	"TABLE_NAME"
+	{
+		$$ = ast.TABLE_NAME
+	}
+|	"COLUMN_NAME"
+	{
+		$$ = ast.COLUMN_NAME
+	}
+
+ProcedureGetDiagStateList:
+	ProcedureGetDiagState
+	{
+		$$ = []*ast.ProcedureGetDiagnosticsState{$1.(*ast.ProcedureGetDiagnosticsState)} 
+	}
+|	ProcedureGetDiagStateList ',' ProcedureGetDiagState
+	{
+		$$ = append($1.([]*ast.ProcedureGetDiagnosticsState), $3.(*ast.ProcedureGetDiagnosticsState))
+	}
+
+
+ProcedureGetDiagState:
+	/* EMPTY */
+	{
+		$$ = nil
+	}
+|	Identifier "=" ProcedureDiagStateType
+	{
+		$$ = &ast.ProcedureGetDiagnosticsState{
+			Name: $1,
+			Num: $3.(int),
+		}
+	}
+
+
+ProcedureDiagCondStateType:
+	{}
+|	"CURRENT"
+	{
+		$$ = ast.PROCEDUR_CURRENT
+	}
+|	"STACKED"
+	{
+		$$ = ast.PROCEDUR_STACKED
+	}
+
+
+ProcedureDiagStateType:
+	"NUMBER"
+	{
+		$$ = ast.PROCEDUR_NUMBER
+	}
+|	"ROW_COUNT"
+	{
+		$$ = ast.PROCEDUR_ROW_COUNT
 	}
 
 ProcedureHandlerType:
