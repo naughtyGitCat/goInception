@@ -903,7 +903,6 @@ import (
 	CommonTableExpr               "Common table expression"
 	Constraint                    "table constraint"
 	ConstraintElem                "table constraint element"
-	ConstraintElemInner           "table constraint element inner"
 	ConstraintKeywordOpt          "Constraint Keyword or empty"
 	CreateSequenceOptionListOpt   "create sequence list opt"
 	CreateTableOptionListOpt      "create table option list opt"
@@ -2668,37 +2667,6 @@ ColumnOptionListOpt:
 	}
 
 ConstraintElem:
-	ConstraintElemInner
-|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')'  IndexOptionList
-	{
-		c := &ast.Constraint{
-			Tp:   ast.ConstraintGlobal,
-			Keys: $5.([]*ast.IndexPartSpecification),
-			ColumnNames: $9.([]*ast.ColumnName),
-			Name: $3.(string),
-		}
-		if $11 != nil {
-			c.Option = $11.(*ast.IndexOption)
-		}
-		$$ = c
-	}
-
-|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' CoveringKeywordOpt '(' ColumnNameListOpt ')' IndexOptionList
-	{
-		c := &ast.Constraint{
-			Tp:   ast.ConstraintUniqueGlobal,
-			Keys: $6.([]*ast.IndexPartSpecification),
-			ColumnNames: $10.([]*ast.ColumnName),
-			Name: $4.(string),
-		}
-		if $12 != nil {
-			c.Option = $12.(*ast.IndexOption)
-		}
-		$$ = c
-	}
-
-
-ConstraintElemInner:
 	"PRIMARY" "KEY" IndexNameAndTypeOpt '(' IndexPartSpecificationList ')'  IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
@@ -2750,34 +2718,7 @@ ConstraintElemInner:
 		}
 		$$ = c
 	}
-
-|	"GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' IndexOptionList
-	{
-		c := &ast.Constraint{
-			Tp:   ast.ConstraintGlobal,
-			Keys: $5.([]*ast.IndexPartSpecification),
-			Name: $3.(string),
-		}	
-		if $7 != nil {
-			c.Option = $7.(*ast.IndexOption)
-		} 
-		
-		$$ = c
-	}
-
-|	"UNIQUE" "GLOBAL" KeyOrIndexOpt IndexName '(' IndexPartSpecificationList ')' IndexOptionList
-	{
-		c := &ast.Constraint{
-			Tp:   ast.ConstraintUniqueGlobal,
-			Keys: $6.([]*ast.IndexPartSpecification),
-			Name: $4.(string),
-		}
-		if $8 != nil {
-			c.Option = $8.(*ast.IndexOption)
-		}
-		$$ = c
-	}
-
+	
 |	KeyOrIndex IfNotExists IndexNameAndTypeOpt '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt
 	{
 		c := &ast.Constraint{
@@ -3125,45 +3066,49 @@ NumLiteral:
  *     LOCK [=] {DEFAULT | NONE | SHARED | EXCLUSIVE}
  *******************************************************************************************/
 CreateIndexStmt:
-	"CREATE" IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt IndexLockAndAlgorithmOpt PartitionOpt
+	"CREATE" TableOptimizerHintsOpt IndexKeyTypeOpt "INDEX" IfNotExists Identifier IndexTypeOpt "ON" TableName '(' IndexPartSpecificationList ')' IndexOptionList WithColumnGroupOpt IndexLockAndAlgorithmOpt PartitionOpt
 	{
 		var indexOption *ast.IndexOption
-		if $12 != nil {
-			indexOption = $12.(*ast.IndexOption)
+		if $13 != nil {
+			indexOption = $13.(*ast.IndexOption)
 			if indexOption.Tp == model.IndexTypeInvalid {
-				if $6 != nil {
-					indexOption.Tp = $6.(model.IndexType)
+				if $7 != nil {
+					indexOption.Tp = $7.(model.IndexType)
 				}
 			}
 		} else {
 			indexOption = &ast.IndexOption{}
-			if $6 != nil {
-				indexOption.Tp = $6.(model.IndexType)
+			if $7 != nil {
+				indexOption.Tp = $7.(model.IndexType)
 			}
 		}
 		var indexLockAndAlgorithm *ast.IndexLockAndAlgorithm
-		if $14 != nil {
-			indexLockAndAlgorithm = $14.(*ast.IndexLockAndAlgorithm)
+		if $15 != nil {
+			indexLockAndAlgorithm = $15.(*ast.IndexLockAndAlgorithm)
 			if indexLockAndAlgorithm.LockTp == ast.LockTypeDefault && indexLockAndAlgorithm.AlgorithmTp == ast.AlgorithmTypeDefault {
 				indexLockAndAlgorithm = nil
 			}
 		}
 		var partitionOpt *ast.PartitionOptions
-		if $15 != nil {
-			partitionOpt = $15.(*ast.PartitionOptions)
+		if $16 != nil {
+			partitionOpt = $16.(*ast.PartitionOptions)
 		}
-		$$ = &ast.CreateIndexStmt{
-			IfNotExists:   $4.(bool),
-			IndexName:     $5,
-			Table:         $8.(*ast.TableName),
-			IndexPartSpecifications: $10.([]*ast.IndexPartSpecification),
+		x := &ast.CreateIndexStmt{
+			IfNotExists:   $5.(bool),
+			IndexName:     $6,
+			Table:         $9.(*ast.TableName),
+			IndexPartSpecifications: $11.([]*ast.IndexPartSpecification),
 			IndexOption:   indexOption,
-			KeyType:       $2.(ast.IndexKeyType),
-			Unique:        $2.(ast.IndexKeyType) == ast.IndexKeyTypeUnique,
+			KeyType:       $3.(ast.IndexKeyType),
+			Unique:        $3.(ast.IndexKeyType) == ast.IndexKeyTypeUnique,
 			LockAlg:       indexLockAndAlgorithm,
 			Partition:     partitionOpt,
-			ColGroupOption:   $13.([]*ast.ColumnGroupOption),
+			ColGroupOption:   $14.([]*ast.ColumnGroupOption),
 		}
+		if $2 != nil {
+			x.TableHints = $2.([]*ast.TableOptimizerHint)
+		}
+		$$ = x
 	}
 
 
@@ -3246,14 +3191,7 @@ IndexKeyTypeOpt:
 	{
 		$$ = ast.IndexKeyTypeFullText
 	}
-|	"GLOBAL"
-	{
-		$$ = ast.IndexKeyTypeGlobal
-	}
-|	"UNIQUE" "GLOBAL"
-	{
-		$$ = ast.IndexKeyTypeUniqueGlobal
-	}
+
 /**************************************AlterDatabaseStmt***************************************
  * See https://dev.mysql.com/doc/refman/5.7/en/alter-database.html
  * 'ALTER DATABASE ... UPGRADE DATA DIRECTORY NAME' is not supported yet.
