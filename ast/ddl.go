@@ -2487,29 +2487,42 @@ type CreateIndexStmt struct {
 	KeyType                 IndexKeyType
 	LockAlg                 *IndexLockAndAlgorithm
 	Partition               *PartitionOptions
-	ColGroupOption          []*ColumnGroupOption
+	// TableHints represents the table level Optimizer Hint for join type.
+	TableHints     []*TableOptimizerHint
+	ColGroupOption []*ColumnGroupOption
 }
 
 // Restore implements Node interface.
 func (n *CreateIndexStmt) Restore(ctx *RestoreCtx) error {
 	ctx.WriteKeyWord("CREATE ")
+	if n.TableHints != nil && len(n.TableHints) != 0 {
+		ctx.WritePlain("/*+ ")
+		for i, tableHint := range n.TableHints {
+			if i != 0 {
+				ctx.WritePlain(" ")
+			}
+			if err := tableHint.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while restore UpdateStmt.TableHints[%d]", i)
+			}
+		}
+		ctx.WritePlain("*/ ")
+	}
 	if n.Unique {
 		ctx.WriteKeyWord("UNIQUE ")
 	}
 	switch n.KeyType {
-	case IndexKeyTypeNone:
-		ctx.WriteKeyWord("CREATE INDEX ")
-	case IndexKeyTypeSpatial:
-		ctx.WriteKeyWord("CREATE SPATIAL INDEX ")
-	case IndexKeyTypeFullText:
-		ctx.WriteKeyWord("CREATE FULLTEXT INDEX ")
 	case IndexKeyTypeUnique:
-		ctx.WriteKeyWord("CREATE UNIQUE INDEX ")
-	case IndexKeyTypeGlobal:
-		ctx.WriteKeyWord("CREATE GLOBAL INDEX ")
-	case IndexKeyTypeUniqueGlobal:
-		ctx.WriteKeyWord("CREATE UNIQUE GLOBAL INDEX ")
+		ctx.WriteKeyWord("UNIQUE ")
+	case IndexKeyTypeSpatial:
+		ctx.WriteKeyWord("SPATIAL ")
+	case IndexKeyTypeFullText:
+		ctx.WriteKeyWord("FULLTEXT ")
 	}
+	ctx.WriteKeyWord("INDEX ")
+	if n.IfNotExists {
+		ctx.WriteKeyWord("IF NOT EXISTS ")
+	}
+
 	ctx.WriteName(n.IndexName)
 	ctx.WriteKeyWord(" ON ")
 	if err := n.Table.Restore(ctx); err != nil {

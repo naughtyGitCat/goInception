@@ -1883,10 +1883,8 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"alter sequence seq restart = 5", true, "ALTER SEQUENCE `seq` RESTART WITH 5"},
 		{"create sequence seq restart = 5", false, ""},
 		// for create table GLOBAL/LOCAL INDEX
-		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) );", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) GLOBAL)"},
+		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) GLOBAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) GLOBAL)"},
 		{"CREATE TABLE t (a varchar(50), b int, index idx_b(b) LOCAL);", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, index idx_b(b) LOCAL)"},
-		{"CREATE TABLE t (a varchar(50), b int, GLOBAL index idx_b(b) PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, GLOBAL index idx_b(`b`) PARTITION BY HASH(`b`))"},
-		{"CREATE TABLE t (a varchar(50), b int, unique global index idx_b(b)  PARTITION BY HASH(b));", true, "CREATE TABLE `t` (`a` VARCHAR(50),`b` INT, UNIQUE GLOBAL index idx_b(b) PARTITION BY HASH(`b`))"},
 		// column visibility option
 		{"CREATE TABLE foo (pump varchar(50), b int visible);", true, "CREATE TABLE `foo` (`pump` VARCHAR(50),`b` INT VISIBLE)"},
 		//parallel option
@@ -2390,8 +2388,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"CREATE UNIQUE INDEX idx ON t (a)", true, "CREATE UNIQUE INDEX `idx` ON `t` (`a`)"},
 		{"CREATE SPATIAL INDEX idx ON t (a)", true, "CREATE SPATIAL INDEX `idx` ON `t` (`a`)"},
 		{"CREATE FULLTEXT INDEX idx ON t (a)", true, "CREATE FULLTEXT INDEX `idx` ON `t` (`a`)"},
-		{"CREATE GLOBAL INDEX idx ON t (a)", true, "CREATE GLOBAL INDEX `idx` ON `t` (`a`)"},
-		{"CREATE UNIQUE GLOBAL INDEX idx ON t (a)", true, "CREATE UNIQUE GLOBAL INDEX `idx` ON `t` (`a`)"},
 		{"CREATE INDEX idx ON t (a) GLOBAL", true, "CREATE INDEX `idx` ON `t` (`a`) GLOBAL"},
 		{"CREATE INDEX idx ON t (a) USING HASH", true, "CREATE INDEX `idx` ON `t` (`a`) USING HASH"},
 		{"CREATE INDEX idx ON t (a) COMMENT 'foo'", true, "CREATE INDEX `idx` ON `t` (`a`) COMMENT 'foo'"},
