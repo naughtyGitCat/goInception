@@ -2134,6 +2134,8 @@ func (n *TableOptimizerHint) Restore(ctx *format.RestoreCtx) error {
 	switch n.HintName.L {
 	case "max_execution_time":
 		ctx.WritePlainf("%d", n.HintData.(uint64))
+	case "parallel":
+		ctx.WritePlainf("%d", n.HintData.(uint64))
 	case "resource_group":
 		ctx.WriteName(n.HintData.(string))
 	case "nth_plan":
