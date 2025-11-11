@@ -2466,8 +2466,6 @@ const (
 	IndexKeyTypeUnique
 	IndexKeyTypeSpatial
 	IndexKeyTypeFullText
-	IndexKeyTypeGlobal
-	IndexKeyTypeUniqueGlobal
 )
 
 // CreateIndexStmt is a statement to create an index.

@@ -100,6 +100,9 @@ import (
 	hintTimeRange             "TIME_RANGE"
 	hintUseCascades           "USE_CASCADES"
 
+	/* OceanBase hint names */
+	hintParallel "PARALLEL"
+
 	/* Other keywords */
 	hintOLAP            "OLAP"
 	hintOLTP            "OLTP"
@@ -301,6 +304,14 @@ TableOptimizerHintOpt:
 			HintName: model.NewCIStr($1),
 			QBName:   model.NewCIStr($3),
 			HintData: model.NewCIStr($4),
+		}
+	}
+|	"PARALLEL" '(' QueryBlockOpt hintIntLit ')'
+	{
+		$$ = &ast.TableOptimizerHint{
+			HintName: model.NewCIStr($1),
+			QBName:   model.NewCIStr($3),
+			HintData: $4,
 		}
 	}
 |	hintIdentifier '(' QueryBlockOpt hintIntLit ')'
@@ -635,6 +646,8 @@ Identifier:
 |	"USE_TOJA"
 |	"TIME_RANGE"
 |	"USE_CASCADES"
+/* OceanBase hint names */
+|	"PARALLEL"
 /* other keywords */
 |	"OLAP"
 |	"OLTP"

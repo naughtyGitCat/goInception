@@ -662,7 +662,7 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 		if node.KeyType == ast.IndexKeyTypeFullText {
 			tp = ast.ConstraintFulltext
 		}
-		if !s.inc.AlterAutoMerge { // jwx added
+		if !s.inc.AlterAutoMerge || s.dbType == DBTypeOceanBase { // jwx added
 			s.checkCreateIndex(node.Table, node.IndexName,
 				node.IndexPartSpecifications, node.IndexOption, nil, node.Unique, tp)
 		} else {

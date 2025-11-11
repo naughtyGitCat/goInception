@@ -866,6 +866,9 @@ var hintTokenMap = map[string]int{
 	"TIME_RANGE":              hintTimeRange,
 	"USE_CASCADES":            hintUseCascades,
 
+	// Oceanbase hint names
+	"PARALLEL": hintParallel,
+
 	// TiDB hint aliases
 	"TIDB_HJ":   hintHashJoin,
 	"TIDB_INLJ": hintInlJoin,
