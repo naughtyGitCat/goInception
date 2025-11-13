@@ -387,16 +387,16 @@ type SequencesInfo struct {
 type SequencesOptionInfo struct {
 	gorm.Model
 
-	Db          string `gorm:"Column:DB"`
-	Name        string `gorm:"Column:NAME"`
-	StartWtih   uint64 `gorm:"Column:START_WITH"`
-	MinValue    uint64 `gorm:"Column:MIN_VALUE"`
-	MaxValue    uint64 `gorm:"Column:MAX_VALUE"`
-	IncrementBy uint64 `gorm:"Column:INCREMENT_BY"`
-	CycleFlag   uint64 `gorm:"Column:CYCLE_FLAG"`
-	CacheNum    uint64 `gorm:"Column:CACHE_NUM"`
-	OrderFlag   uint64 `gorm:"Column:ORDER_FLAG"`
-	CacheSize   uint64 `gorm:"Column:CACHE_SIZE"`
+	SequenceOwner string `gorm:"Column:SEQUENCE_OWNER"`
+	SequenceName  string `gorm:"Column:SEQUENCE_NAME"`
+	StartWtih     uint64 `gorm:"Column:START_WITH"`
+	MinValue      uint64 `gorm:"Column:MIN_VALUE"`
+	MaxValue      uint64 `gorm:"Column:MAX_VALUE"`
+	IncrementBy   uint64 `gorm:"Column:INCREMENT_BY"`
+	CycleFlag     uint64 `gorm:"Column:CYCLE_FLAG"`
+	CacheNum      uint64 `gorm:"Column:CACHE_NUM"`
+	OrderFlag     uint64 `gorm:"Column:ORDER_FLAG"`
+	CacheSize     uint64 `gorm:"Column:CACHE_SIZE"`
 }
 
 // DBInfo 库信息
