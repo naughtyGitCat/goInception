@@ -6792,7 +6792,14 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 			}
 
 			for colIndex, vv := range list {
-				s.checkItem(vv, []*TableInfo{table}, "")
+				if v, ok := vv.(*ast.ColumnNameExpr); ok && s.dbType == DBTypeOceanBase {
+					seq := s.querySequencesFromDB(table.Schema, v.Name.Table.O, true)
+					if seq != nil {
+						continue
+					}
+				} else {
+					s.checkItem(vv, []*TableInfo{table}, "")
+				}
 
 				if v, ok := vv.(*ast.ValueExpr); ok {
 					// name := node.Columns[colIndex].Name.L
@@ -8754,8 +8761,14 @@ func (s *session) checkUpdate(node *ast.UpdateStmt, sql string) {
 				// 		s.checkFieldItem(l.Column, tableInfoList)
 				// 	}
 				// }
-
-				s.checkItem(l.Expr, tableInfoList, "")
+				if v, ok := l.Expr.(*ast.ColumnNameExpr); ok && s.dbType == DBTypeOceanBase {
+					seq := s.querySequencesFromDB(s.dbName, v.Name.Table.O, true)
+					if seq != nil {
+						continue
+					}
+				} else {
+					s.checkItem(l.Expr, tableInfoList, "")
+				}
 			}
 
 			s.checkSelectItem(node.TableRefs.TableRefs, nil, node.Where != nil, "")

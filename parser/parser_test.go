@@ -1822,7 +1822,7 @@ func (s *testParserSuite) TestDDL(c *C) {
 		// for drop materialized view log
 		{"drop materialized view log on v", true, "DROP MATERIALIZED VIEW LOG ON `v`"},
 		// for create sequence
-		{"create sequence sequence", false, ""},
+		{"create sequence sequence", true, "CREATE SEQUENCE `sequence`"},
 		{"create sequence seq", true, "CREATE SEQUENCE `seq`"},
 		{"create sequence if not exists seq", true, "CREATE SEQUENCE IF NOT EXISTS `seq`"},
 		{"create sequence if not exists seq increment", false, ""},
