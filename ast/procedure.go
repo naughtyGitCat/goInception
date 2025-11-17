@@ -1271,7 +1271,7 @@ const (
 )
 
 const (
-	PROCEDUR_CURRENT = iota
+	PROCEDUR_CURRENT int64 = iota
 	PROCEDUR_STACKED
 )
 
@@ -1364,7 +1364,7 @@ func (n *ProcedureGetDiagnosticsState) Accept(v Visitor) (Node, bool) {
 
 type ProcedureGetDiagnosticCondStmt struct {
 	stmtNode
-	DiagSCond          int
+	DiagSCond          int64
 	Num                int
 	GetDiagnosticsCond []*ProcedureGetDiagnosticsCond
 }
@@ -1410,7 +1410,7 @@ func (n *ProcedureGetDiagnosticCondStmt) Accept(v Visitor) (Node, bool) {
 
 type ProcedureGetDiagnosticStateStmt struct {
 	stmtNode
-	DiagState           int
+	DiagState           int64
 	GetDiagnosticsState []*ProcedureGetDiagnosticsState
 }
 
