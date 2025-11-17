@@ -129,13 +129,7 @@ func (rw *Rewrite) select2Count() string {
 		newSQL := &sqlparser.Select{
 			SelectExprs: []sqlparser.SelectExpr{
 				&sqlparser.AliasedExpr{
-					Expr: &sqlparser.FuncExpr{
-						// Name: sqlparser.NewColIdent("count"),
-						Name: sqlparser.NewIdentifierCI("count"),
-						Exprs: []sqlparser.SelectExpr{
-							new(sqlparser.StarExpr),
-						},
-					},
+					Expr: &sqlparser.CountStar{},
 				},
 			},
 			Distinct: stmt.Distinct,
