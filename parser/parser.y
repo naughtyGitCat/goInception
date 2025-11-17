@@ -827,6 +827,7 @@ import (
 	SetOprStmtWithLimitOrderBy "Union/Except/Intersect select statement with limit and order by"
 	SetOprStmtWoutLimitOrderBy "Union/Except/Intersect select statement without limit and order by"
 	UseStmt              "USE statement"
+	ProcedureGetDiagnosticStmt
 	ProcedureUnlabeledBlock    "The statement block without label in procedure"
 	ProcedureBlockContent      "The statement block in procedure expressed with 'Begin ... End'"
 	ProcedureCursorSelectStmt  "The select stmt can used in procedure cursor."
@@ -11855,6 +11856,7 @@ ProcedureStatementStmt:
 |	DeleteFromStmt
 |	AnalyzeTableStmt
 |	TruncateTableStmt
+|   ProcedureGetDiagnosticStmt
 
 ProcedureCursorSelectStmt:
 	SelectStmt
@@ -11931,13 +11933,14 @@ ProcedureDecl:
 			Operate:       $6.(ast.StmtNode),
 		}
 	}
-|	"GET" ProcedureDiagCondStateType "DIAGNOSTICS" "CONDITION" LengthNum ProcedureGetDiagList
+ProcedureGetDiagnosticStmt:
+	"GET" ProcedureDiagCondStateType "DIAGNOSTICS" "CONDITION" LengthNum ProcedureGetDiagList
 	{
 		x := &ast.ProcedureGetDiagnosticCondStmt{
 			GetDiagnosticsCond:   $6.([]*ast.ProcedureGetDiagnosticsCond),
 		}
 		if $2 != nil {
-			x.DiagSCond = $2.(int)
+			x.DiagSCond = $2.(int64)
 		}
 		$$ = x
 	}
@@ -11947,7 +11950,7 @@ ProcedureDecl:
 			GetDiagnosticsState: $4.([]*ast.ProcedureGetDiagnosticsState),
 		}
 		if $2 != nil {
-			x.DiagState = $2.(int)
+			x.DiagState = $2.(int64)
 		}
 		$$ = x
 	}
