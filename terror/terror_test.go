@@ -117,7 +117,7 @@ func (s *testTErrorSuite) TestTraceAndLocation(c *C) {
 			sysStack++
 		}
 	}
-	c.Assert(len(lines)-(2*sysStack), Equals, 15)
+	c.Assert(len(lines)-(2*sysStack), Equals, 13)
 	var containTerr bool
 	for _, v := range lines {
 		if strings.Contains(v, "terror_test.go") {
