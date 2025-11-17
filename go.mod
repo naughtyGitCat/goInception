@@ -10,7 +10,7 @@ replace vitess.io/vitess => github.com/vitessio/vitess v0.21.6
 
 replace google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
-replace github.com/go-sql-driver/mysql => github.com/go-sql-driver/mysql v1.7.1
+replace github.com/go-sql-driver/mysql => github.com/go-sql-driver/mysql v1.9.3
 
 replace github.com/etcd-io/gofail => go.etcd.io/gofail v0.0.0-20180808172546-51ce9a71510a
 
