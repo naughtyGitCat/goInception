@@ -1950,18 +1950,35 @@ func (s *session) mysqlServerVersion() {
 					s.dbType = DBTypeMysql
 				}
 
-				versionStr := strings.Split(value, "-")[0]
-				versionSeg := strings.Split(versionStr, ".")
-				if len(versionSeg) == 3 {
-					versionStr = fmt.Sprintf("%s%02s%02s", versionSeg[0], versionSeg[1], versionSeg[2])
-					version, err := strconv.Atoi(versionStr)
-					if err != nil {
-						s.appendErrorMsg(err.Error())
+				if s.dbType == DBTypeOceanBase {
+					versionStr := strings.Split(value, "-")[2]
+					versionBp := strings.Split(versionStr, "v")[1]
+					versionSeg := strings.Split(versionBp, ".")
+					if len(versionSeg) == 4 {
+						versionStr = fmt.Sprintf("%s%s%s%02s", versionSeg[0], versionSeg[1], versionSeg[2], versionSeg[3])
+						version, err := strconv.Atoi(versionStr)
+						if err != nil {
+							s.appendErrorMsg(err.Error())
+						}
+						s.dbVersion = version
+					} else {
+						s.appendErrorMsg(fmt.Sprintf("无法解析版本号:%s", value))
 					}
-					s.dbVersion = version
 				} else {
-					s.appendErrorMsg(fmt.Sprintf("无法解析版本号:%s", value))
+					versionStr := strings.Split(value, "-")[0]
+					versionSeg := strings.Split(versionStr, ".")
+					if len(versionSeg) == 3 {
+						versionStr = fmt.Sprintf("%s%02s%02s", versionSeg[0], versionSeg[1], versionSeg[2])
+						version, err := strconv.Atoi(versionStr)
+						if err != nil {
+							s.appendErrorMsg(err.Error())
+						}
+						s.dbVersion = version
+					} else {
+						s.appendErrorMsg(fmt.Sprintf("无法解析版本号:%s", value))
+					}
 				}
+
 				log.Debug("db version: ", s.dbVersion)
 			case "version_comment":
 				if strings.Contains(strings.ToLower(value), "oceanbase") {
@@ -6308,6 +6325,8 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 					if foundField.Null == "YES" {
 						s.appendErrorMsg("All parts of a SPATIAL index must be NOT NULL")
 					}
+				} else if tp == ast.ConstraintFulltext && s.dbType == DBTypeOceanBase && s.dbVersion < 43100 {
+					s.appendErrorMsg("OceanBase version less than 4.3.1.0 does not support fulltext index")
 				}
 				if col.Desc && s.dbType == DBTypeOceanBase {
 					s.appendErrorMsg("OceanBase Desc index not supported")
