@@ -1249,7 +1249,10 @@ type SelectStmt struct {
 	Kind SelectStmtKind
 	// Lists is filled only when Kind == SelectStmtKindValues
 	Lists []*RowExpr
-	With  *WithClause
+
+	With *WithClause
+
+	IntoLists []ExprNode
 }
 
 func (*SelectStmt) resultSet() {}
@@ -1485,7 +1488,16 @@ func (n *SelectStmt) Restore(ctx *RestoreCtx) error {
 			}
 		}
 	}
-
+	if n.IntoLists != nil {
+		for i, v := range n.IntoLists {
+			if i != 0 {
+				ctx.WritePlain(", ")
+			}
+			if err := v.Restore(ctx); err != nil {
+				return errors.Annotatef(err, "An error occurred while restore SelectStmt.IntoLists[%d]", i)
+			}
+		}
+	}
 	return nil
 }
 
@@ -1610,6 +1622,13 @@ func (n *SelectStmt) Accept(v Visitor) (Node, bool) {
 		}
 	}
 
+	for i, val := range n.IntoLists {
+		node, ok := val.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.IntoLists[i] = node.(ExprNode)
+	}
 	return v.Leave(n)
 }
 
