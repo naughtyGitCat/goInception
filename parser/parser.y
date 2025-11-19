@@ -2997,6 +2997,12 @@ NextValueForSequence:
 			Args:   []ast.ExprNode{objNameExpr},
 		}
 	}
+|   "NEXTVAL" '(' stringLit ')'
+	{
+		$$ = &ast.FuncCallExpr{
+			FnName: model.NewCIStr(ast.NextVal),
+		}
+	}
 
 /*
 * See https://dev.mysql.com/doc/refman/5.7/en/date-and-time-functions.html#function_localtime
