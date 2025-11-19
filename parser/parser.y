@@ -7721,6 +7721,9 @@ SelectStmtBasic:
 		if $4 != nil {
 			st.Having = $4.(*ast.HavingClause)
 		}
+		if $5 != nil {
+			st.IntoLists = $5.([]ast.ExprNode)
+		}
 		$$ = st
 	}
 
@@ -7739,13 +7742,13 @@ SelectStmtFromDualTable:
 	}
 
 SelectStmtFromTable:
-	SelectStmtBasic "FROM" TableRefsClause WhereClauseOptional SelectStmtGroup HavingClause WindowClauseOptional
+	SelectStmtBasic "FROM" TableRefsClause WhereClauseOptional SelectStmtGroup HavingClause WindowClauseOptional SelectStmtIntoList
 	{
 		st := $1.(*ast.SelectStmt)
 		st.From = $3.(*ast.TableRefsClause)
 		lastField := st.Fields.Fields[len(st.Fields.Fields)-1]
 		if lastField.Expr != nil && lastField.AsName.O == "" {
-			lastEnd := parser.endOffset(&yyS[yypt-5])
+			lastEnd := parser.endOffset(&yyS[yypt-6])
 			lastField.SetText(parser.src[lastField.Offset:lastEnd])
 		}
 		if $4 != nil {
@@ -7759,6 +7762,9 @@ SelectStmtFromTable:
 		}
 		if $7 != nil {
 			st.WindowSpecs = ($7.([]ast.WindowSpec))
+		}
+		if $8 != nil {
+			st.IntoLists = $8.([]ast.ExprNode)
 		}
 		$$ = st
 	}
@@ -8833,7 +8839,7 @@ SelectStmtIntoList:
 	}
 |	"INTO" ExpressionList
 	{
-		$$ = nil
+		$$ = $2.([]ast.ExprNode)
 	}
 
 // See https://dev.mysql.com/doc/refman/5.7/en/subqueries.html
