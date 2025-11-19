@@ -2710,6 +2710,7 @@ func (s *session) checkAlterSequence(node *ast.AlterSequenceStmt) {
 		case ast.SequenceRestart:
 		case ast.SequenceOrder:
 		case ast.SequenceNoOrder:
+		case ast.SequenceMinValue:
 		default:
 			s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 			log.Info("con:", s.sessionVars.ConnectionID, " 未定义的解析: ", alter.Tp)
