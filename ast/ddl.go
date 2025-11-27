@@ -4993,18 +4993,10 @@ func (n *PartitionMethod) acceptInPlace(v Visitor) bool {
 	return true
 }
 
-type DbPartitionKeyword int
-
-const (
-	DbPartitionNone DbPartitionKeyword = iota
-	DbPartitionShard
-)
-
 // PartitionOptions specifies the partition options.
 type PartitionOptions struct {
 	node
 	PartitionMethod
-	DbPartitionKeyword
 	Sub         *PartitionMethod
 	Definitions []*PartitionDefinition
 }
@@ -5066,12 +5058,7 @@ func (n *PartitionOptions) Validate() error {
 }
 
 func (n *PartitionOptions) Restore(ctx *RestoreCtx) error {
-	switch n.DbPartitionKeyword {
-	case DbPartitionNone:
-		ctx.WriteKeyWord("PARTITION BY ")
-	case DbPartitionShard:
-		ctx.WriteKeyWord("DBPARTITION BY ")
-	}
+	ctx.WriteKeyWord("PARTITION BY ")
 
 	if err := n.PartitionMethod.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore PartitionOptions.PartitionMethod")

@@ -822,15 +822,19 @@ func (s *session) checkPartitionValuesType(t *TableInfo, opts *ast.PartitionOpti
 	if opts == nil {
 		return
 	}
-	var partkeys string
-	var colType byte
-	var rangeType bool = true
 
-	if opts.ColumnNames != nil {
-		for _, key := range opts.ColumnNames {
-			partkeys = key.Name.L
-		}
+	var partkeys string
+	var rangeType bool = true
+	var listColumns bool
+	var foundField FieldInfo
+	var foundAllowedType bool
+
+	// Handle column names assignment correctly
+	if opts.ColumnNames != nil && len(opts.ColumnNames) > 0 {
+		// Only use the first one as per current logic; consider revisiting this design choice
+		partkeys = opts.ColumnNames[0].Name.L
 		rangeType = false
+		listColumns = true
 	}
 
 	op := opts.PartitionMethod
@@ -845,80 +849,101 @@ func (s *session) checkPartitionValuesType(t *TableInfo, opts *ast.PartitionOpti
 		}
 	}
 
+	// Find corresponding field info
 	for _, field := range t.Fields {
 		if strings.EqualFold(field.Field, partkeys) {
-			colType = field.Tp.Tp
-
+			foundField = field
+			break
 		}
 	}
 
+	// Validate partition definitions
 	for _, part := range opts.Definitions {
 		switch clause := part.Clause.(type) {
 		case *ast.PartitionDefinitionClauseIn:
-			if clause.Values == nil {
-				continue
-			}
-			for _, values := range clause.Values {
-				for _, v := range values {
-					if types.IsTypeVarchar(colType) {
-						if !types.IsTypeVarchar(v.GetType().Tp) {
-							s.appendErrorNo(ErrFieldTypeNotAllowedAsPartitionField, partkeys)
-							break
-						}
-					}
-					if types.IsTypeNumeric(colType) {
-						if !types.IsTypeNumeric(v.GetType().Tp) {
-							s.appendErrorNo(ErrValuesIsNotIntType, part.Name.O)
-							break
-						}
-					}
-				}
-			}
+			s.validateInClause(clause, part.Name.O, listColumns, foundField, &foundAllowedType)
 		case *ast.PartitionDefinitionClauseLessThan:
-			for _, op := range clause.Exprs {
-				switch v := op.(type) {
-				case *ast.FuncCallExpr:
-					value := v.Args[0]
-					if types.IsTypeVarchar(colType) {
-						if !types.IsTypeVarchar(value.GetType().Tp) {
-							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
-							break
-						}
-					}
-					if types.IsTypeNumeric(colType) {
-						if !types.IsTypeNumeric(value.GetType().Tp) {
-							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
-							break
-						}
-					}
-				case *ast.ValueExpr:
-					if rangeType {
-						if types.IsTypeVarchar(v.Type.Tp) {
-							s.appendErrorNo(ErrValuesIsNotIntType, part.Name.O)
-							break
-						}
-						if types.IsTypeVarchar(colType) {
-							s.appendErrorNo(ErrFieldTypeNotAllowedAsPartitionField, partkeys)
-							break
-						}
-					}
-					if types.IsTypeVarchar(colType) {
-						if !types.IsTypeVarchar(v.GetType().Tp) {
-							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
-							break
-						}
-					}
-					if types.IsTypeNumeric(colType) {
-						if !types.IsTypeNumeric(v.Type.Tp) {
-							s.appendErrorNo(ErrWrongTypeColumnValue, part.Name.O)
-							break
-						}
-					}
+			s.validateLessThanClause(clause, part.Name.O, rangeType, foundField, &foundAllowedType)
+		}
+	}
+
+	if foundAllowedType {
+		s.appendErrorNo(ErrFieldTypeNotAllowedAsPartitionField, partkeys)
+	}
+}
+
+// Helper method to validate IN clause values
+func (s *session) validateInClause(clause *ast.PartitionDefinitionClauseIn, partName string, listColumns bool, foundField FieldInfo, foundAllowedType *bool) {
+	if clause.Values == nil {
+		return
+	}
+	for _, values := range clause.Values {
+		for _, v := range values {
+			tp := v.GetType().Tp
+			baseType := GetDataTypeBase(foundField.Type)
+
+			if !listColumns {
+				if types.IsTypeVarchar(tp) {
+					s.appendErrorNo(ErrValuesIsNotIntType, partName)
+					return
+				}
+				if types.IsTypeNumeric(tp) && strings.Contains(baseType, "char") {
+					*foundAllowedType = true
+					return
+				}
+			} else {
+				if types.IsTypeVarchar(tp) && strings.Contains(baseType, "int") {
+					s.appendErrorNo(ErrWrongTypeColumnValue, partName)
+					return
+				}
+				if types.IsTypeNumeric(tp) && strings.Contains(baseType, "char") {
+					s.appendErrorNo(ErrWrongTypeColumnValue, partName)
+					return
 				}
 			}
 		}
 	}
 }
+
+// Helper method to validate LESS THAN clause values
+func (s *session) validateLessThanClause(clause *ast.PartitionDefinitionClauseLessThan, partName string, rangeType bool, foundField FieldInfo, foundAllowedType *bool) {
+	for _, expr := range clause.Exprs {
+		switch v := expr.(type) {
+		case *ast.FuncCallExpr:
+			if arg, ok := v.Args[0].(*ast.ColumnNameExpr); ok {
+				tp := arg.GetType().Tp
+				baseType := GetDataTypeBase(foundField.Type)
+				if types.IsTypeVarchar(tp) && strings.Contains(baseType, "int") {
+					s.appendErrorNo(ErrWrongTypeColumnValue, partName)
+					return
+				}
+			}
+		case *ast.ValueExpr:
+			tp := v.GetType().Tp
+			baseType := GetDataTypeBase(foundField.Type)
+
+			if rangeType {
+				if types.IsTypeVarchar(tp) {
+					s.appendErrorNo(ErrValuesIsNotIntType, partName)
+					return
+				}
+				if types.IsTypeNumeric(tp) && strings.Contains(baseType, "char") {
+					*foundAllowedType = true
+					return
+				}
+			}
+			if types.IsTypeVarchar(tp) && strings.Contains(baseType, "int") {
+				s.appendErrorNo(ErrWrongTypeColumnValue, partName)
+				return
+			}
+			if types.IsTypeNumeric(tp) && strings.Contains(baseType, "char") {
+				s.appendErrorNo(ErrWrongTypeColumnValue, partName)
+				return
+			}
+		}
+	}
+}
+
 func (s *session) checkPartitionNameExists(t *TableInfo, defs []*ast.PartitionDefinition) {
 	for _, part := range defs {
 		partDescription := ""
@@ -985,6 +1010,7 @@ func (s *session) checkPartitionConvert(t *TableInfo, opts *ast.PartitionOptions
 	// 	s.appendErrorMsg(fmt.Sprintf("Table '%s' is already a partitioned table", t.Name))
 	// }
 	s.checkPartitionNameUnique(opts.Definitions)
+	s.checkPartitionValuesType(t, opts)
 	// s.checkPartitionNameExists(t, opts.Definitions)
 }
 
