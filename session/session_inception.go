@@ -4262,6 +4262,10 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
 		return
 	}
+	if s.dbType == DBTypeOceanBase {
+		// 检查 oceanbase 混合DDL冲突
+		s.checkAlterOperationConflicts(table, node.Specs)
+	}
 	for i, alter := range node.Specs {
 		switch alter.Tp {
 		case ast.AlterTableOption:
@@ -4583,6 +4587,69 @@ func (s *session) checkDDLInstant(node *ast.AlterTableStmt, t *TableInfo) {
 	}
 	if checkDDLInstantMySQL80(node, t, s.dbVersion) {
 		s.myRecord.useOsc = false
+	}
+}
+
+func (s *session) checkAlterOperationConflicts(t *TableInfo, specs []*ast.AlterTableSpec) {
+	if len(specs) <= 1 {
+		return
+	}
+
+	const (
+		ColumnChange = 1 << iota
+		ColumnAdd
+		ColumnDrop
+		IndexDrop
+		PrimaryKey
+	)
+	var operations int
+	var colChange bool
+	for _, alter := range specs {
+		switch alter.Tp {
+		case ast.AlterTableModifyColumn, ast.AlterTableChangeColumn:
+			operations |= ColumnChange
+		case ast.AlterTableDropColumn:
+			operations |= ColumnDrop
+		case ast.AlterTableAddColumns:
+			operations |= ColumnAdd
+		case ast.AlterTableDropPrimaryKey:
+			operations |= PrimaryKey | ColumnAdd
+		case ast.AlterTableDropIndex:
+			operations |= IndexDrop
+		}
+		for _, nc := range alter.NewColumns {
+			var foundField FieldInfo
+			for _, field := range t.Fields {
+				if strings.EqualFold(field.Field, nc.Name.Name.O) {
+					foundField = field
+					break
+				}
+			}
+			if nc.Tp.CompactStr() != foundField.Type {
+				colChange = true
+			}
+		}
+	}
+
+	if (operations & ColumnChange) != 0 {
+		if (operations&PrimaryKey) != 0 && (operations&IndexDrop) != 0 {
+			s.appendErrorMsg("Multiple complex DDLs about primary in single stmt not supported.")
+			return
+		}
+		if (operations&IndexDrop) != 0 && colChange {
+			s.appendErrorMsg("alter column and drop index in single statement not supported.")
+			return
+		}
+	}
+
+	if (operations&ColumnDrop) != 0 && (operations&IndexDrop) != 0 {
+		s.appendErrorMsg("drop column and drop index in single statment not supported.")
+		return
+	}
+
+	if (operations&ColumnAdd) != 0 && (operations&PrimaryKey) != 0 {
+		s.appendErrorMsg("Multiple complex DDLs about primary in single stmt not supported.")
+		return
 	}
 }
 
