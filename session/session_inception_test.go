@@ -1097,6 +1097,15 @@ primary key(id)) comment 'test';`
 		session.NewErr(session.ErrUniqueKeyNeedAllFieldsInPf, "PRIMARY KEY"))
 
 	sql = `CREATE TABLE t1 (
+			c1  INT PRIMARY KEY,
+			c2  INT
+			)
+			PARTITION BY RANGE (c2) (
+				PARTITION p0 VALUES LESS THAN (1));`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrUniqueKeyNeedAllFieldsInPf, "PRIMARY KEY"))
+
+	sql = `CREATE TABLE t1 (
 			c1  INT,
 			c2  DATE,
 			PRIMARY KEY (c1,c2)

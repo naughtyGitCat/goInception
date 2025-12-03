@@ -1793,8 +1793,6 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table t (a int default(\"1\"))", true, "CREATE TABLE `t` (`a` INT DEFAULT _UTF8MB4'1')"},
 		{"create table t (a int default (_utf8mb4'1'))", true, "CREATE TABLE `t` (`a` INT DEFAULT _UTF8MB4'1')"},
 
-		// for create partition table
-		{"CREATE PARTITION TABLE t (a varchar(50), b int);", true, "CREATE PARTITION TABLE `t` (`a` VARCHAR(50),`b` INT)"},
 		// for create materialized view
 		{"create materialized view v as select * from t", true, "CREATE MATERIALIZED VIEW `v` AS SELECT * FROM `t`"},
 		{"create materialized view v never refresh as select * from t", true, "CREATE MATERIALIZED VIEW `v` NEVER REFRESH AS SELECT * FROM `t`"},
@@ -2014,8 +2012,7 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"drop table xxx restrict", true, "DROP TABLE `xxx`"},
 		{"drop table xxx, yyy cascade", true, "DROP TABLE `xxx`, `yyy`"},
 		{"drop table if exists xxx restrict", true, "DROP TABLE IF EXISTS `xxx`"},
-		// for drop partition table
-		{"drop PARTITION  table xxx", true, "DROP PARTITION TABLE `xxx`"},
+
 		{"drop view", false, "DROP VIEW"},
 		{"drop view xxx", true, "DROP VIEW `xxx`"},
 		{"drop view xxx, yyy", true, "DROP VIEW `xxx`, `yyy`"},

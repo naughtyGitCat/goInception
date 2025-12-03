@@ -1001,13 +1001,12 @@ func (n *ColumnDef) Validate() bool {
 	return !(generatedCol && illegalOpt4gc)
 }
 
-type TemporaryOrPartitionKeyword int
+type TemporaryKeyword int
 
 const (
-	TemporaryNone TemporaryOrPartitionKeyword = iota
+	TemporaryNone TemporaryKeyword = iota
 	TemporaryGlobal
 	TemporaryLocal
-	TablePartition
 )
 
 // CreateTableStmt is a statement to create a table.
@@ -1016,7 +1015,7 @@ type CreateTableStmt struct {
 	ddlNode
 
 	IfNotExists bool
-	TemporaryOrPartitionKeyword
+	TemporaryKeyword
 	OnCommitDelete bool
 	Table          *TableName
 	ReferTable     *TableName
@@ -1031,15 +1030,13 @@ type CreateTableStmt struct {
 
 // Restore implements Node interface.
 func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
-	switch n.TemporaryOrPartitionKeyword {
+	switch n.TemporaryKeyword {
 	case TemporaryNone:
 		ctx.WriteKeyWord("CREATE TABLE ")
 	case TemporaryGlobal:
 		ctx.WriteKeyWord("CREATE GLOBAL TEMPORARY TABLE ")
 	case TemporaryLocal:
 		ctx.WriteKeyWord("CREATE TEMPORARY TABLE ")
-	case TablePartition:
-		ctx.WriteKeyWord("CREATE PARTITION TABLE ")
 	}
 	if n.IfNotExists {
 		ctx.WriteKeyWord("IF NOT EXISTS ")
@@ -1116,7 +1113,7 @@ func (n *CreateTableStmt) Restore(ctx *RestoreCtx) error {
 			return errors.Annotate(err, "An error occurred while splicing CreateTableStmt Select")
 		}
 	}
-	if n.TemporaryOrPartitionKeyword == TemporaryGlobal {
+	if n.TemporaryKeyword == TemporaryGlobal {
 		if n.OnCommitDelete {
 			ctx.WriteKeyWord(" ON COMMIT DELETE ROWS")
 		} else {
@@ -1396,30 +1393,29 @@ func (n *TableGroupPartitionOption) Accept(v Visitor) (Node, bool) {
 type DropTableStmt struct {
 	ddlNode
 
-	IfExists                    bool
-	Tables                      []*TableName
-	IsView                      bool
-	IsMvView                    bool
-	TemporaryOrPartitionKeyword // make sense ONLY if/when IsView == false
+	IfExists         bool
+	Tables           []*TableName
+	IsView           bool
+	IsMvView         bool
+	TemporaryKeyword // make sense ONLY if/when IsView == false
 }
 
 // Restore implements Node interface.
 func (n *DropTableStmt) Restore(ctx *RestoreCtx) error {
 	if n.IsView {
 		ctx.WriteKeyWord("DROP VIEW ")
+	} else {
+		switch n.TemporaryKeyword {
+		case TemporaryNone:
+			ctx.WriteKeyWord("DROP TABLE ")
+		case TemporaryGlobal:
+			ctx.WriteKeyWord("DROP GLOBAL TEMPORARY TABLE ")
+		case TemporaryLocal:
+			ctx.WriteKeyWord("DROP TEMPORARY TABLE ")
+		}
 	}
 	if n.IsMvView {
 		ctx.WriteKeyWord("DROP MATERIALIZED VIEW ")
-	}
-	switch n.TemporaryOrPartitionKeyword {
-	case TemporaryNone:
-		ctx.WriteKeyWord("DROP TABLE ")
-	case TemporaryGlobal:
-		ctx.WriteKeyWord("DROP GLOBAL TEMPORARY TABLE ")
-	case TemporaryLocal:
-		ctx.WriteKeyWord("DROP TEMPORARY TABLE ")
-	case TablePartition:
-		ctx.WriteKeyWord("DROP PARTITION TABLE ")
 	}
 	if n.IfExists {
 		ctx.WriteKeyWord("IF EXISTS ")
