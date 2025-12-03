@@ -3400,6 +3400,8 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 	}
 	table := s.getTableFromCache(node.Table.Schema.O, node.Table.Name.O, false)
 
+	hasPrimary := false
+
 	if table != nil {
 		if !node.IfNotExists {
 			s.appendErrorNo(ER_TABLE_EXISTS_ERROR, node.Table.Name.O)
@@ -3494,7 +3496,6 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 				}
 			}
 
-			hasPrimary := false
 			for _, ct := range node.Constraints {
 				switch ct.Tp {
 				case ast.ConstraintPrimaryKey:
@@ -3802,7 +3803,7 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 		} else {
 			s.checkPartitionNameUnique(node.Partition.Definitions)
 			s.checkPartitionValuesType(table, node.Partition)
-			s.checkRangePartitioningKeysConstraints(node)
+			s.checkRangePartitioningKeysConstraints(node, hasPrimary)
 			s.checkPartitionRangeNotIncreasing(table, node.Partition.Definitions)
 			if !s.hasError() {
 				s.buildPartitionInfo(node.Partition, table)

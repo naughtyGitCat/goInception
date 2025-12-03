@@ -991,7 +991,7 @@ import (
 	DuplicateOpt                  "[IGNORE|REPLACE] in CREATE TABLE ... SELECT statement"
 	OfTablesOpt                   "OF table_name [, ...]"
 	OptFull                       "Full or empty"
-	OptTemporaryPartition         "TEMPORARY or PARTITION"
+	OptTemporary                  "TEMPORARY or empty"
 	Order                         "Ordering keyword: ASC or DESC"
 	OrderBy                       "ORDER BY clause"
 	OrReplace                     "or replace"
@@ -3819,12 +3819,12 @@ DropTableGroupStmt:
  *
  *******************************************************************/
 CreateTableStmt:
-	"CREATE" OptTemporaryPartition "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt WithColumnGroupOpt AsOpt CreateTableSelectOpt OnCommitOpt 
+	"CREATE" OptTemporary "TABLE" IfNotExists TableName TableElementListOpt CreateTableOptionListOpt PartitionOpt DuplicateOpt WithColumnGroupOpt AsOpt CreateTableSelectOpt OnCommitOpt 
 	{
 		stmt := $6.(*ast.CreateTableStmt)
 		stmt.Table = $5.(*ast.TableName)
 		stmt.IfNotExists = $4.(bool)
-		stmt.TemporaryOrPartitionKeyword = $2.(ast.TemporaryOrPartitionKeyword)
+		stmt.TemporaryKeyword = $2.(ast.TemporaryKeyword)
 		stmt.Options = $7.([]*ast.TableOption)
 		if $8 != nil {
 			stmt.Partition = $8.(*ast.PartitionOptions)
@@ -3832,27 +3832,27 @@ CreateTableStmt:
 		stmt.OnDuplicate = $9.(ast.OnDuplicateKeyHandlingType)
 		stmt.ColGroupOption = $10.([]*ast.ColumnGroupOption)
 		stmt.Select = $12.(*ast.CreateTableStmt).Select
-		if ($13 != nil && stmt.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $13 == nil) {
+		if ($13 != nil && stmt.TemporaryKeyword  != ast.TemporaryGlobal) || (stmt.TemporaryKeyword  == ast.TemporaryGlobal && $13 == nil) {
 			yylex.AppendError(yylex.Errorf("GLOBAL TEMPORARY and ON COMMIT DELETE ROWS must appear together"))
 		} else {
-			if stmt.TemporaryOrPartitionKeyword == ast.TemporaryGlobal {
+			if stmt.TemporaryKeyword  == ast.TemporaryGlobal {
 				stmt.OnCommitDelete = $13.(bool)
 			}
 		}
 		$$ = stmt
 	}
-|	"CREATE" OptTemporaryPartition "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen OnCommitOpt
+|	"CREATE" OptTemporary "TABLE" IfNotExists TableName LikeTableWithOrWithoutParen OnCommitOpt
 	{
 		tmp := &ast.CreateTableStmt{
 			Table:       $5.(*ast.TableName),
 			ReferTable:  $6.(*ast.TableName),
 			IfNotExists: $4.(bool),
-			TemporaryOrPartitionKeyword: $2.(ast.TemporaryOrPartitionKeyword),
+			TemporaryKeyword: $2.(ast.TemporaryKeyword),
 		}
-		if ($7 != nil && tmp.TemporaryOrPartitionKeyword != ast.TemporaryGlobal) || (tmp.TemporaryOrPartitionKeyword == ast.TemporaryGlobal && $7 == nil) {
+		if ($7 != nil && tmp.TemporaryKeyword != ast.TemporaryGlobal) || (tmp.TemporaryKeyword == ast.TemporaryGlobal && $7 == nil) {
 			yylex.AppendError(yylex.Errorf("GLOBAL TEMPORARY and ON COMMIT DELETE ROWS must appear together"))
 		} else {
-			if tmp.TemporaryOrPartitionKeyword == ast.TemporaryGlobal {
+			if tmp.TemporaryKeyword == ast.TemporaryGlobal {
 				tmp.OnCommitDelete = $7.(bool)
 			}
 		}
@@ -4896,34 +4896,29 @@ DropIndexStmt:
 	}
 
 DropTableStmt:
-	"DROP" OptTemporaryPartition TableOrTables TableNameList RestrictOrCascadeOpt
+	"DROP" OptTemporary TableOrTables TableNameList RestrictOrCascadeOpt
 	{
-		$$ = &ast.DropTableStmt{Tables: $4.([]*ast.TableName),TemporaryOrPartitionKeyword: $2.(ast.TemporaryOrPartitionKeyword)}
+		$$ = &ast.DropTableStmt{Tables: $4.([]*ast.TableName),TemporaryKeyword: $2.(ast.TemporaryKeyword)}
 	}
-|	"DROP" OptTemporaryPartition TableOrTables "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
+|	"DROP" OptTemporary TableOrTables "IF" "EXISTS" TableNameList RestrictOrCascadeOpt
 	{
-		$$ = &ast.DropTableStmt{IfExists: true, Tables: $6.([]*ast.TableName),TemporaryOrPartitionKeyword: $2.(ast.TemporaryOrPartitionKeyword)}
-	}
-
-
-OptTemporaryPartition:
-    /* empty */
-    {
-        $$ = ast.TemporaryNone
-    }
-|   "TEMPORARY"
-    {
-        $$ = ast.TemporaryLocal
-    }
-|   "GLOBAL" "TEMPORARY"
-    {
-        $$ = ast.TemporaryGlobal
-    }
-|	"PARTITION"
-	{
-		$$ = ast.TablePartition
+		$$ = &ast.DropTableStmt{IfExists: true, Tables: $6.([]*ast.TableName),TemporaryKeyword: $2.(ast.TemporaryKeyword)}
 	}
 
+
+OptTemporary:
+	/* empty */
+	{
+		$$ = ast.TemporaryNone
+	}
+|	"TEMPORARY"
+	{
+		$$ = ast.TemporaryLocal
+	}
+|	"GLOBAL" "TEMPORARY"
+	{
+		$$ = ast.TemporaryGlobal
+	}
 
 DropViewStmt:
 	"DROP" "VIEW" TableNameList RestrictOrCascadeOpt

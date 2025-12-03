@@ -1051,17 +1051,20 @@ func validRangePartitionType(col *ast.ColumnDef) bool {
 }
 
 // checkRangePartitioningKeysConstraints checks that the range partitioning key is included in the table constraint.
-func (s *session) checkRangePartitioningKeysConstraints(table *ast.CreateTableStmt) {
+func (s *session) checkRangePartitioningKeysConstraints(table *ast.CreateTableStmt, hasPrimary bool) {
 	log.Debug("checkRangePartitioningKeysConstraints")
 	// Returns directly if there is no constraint in the partition table.
-	if len(table.Constraints) == 0 {
+	if len(table.Constraints) == 0 && !hasPrimary {
 		return
 	}
 	var partkeys []string
+	var pkkeyColNames []map[string]struct{}
 	//var consColNames []map[string]struct{}
 	// Extract the column names in table constraints to []map[string]struct{}.
 	consColNames := extractConstraintsColumnNames(table.Constraints)
-
+	if hasPrimary && consColNames == nil {
+		pkkeyColNames = extractPrimaryKeyColumnNames(table.Cols)
+	}
 	if table.Partition.Expr != nil {
 		// Parse partitioning key, extract the column names in the partitioning key to slice.
 		buf := new(bytes.Buffer)
@@ -1076,13 +1079,22 @@ func (s *session) checkRangePartitioningKeysConstraints(table *ast.CreateTableSt
 		return
 	}
 	// Checks that the partitioning key is included in the constraint.
-	for _, con := range consColNames {
-		// Every unique key on the table must use every column in the table's partitioning expression.
-		// See https://dev.mysql.com/doc/refman/5.7/en/partitioning-limitations-partitioning-keys-unique-keys.html.
-		if !checkConstraintIncludePartKey(partkeys, con) {
-			s.appendErrorNo(ErrUniqueKeyNeedAllFieldsInPf, "PRIMARY KEY")
+	if len(table.Constraints) != 0 {
+		for _, con := range consColNames {
+			// Every unique key on the table must use every column in the table's partitioning expression.
+			// See https://dev.mysql.com/doc/refman/5.7/en/partitioning-limitations-partitioning-keys-unique-keys.html.
+			if !checkConstraintIncludePartKey(partkeys, con) {
+				s.appendErrorNo(ErrUniqueKeyNeedAllFieldsInPf, "PRIMARY KEY")
+			}
+		}
+	} else {
+		for _, key := range pkkeyColNames {
+			if !checkConstraintIncludePartKey(partkeys, key) {
+				s.appendErrorNo(ErrUniqueKeyNeedAllFieldsInPf, "PRIMARY KEY")
+			}
 		}
 	}
+
 }
 
 // extractConstraintsColumnNames extract the column names in table constraints to []map[string]struct{}.
@@ -1101,6 +1113,20 @@ func extractConstraintsColumnNames(cons []*ast.Constraint) []map[string]struct{}
 		}
 	}
 	return constraints
+}
+
+func extractPrimaryKeyColumnNames(cols []*ast.ColumnDef) []map[string]struct{} {
+	var primaryKeys []map[string]struct{}
+	for _, col := range cols {
+		for _, op := range col.Options {
+			switch op.Tp {
+			case ast.ColumnOptionPrimaryKey:
+				primaryKeys = append(primaryKeys, map[string]struct{}{col.Name.Name.L: {}})
+			}
+		}
+
+	}
+	return primaryKeys
 }
 
 // checkConstraintIncludePartKey checks that the partitioning key is included in the constraint.
