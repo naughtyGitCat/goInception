@@ -6949,13 +6949,13 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 						}
 					}
 				}
-				if !table.IsNew && node.Select == nil {
+				if !table.IsNew {
 					if len(fastevals) > 0 {
 						s.checkfastevalRow(vv, fastevals[colIndex], i)
 					} else {
 						s.checkfastevalRow(vv, table.DataInfos[colIndex], i)
 					}
-				} else if table.IsNew && node.Select == nil {
+				} else if table.IsNew {
 					s.checkevalRow(vv, fields[colIndex], i)
 				}
 			}
