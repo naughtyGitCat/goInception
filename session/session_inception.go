@@ -6955,7 +6955,7 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 					} else {
 						s.checkfastevalRow(vv, table.DataInfos[colIndex], i)
 					}
-				} else if table.IsNew {
+				} else {
 					s.checkevalRow(vv, fields[colIndex], i)
 				}
 			}
