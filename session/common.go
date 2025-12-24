@@ -240,6 +240,17 @@ type FieldInfo struct {
 	Tp *types.FieldType `gorm:"-"`
 }
 
+type DataInfo struct {
+	ColumnName             string `gorm:"Column:COLUMN_NAME"`
+	DataType               string `gorm:"Column:DATA_TYPE"`
+	CharacterMaximumLength int    `gorm:"Column:CHARACTER_MAXIMUM_LENGTH"`
+	NumericPrecision       int    `gorm:"Column:NUMERIC_PRECISION"`
+	NumericScale           string `gorm:"Column:NUMERIC_SCALE"`
+	CharacterSetName       string `gorm:"Column:CHARACTER_SET_NAME"`
+	CollationName          string `gorm:"Column:COLLATION_NAME"`
+	ColumnType             string `gorm:"Column:COLUMN_TYPE"`
+}
+
 // MaskingFieldInfo 脱敏功能的字段信息
 type MaskingFieldInfo struct {
 	Index  uint16 `json:"index"`
@@ -283,6 +294,9 @@ type TableInfo struct {
 
 	// 分区信息
 	Partitions []*PartitionInfo
+
+	// 数据类型信息
+	DataInfos []*DataInfo
 
 	// 是否已删除
 	IsDeleted bool

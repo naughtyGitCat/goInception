@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/hanchuanchuan/goInception/ast"
@@ -1176,4 +1177,50 @@ func extractParenthesesContent(s string) ([]string, error) {
 
 func containsParentheses(s string) bool {
 	return strings.Contains(s, "(") || strings.Contains(s, ")")
+}
+
+func (s *session) checkfastevalRow(list ast.ExprNode, datainfo *DataInfo, index int) {
+	s.sessionVars.StmtCtx.IgnoreTruncate = false
+	if strings.Contains(strings.ToLower(datainfo.ColumnType), "unsigned") {
+		list.GetType().Flag = mysql.UnsignedFlag
+	}
+	if datainfo.NumericPrecision > 0 {
+		list.GetType().Flen = datainfo.NumericPrecision
+		if datainfo.NumericScale == "" {
+			list.GetType().Decimal = int(-1)
+		} else {
+			numericScale, _ := strconv.Atoi(datainfo.NumericScale)
+			list.GetType().Decimal = numericScale
+
+		}
+	} else {
+		list.GetType().Flen = datainfo.CharacterMaximumLength
+	}
+	list.GetType().Tp = types.StrType(datainfo.DataType)
+	list.GetType().Charset = datainfo.CharacterSetName
+	list.GetType().Collate = datainfo.CollationName
+	_, err := list.GetDatum().ConvertTo(s.sessionVars.StmtCtx, list.GetType())
+	if types.ErrDataTooLong.Equal(err) {
+		s.appendErrorNo(ErrDataTooLong, datainfo.ColumnName, index+1)
+	}
+	if types.ErrOverflow.Equal(err) {
+		s.appendErrorNo(ErrWarnDataOutOfRange, datainfo.ColumnName, index+1)
+	}
+}
+
+func (s *session) checkevalRow(list ast.ExprNode, filedinfo FieldInfo, index int) {
+	s.sessionVars.StmtCtx.IgnoreTruncate = false
+	list.GetType().Flag = filedinfo.Tp.Flag
+	list.GetType().Flen = filedinfo.Tp.Flen
+	list.GetType().Decimal = filedinfo.Tp.Decimal
+	list.GetType().Tp = filedinfo.Tp.Tp
+	list.GetType().Charset = filedinfo.Tp.Charset
+	list.GetType().Collate = filedinfo.Tp.Collate
+	_, err := list.GetDatum().ConvertTo(s.sessionVars.StmtCtx, list.GetType())
+	if types.ErrDataTooLong.Equal(err) {
+		s.appendErrorNo(ErrDataTooLong, filedinfo.Field, index+1)
+	}
+	if types.ErrOverflow.Equal(err) {
+		s.appendErrorNo(ErrWarnDataOutOfRange, filedinfo.Field, index+1)
+	}
 }

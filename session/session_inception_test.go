@@ -1810,9 +1810,19 @@ func (s *testSessionIncSuite) TestInsert(c *C) {
 
 	s.mustRunExec(c, "drop table if exists t1; create table t1(c1 char(100) not null);")
 
-	sql = "create table t1(c1 char(100) not null);insert into t1(c1) values(null);"
+	sql = "drop table if exists t1;create table t1(c1 char(100) not null);insert into t1(c1) values(null);"
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ER_BAD_NULL_ERROR, "test_inc.t1.c1", 1))
+
+	s.mustRunExec(c, "drop table if exists t1;create table t1(c1 int);")
+	sql = "insert into t1(c1) values(11111111111);"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrWarnDataOutOfRange, "c1", 1))
+
+	s.mustRunExec(c, "drop table if exists t1;create table t1(c1 varchar(2));")
+	sql = "insert into t1(c1) values('abc');"
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrDataTooLong, "c1", 1))
 
 	sql = "create table t1(c1 char(100) not null);insert into t1(c1) select t1.c1 from t1 inner join t1 on t1.id=t1.id;"
 	s.testErrorCode(c, sql,

@@ -6811,6 +6811,7 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 
 	s.myRecord.TableInfo = table
 	fields := make([]FieldInfo, 0, fieldCount)
+	fastevals := make([]*DataInfo, 0, fieldCount)
 	if fieldCount == 0 {
 		for _, field := range table.Fields {
 			if !field.IsDeleted {
@@ -6854,11 +6855,15 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 				break
 			}
 		}
+		for _, datainfo := range table.DataInfos {
+			if strings.EqualFold(datainfo.ColumnName, c.Name.O) {
+				fastevals = append(fastevals, datainfo)
+			}
+		}
 		if !found {
 			s.appendErrorNo(ER_COLUMN_NOT_EXISTED, fmt.Sprintf("%s.%s", c.Table, c.Name))
 		}
 	}
-
 	// log.Errorf("fieldCount: %v", fieldCount)
 	// log.Errorf("fields len: %#v", len(fields))
 	// log.Errorf("fields: %#v", fields)
@@ -6943,6 +6948,15 @@ func (s *session) checkInsert(node *ast.InsertStmt, sql string) {
 							}
 						}
 					}
+				}
+				if !table.IsNew && node.Select == nil {
+					if len(fastevals) > 0 {
+						s.checkfastevalRow(vv, fastevals[colIndex], i)
+					} else {
+						s.checkfastevalRow(vv, table.DataInfos[colIndex], i)
+					}
+				} else if table.IsNew && node.Select == nil {
+					s.checkevalRow(vv, fields[colIndex], i)
 				}
 			}
 		}
@@ -9352,6 +9366,22 @@ func (s *session) queryPartitionFromDB(db string, tableName string, reportNotExi
 	return rows
 }
 
+func (s *session) queryDataTypeFromDB(db string, tableName string, reportNotExists bool) []*DataInfo {
+
+	var rows []*DataInfo
+	sql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, CHARACTER_SET_NAME, COLLATION_NAME, COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME= '%s'", db, tableName)
+	if err := s.rawDB(&rows, sql); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+			s.appendErrorMsg(myErr.Message + ".")
+		} else {
+			s.appendErrorMsg(err.Error() + ".")
+		}
+		return nil
+	}
+	return rows
+}
+
 func (s *session) fetchPartitionFromDB(t *TableInfo) error {
 	if t.IsNew || t.IsDeleted || len(t.Partitions) > 0 {
 		return nil
@@ -9769,6 +9799,9 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 		}
 		if rows := s.queryPartitionFromDB(db, tableName, reportNotExists); rows != nil {
 			newT.Partitions = rows
+		}
+		if rows := s.queryDataTypeFromDB(db, tableName, reportNotExists); rows != nil {
+			newT.DataInfos = rows
 		}
 		s.tableCacheList[key] = newT
 
