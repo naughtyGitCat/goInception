@@ -118,6 +118,37 @@ func IsTypeVector(tp byte) bool {
 	return tp == mysql.TypeTiDBVectorFloat32
 }
 
+var str2Type = map[string]byte{
+	"bit":         mysql.TypeBit,
+	"text":        mysql.TypeBlob,
+	"date":        mysql.TypeDate,
+	"datetime":    mysql.TypeDatetime,
+	"unspecified": mysql.TypeDecimal,
+	"decimal":     mysql.TypeNewDecimal,
+	"double":      mysql.TypeDouble,
+	"enum":        mysql.TypeEnum,
+	"float":       mysql.TypeFloat,
+	"geometry":    mysql.TypeGeometry,
+	"vector":      mysql.TypeTiDBVectorFloat32,
+	"mediumint":   mysql.TypeInt24,
+	"json":        mysql.TypeJSON,
+	"int":         mysql.TypeLong,
+	"bigint":      mysql.TypeLonglong,
+	"longtext":    mysql.TypeLongBlob,
+	"mediumtext":  mysql.TypeMediumBlob,
+	"null":        mysql.TypeNull,
+	"set":         mysql.TypeSet,
+	"smallint":    mysql.TypeShort,
+	"char":        mysql.TypeString,
+	"time":        mysql.TypeDuration,
+	"timestamp":   mysql.TypeTimestamp,
+	"tinyint":     mysql.TypeTiny,
+	"tinytext":    mysql.TypeTinyBlob,
+	"varchar":     mysql.TypeVarchar,
+	"var_string":  mysql.TypeVarString,
+	"year":        mysql.TypeYear,
+}
+
 var type2Str = map[byte]string{
 	mysql.TypeBit:               "bit",
 	mysql.TypeBlob:              "text",
@@ -174,6 +205,11 @@ var kind2Str = map[byte]string{
 // TypeStr converts tp to a string.
 func TypeStr(tp byte) (r string) {
 	return type2Str[tp]
+}
+
+// StrType converts string to a tp.
+func StrType(s string) (r byte) {
+	return str2Type[s]
 }
 
 // KindStr converts kind to a string.

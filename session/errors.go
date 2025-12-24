@@ -248,6 +248,7 @@ const (
 	ErrWrongTypeColumnValue
 	ErrValuesIsNotIntType
 	ErrFieldTypeNotAllowedAsPartitionField
+	ErrWarnDataOutOfRange
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -463,6 +464,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErrWrongTypeColumnValue:                "Partition column values of incorrect type '%s'.",
 	ErrValuesIsNotIntType:                  "VALUES value for partition '%-.64s' must have type INT",
 	ErrFieldTypeNotAllowedAsPartitionField: "Field '%-.192s' is of a not allowed type for this type of partitioning",
+	ErrWarnDataOutOfRange:                  "Out of range value for column '%s' at row %d",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -669,6 +671,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrWrongTypeColumnValue:                "分区列值类型不正确 '%s'.",
 	ErrValuesIsNotIntType:                  "分区 '%-.64s' 的值必须为整型",
 	ErrFieldTypeNotAllowedAsPartitionField: "字段'%-.192s'的类型不允许用于此分区类型.",
+	ErrWarnDataOutOfRange:                  "数据超出范围: '%s'.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -805,7 +808,8 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrRangeNotIncreasing,
 		ErrWrongTypeColumnValue,
 		ErrValuesIsNotIntType,
-		ErrFieldTypeNotAllowedAsPartitionField:
+		ErrFieldTypeNotAllowedAsPartitionField,
+		ErrWarnDataOutOfRange:
 		return 2
 
 	default:
@@ -1260,6 +1264,8 @@ func (e ErrorCode) String() string {
 		return "er_values_is_not_int_type"
 	case ErrFieldTypeNotAllowedAsPartitionField:
 		return "er_field_type_not_allowed_as_partition_field"
+	case ErrWarnDataOutOfRange:
+		return "er_warn_data_out_of_range"
 	}
 	return ""
 }
