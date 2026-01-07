@@ -6373,7 +6373,7 @@ func (s *session) checkCreateIndex(table *ast.TableName, IndexName string,
 
 				if !s.innodbLargePrefix && !isOverflowIndexLength &&
 					!isBlobColumn &&
-					columnIndexLength > maxKeyLength {
+					columnIndexLength > maxKeyLength && s.dbType == DBTypeMysql {
 					s.appendErrorNo(ER_TOO_LONG_KEY, IndexName, maxKeyLength)
 					isOverflowIndexLength = true
 				}
