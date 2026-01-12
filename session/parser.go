@@ -425,6 +425,81 @@ func (s *session) parserBinlog(ctx context.Context) {
 					goto ENDCHECK
 				}
 			}
+		case replication.TRANSACTION_PAYLOAD_EVENT:
+			if event, ok := e.Event.(*replication.TransactionPayloadEvent); ok {
+				for _, e := range event.Events {
+					switch e.Header.EventType {
+					case replication.TABLE_MAP_EVENT:
+						if event, ok := e.Event.(*replication.TableMapEvent); ok {
+							if !strings.EqualFold(string(event.Schema), record.TableInfo.Schema) ||
+								!strings.EqualFold(string(event.Table), record.TableInfo.Name) {
+								goto ENDCHECK
+							}
+						}
+					case replication.QUERY_EVENT:
+						// if event, ok := e.Event.(*replication.QueryEvent); ok {
+						// 	// currentThreadID = event.SlaveProxyID
+						// 	log.Error(string(event.Query))
+						// }
+
+						if s.dbType == DBTypeOceanBase || (s.dbType == DBTypeMariaDB && s.dbVersion >= 100000) {
+							goto ENDCHECK
+						}
+
+						if event, ok := e.Event.(*replication.QueryEvent); ok {
+							currentThreadID = event.SlaveProxyID
+						}
+
+					case replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
+						if event, ok := e.Event.(*replication.RowsEvent); ok {
+							if s.checkFilter(event, record, currentThreadID) {
+								changeRows += len(event.Rows)
+								_, err = s.generateDeleteSql(record.TableInfo, event, e)
+								if err != nil {
+									log.Error(err)
+								}
+							} else {
+								goto ENDCHECK
+							}
+						}
+
+					case replication.DELETE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv2:
+
+						if event, ok := e.Event.(*replication.RowsEvent); ok {
+							if ok, t := s.checkUpdateFilter(event, record, currentThreadID); ok {
+								changeRows += len(event.Rows)
+								if t != nil {
+									_, err = s.generateInsertSql(t, event, e)
+								} else {
+									_, err = s.generateInsertSql(record.TableInfo, event, e)
+								}
+								if err != nil {
+									log.Error(err)
+								}
+							} else {
+								goto ENDCHECK
+							}
+						}
+
+					case replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
+						if event, ok := e.Event.(*replication.RowsEvent); ok {
+							if ok, t := s.checkUpdateFilter(event, record, currentThreadID); ok {
+								changeRows += len(event.Rows) / 2
+								if t != nil {
+									_, err = s.generateUpdateSql(t, event, e)
+								} else {
+									_, err = s.generateUpdateSql(record.TableInfo, event, e)
+								}
+								if err != nil {
+									log.Error(err)
+								}
+							} else {
+								goto ENDCHECK
+							}
+						}
+					}
+				}
+			}
 		}
 
 	ENDCHECK:
