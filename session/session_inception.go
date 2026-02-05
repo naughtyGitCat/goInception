@@ -2402,6 +2402,9 @@ func (s *session) parseOptions(sql string) {
 // getTLSConfig 获取tls设置
 // https://dev.mysql.com/doc/refman/5.7/en/connection-options.html#option_general_ssl-mode
 func (s *session) getTLSConfig() (string, error) {
+	// Set GODEBUG environment variable for RSA key exchange compatibility
+	os.Setenv("GODEBUG", "tlsrsakex=1")
+
 	tlsValue := "false"
 	s.opt.ssl = strings.ToLower(s.opt.ssl)
 	switch s.opt.ssl {
