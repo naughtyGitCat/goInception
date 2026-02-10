@@ -5481,6 +5481,16 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 							fmt.Sprintf("%s.%s", t.Name, nc.Name.Name),
 							foundField.Type, fieldType)
 					}
+					// 整型有符号/无符号互转在 OceanBase 上为离线 DDL（需重整表数据）
+					if s.dbType == DBTypeOceanBase && s.inc.CheckOfflineDDL && s.dbVersion > 3 {
+						log.Debugf("oldType: %s, newType: %s", foundField.Type, fieldType)
+						oldUnsigned := strings.Contains(strings.ToLower(foundField.Type), "unsigned")
+						newUnsigned := mysql.HasUnsignedFlag(nc.Tp.Flag)
+						if oldUnsigned != newUnsigned {
+							s.appendErrorNo(ER_CANT_CHANGE_COLUMN_TYPE)
+							continue
+						}
+					}
 				} else if oldType == newType &&
 					(oldType == "enum" || oldType == "set") {
 
