@@ -409,7 +409,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 				}
 			}
 
-		case replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
+		case replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2, replication.PARTIAL_UPDATE_ROWS_EVENT:
 			if event, ok := e.Event.(*replication.RowsEvent); ok {
 				if ok, t := s.checkUpdateFilter(event, record, currentThreadID); ok {
 					changeRows += len(event.Rows) / 2
@@ -481,7 +481,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 							}
 						}
 
-					case replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2:
+					case replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2, replication.PARTIAL_UPDATE_ROWS_EVENT:
 						if event, ok := e.Event.(*replication.RowsEvent); ok {
 							if ok, t := s.checkUpdateFilter(event, record, currentThreadID); ok {
 								changeRows += len(event.Rows) / 2
