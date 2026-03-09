@@ -35,12 +35,14 @@ import (
 	"github.com/hanchuanchuan/goInception/util/charset"
 	"github.com/hanchuanchuan/goInception/util/sqlexec"
 	"github.com/hanchuanchuan/goInception/util/stringutil"
-	"github.com/jinzhu/gorm"
 	"github.com/percona/go-mysql/query"
 	"github.com/pingcap/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
+	mysqlDialector "gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var (
@@ -833,7 +835,13 @@ func (s *session) executeCommit(ctx context.Context) {
 		}
 
 		// 如果连接已断开
-		if err := s.backupdb.DB().Ping(); err != nil {
+		sqlDb, err := s.backupdb.DB()
+		if err != nil {
+			log.Errorf("con:%d failed to get database connection: %v", s.sessionVars.ConnectionID, err)
+			s.appendErrorMsg(err.Error())
+			return
+		}
+		if err := sqlDb.Ping(); err != nil {
 			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 			addr := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=%s&parseTime=True&loc=Local&autocommit=1",
 				s.inc.BackupUser, s.inc.BackupPassword, s.inc.BackupHost, s.inc.BackupPort,
@@ -841,14 +849,12 @@ func (s *session) executeCommit(ctx context.Context) {
 			if s.inc.BackupTLS != "" {
 				addr += "&tls=" + s.inc.BackupTLS
 			}
-			db, err := gorm.Open("mysql", addr)
+			db, err := gorm.Open(mysqlDialector.Open(addr), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 			if err != nil {
 				log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 				s.appendErrorMsg(err.Error())
 				return
 			}
-			// 禁用日志记录器，不显示任何日志
-			db.LogMode(false)
 			s.backupdb = db
 		}
 
@@ -1158,15 +1164,13 @@ func (s *session) executeTransaction(records []*Record) int {
 
 	if s.dbName != "" {
 		res := tx.Exec(fmt.Sprintf("USE `%s`", s.dbName))
-		if errs := res.GetErrors(); len(errs) > 0 {
+		if res.Error != nil {
 			tx.Rollback()
 			s.myRecord = records[0]
-			for _, err := range errs {
-				if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-					s.appendErrorMsg(myErr.Message)
-				} else {
-					s.appendErrorMsg(err.Error())
-				}
+			if myErr, ok := res.Error.(*mysqlDriver.MySQLError); ok {
+				s.appendErrorMsg(myErr.Message)
+			} else {
+				s.appendErrorMsg(res.Error.Error())
 			}
 			return 2
 		}
@@ -1202,17 +1206,15 @@ func (s *session) executeTransaction(records []*Record) int {
 
 			if s.needTransactionMark() {
 				res := s.markTransactionStart(tx, txMarkData)
-				if errs := res.GetErrors(); len(errs) > 0 {
+				if res.Error != nil {
 					tx.Rollback()
-					log.Errorf("con:%d %v", s.sessionVars.ConnectionID, errs)
+					log.Errorf("con:%d %v", s.sessionVars.ConnectionID, res.Error)
 					record.StageStatus = StatusExecFail
 					record.ExecComplete = false
-					for _, err := range errs {
-						if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-							s.appendErrorMsg(myErr.Message)
-						} else {
-							s.appendErrorMsg(err.Error())
-						}
+					if myErr, ok := res.Error.(*mysqlDriver.MySQLError); ok {
+						s.appendErrorMsg(myErr.Message)
+					} else {
+						s.appendErrorMsg(res.Error.Error())
 					}
 					return 2
 				}
@@ -1227,13 +1229,13 @@ func (s *session) executeTransaction(records []*Record) int {
 		record.ExecTime = fmt.Sprintf("%.3f", time.Since(start).Seconds())
 		record.ExecTimestamp = time.Now().Unix()
 
-		errs := res.GetErrors()
+		errs := res.Error
 
-		if len(errs) == 0 && s.opt.Backup && s.needTransactionMark() && i == len(records)-1 {
-			errs = s.markTransactionEnd(tx, txMarkData).GetErrors()
+		if errs == nil && s.opt.Backup && s.needTransactionMark() && i == len(records)-1 {
+			errs = s.markTransactionEnd(tx, txMarkData).Error
 		}
 
-		if len(errs) > 0 {
+		if errs != nil {
 			tx.Rollback()
 			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, errs)
 
@@ -1242,12 +1244,10 @@ func (s *session) executeTransaction(records []*Record) int {
 				s.myRecord = r
 				r.StageStatus = StatusExecFail
 				r.ExecComplete = false
-				for _, err := range errs {
-					if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-						s.appendErrorMsg(myErr.Message)
-					} else {
-						s.appendErrorMsg(err.Error())
-					}
+				if myErr, ok := errs.(*mysqlDriver.MySQLError); ok {
+					s.appendErrorMsg(myErr.Message)
+				} else {
+					s.appendErrorMsg(errs.Error())
 				}
 				if j >= i {
 					break

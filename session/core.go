@@ -31,11 +31,12 @@ import (
 	"github.com/hanchuanchuan/goInception/util"
 	"github.com/hanchuanchuan/goInception/util/sqlexec"
 	"github.com/hanchuanchuan/goInception/util/timeutil"
-	"github.com/jinzhu/gorm"
 	"github.com/pingcap/errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	// "vitess.io/vitess/go/vt/sqlparser"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func (s *session) makeNewResult() ([]Record, error) {
@@ -139,13 +140,19 @@ func (s *session) init() {
 // clear 清理变量或map等信息
 func (s *session) clear() {
 	if s.db != nil {
-		defer s.db.Close()
+		if sqlDB, err := s.db.DB(); err == nil {
+			defer sqlDB.Close()
+		}
 	}
 	if s.ddlDB != nil {
-		defer s.ddlDB.Close()
+		if sqlDB, err := s.ddlDB.DB(); err == nil {
+			defer sqlDB.Close()
+		}
 	}
 	if s.backupdb != nil {
-		defer s.backupdb.Close()
+		if sqlDB, err := s.backupdb.DB(); err == nil {
+			defer sqlDB.Close()
+		}
 	}
 
 	s.dbName = ""
@@ -490,14 +497,11 @@ func (s *session) checkOptions() error {
 			addr, s.inc.SqlMode)
 	}
 
-	db, err := gorm.Open("mysql", fmt.Sprintf("%s&autocommit=1", addr))
+	db, err := gorm.Open(mysql.Open(fmt.Sprintf("%s&autocommit=1", addr)), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 
 	if err != nil {
 		return fmt.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 	}
-
-	// 禁用日志记录器，不显示任何日志
-	db.LogMode(false)
 
 	s.db = db
 
@@ -520,13 +524,12 @@ func (s *session) checkOptions() error {
 		if s.inc.BackupTLS != "" {
 			addr += "&tls=" + s.inc.BackupTLS
 		}
-		backupdb, err := gorm.Open("mysql", addr)
+		backupdb, err := gorm.Open(mysql.Open(addr), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 
 		if err != nil {
 			return fmt.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
 		}
 
-		backupdb.LogMode(false)
 		s.backupdb = backupdb
 	}
 
@@ -562,8 +565,7 @@ func (s *session) checkOptions() error {
 	}
 
 	if s.opt.tranBatch > 1 {
-		s.ddlDB, _ = gorm.Open("mysql", fmt.Sprintf("%s&autocommit=1", addr))
-		s.ddlDB.LogMode(false)
+		s.ddlDB, _ = gorm.Open(mysql.Open(fmt.Sprintf("%s&autocommit=1", addr)), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	}
 	return nil
 }

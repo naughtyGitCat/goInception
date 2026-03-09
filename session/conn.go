@@ -23,8 +23,10 @@ import (
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 const maxBadConnRetries = 2
@@ -37,7 +39,7 @@ func (s *session) createNewConnection(dbName string) {
 		s.opt.User, s.opt.Password, s.opt.Host, s.opt.Port,
 		dbName, s.inc.DefaultCharset, s.inc.MaxAllowedPacket)
 
-	db, err := gorm.Open("mysql", addr)
+	db, err := gorm.Open(mysql.Open(addr), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 
 	if err != nil {
 		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
@@ -46,11 +48,10 @@ func (s *session) createNewConnection(dbName string) {
 	}
 
 	if s.db != nil {
-		s.db.Close()
+		if sqlDB, err := s.db.DB(); err == nil {
+			sqlDB.Close()
+		}
 	}
-
-	// 禁用日志记录器，不显示任何日志
-	db.LogMode(false)
 
 	// 为保证连接成功关闭,此处等待10ms
 	time.Sleep(10 * time.Millisecond)
@@ -62,7 +63,14 @@ func (s *session) createNewConnection(dbName string) {
 func (s *session) raw(sqlStr string) (rows *sql.Rows, err error) {
 	// 连接断开无效时,自动重试
 	for i := 0; i < maxBadConnRetries; i++ {
-		rows, err = s.db.DB().Query(sqlStr)
+		var sqlDB *sql.DB
+		sqlDB, err = s.db.DB()
+		if err != nil {
+			log.Errorf("con:%d failed to get sql.DB: %v", s.sessionVars.ConnectionID, err)
+			return nil, err
+		}
+
+		rows, err = sqlDB.Query(sqlStr)
 		if err == nil {
 			return
 		}
@@ -89,7 +97,14 @@ func (s *session) exec(sqlStr string, retry bool) (res sql.Result, err error) {
 	log.Debug("exec")
 	// 连接断开无效时,自动重试
 	for i := 0; i < maxBadConnRetries; i++ {
-		res, err = s.db.DB().Exec(sqlStr)
+		var sqlDB *sql.DB
+		sqlDB, err = s.db.DB()
+		if err != nil {
+			log.Errorf("con:%d failed to get sql.DB: %v", s.sessionVars.ConnectionID, err)
+			return nil, err
+		}
+
+		res, err = sqlDB.Exec(sqlStr)
 		if err == nil {
 			return
 		}
@@ -130,7 +145,14 @@ func (s *session) execDDL(sqlStr string, retry bool) (res sql.Result, err error)
 	log.Debug("execDDL")
 	// 连接断开无效时,自动重试
 	for i := 0; i < maxBadConnRetries; i++ {
-		res, err = s.ddlDB.DB().Exec(sqlStr)
+		var sqlDB *sql.DB
+		sqlDB, err = s.ddlDB.DB()
+		if err != nil {
+			log.Errorf("con:%d failed to get sql.DB: %v", s.sessionVars.ConnectionID, err)
+			return nil, err
+		}
+
+		res, err = sqlDB.Exec(sqlStr)
 		if err == nil {
 			return
 		}
@@ -205,8 +227,14 @@ func (s *session) initConnection() (err error) {
 
 	// 连接断开无效时,自动重试
 	for i := 0; i < maxBadConnRetries; i++ {
+		var sqlDB *sql.DB
+		sqlDB, err = s.db.DB()
+		if err != nil {
+			log.Errorf("con:%d failed to get sql.DB: %v", s.sessionVars.ConnectionID, err)
+			return err
+		}
 		if name == "" {
-			err = s.db.DB().Ping()
+			err = sqlDB.Ping()
 		} else {
 			err = s.db.Exec(fmt.Sprintf("USE `%s`", name)).Error
 		}
