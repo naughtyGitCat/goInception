@@ -60,7 +60,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 // Session context

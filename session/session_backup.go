@@ -13,8 +13,8 @@ import (
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/hanchuanchuan/goInception/ast"
 	"github.com/hanchuanchuan/goInception/mysql"
-	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 const backupTableHostDataLength = 128
@@ -573,7 +573,14 @@ func (s *session) checkBackupTableSqlStmtColumnType(dbname string) (longDataType
 
 	var res string
 
-	rows, err2 := s.backupdb.DB().Query(sql)
+	db, err := s.backupdb.DB()
+	if err != nil {
+		log.Errorf("con:%d failed to get database connection: %v", s.sessionVars.ConnectionID, err)
+		s.appendErrorMsg(err.Error())
+		return
+	}
+
+	rows, err2 := db.Query(sql)
 	if err2 != nil {
 		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err2)
 		if myErr, ok := err2.(*mysqlDriver.MySQLError); ok {
@@ -604,7 +611,13 @@ func (s *session) checkBackupTableHostMaxLength(dbname string) (length int) {
 
 	var res string
 
-	rows, err2 := s.backupdb.DB().Query(sql)
+	db, err := s.backupdb.DB()
+	if err != nil {
+		log.Errorf("con:%d failed to get database connection: %v", s.sessionVars.ConnectionID, err)
+		s.appendErrorMsg(err.Error())
+		return 0
+	}
+	rows, err2 := db.Query(sql)
 	if err2 != nil {
 		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err2)
 		if myErr, ok := err2.(*mysqlDriver.MySQLError); ok {
