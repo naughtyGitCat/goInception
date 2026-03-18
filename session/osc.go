@@ -266,6 +266,11 @@ func (s *session) mysqlExecuteWithGhost(r *Record) {
 		masterHost = s.ghost.GhostAssumeMasterHost
 	}
 
+	if s.ghost.GhostCheckPoint {
+		buf.WriteString(" --checkpoint")
+		buf.WriteString(fmt.Sprintf(" --checkpoint-seconds=%d", s.ghost.GhostCheckPointSeconds))
+	}
+
 	buf.WriteString(fmt.Sprintf(" --assume-master-host=%s", masterHost))
 	buf.WriteString(fmt.Sprintf(" --attempt-instant-ddl=%t", s.ghost.GhostAttemptInstantDDL))
 	buf.WriteString(fmt.Sprintf(" --exact-rowcount=%t", s.ghost.GhostExactRowcount))
@@ -340,6 +345,9 @@ func (s *session) mysqlExecuteWithGhost(r *Record) {
 
 	if s.ghost.GhostForceTableNames != "" {
 		buf.WriteString(fmt.Sprintf(" --force-table-names=%s", s.ghost.GhostForceTableNames))
+	}
+	if s.ghost.GhostSkipMetadataLockCheck {
+		buf.WriteString(" --skip-metadata-lock-check")
 	}
 
 	buf.WriteString(" --critical-load='")
