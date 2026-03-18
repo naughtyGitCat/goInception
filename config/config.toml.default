@@ -216,6 +216,9 @@ ghost_exponential_backoff_max_interval = 64
 ghost_dml_batch_size = 10
 ghost_ok_to_drop_table = true
 ghost_skip_foreign_key_checks = true
+ghost_skip_metadata_lock_check = false
+ghost_checkpoint = false
+ghost_checkpoint_seconds = 300
 
 [inc_level]
 er_alter_table_once = 1
