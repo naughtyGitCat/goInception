@@ -534,6 +534,10 @@ type Ghost struct {
 
 	// gh-ost在cut-over阶段最大的锁等待时间，当锁超时时，gh-ost的cut-over将重试。(默认值：3)
 	GhostCutOverLockTimeoutSeconds int64 `toml:"ghost_cut_over_lock_timeout_seconds"`
+	// gh-ost 1.1.8版本新增参数，用于开启迁移的检查点功能，默认关闭。
+	GhostCheckPoint bool `toml:"ghost_checkpoint"`
+	// gh-ost 1.1.8版本新增参数，用于设置检查点间隔时间，默认为300秒。
+	GhostCheckPointSeconds int64 `toml:"ghost_checkpoint_seconds"`
 
 	// 很危险的参数，慎用！
 	// 该参数针对一个有外键的表，在gh-ost创建ghost表时，并不会为ghost表创建外键。该参数很适合用于删除外键，除此之外，请谨慎使用。
@@ -592,6 +596,12 @@ type Ghost struct {
 	// GhostPanicFlagFile           string `toml:"ghost_panic_flag_file"`
 	// GhostReplicaServerID      bool `toml:"ghost_replica_server_id"`
 	GhostSkipForeignKeyChecks bool `toml:"ghost_skip_foreign_key_checks"`
+	//new command-line flag to allow users to bypass metadata lock validation during cut-over when cannot be enabled (e.g., on Aurora RDS). This addresses environments where enabling may be infeasible while acknowledging a small risk of data loss.--skip-metadata-lock-checksperformance_schema.metadata_locksperformance_schema
+	//Changes:
+	//Added flag to bypass metadata lock checks at cut-over--skip-metadata-lock-checks
+	//Enhanced to handle cases where is disabledStateMetadataLockInstrument()performance_schema
+	//Added validation logic in to conditionally bail out or warn based on flaginitiateApplier()
+	GhostSkipMetadataLockCheck bool `toml:"ghost_skip_metadata_lock_check"`
 
 	// 如果你修改一个列的名字(如change column)，gh-ost将会识别到并且需要提供重命名列名的原因，
 	// 默认情况下gh-ost是不继续执行的。该参数告诉gh-ost跳该列的数据迁移，
@@ -775,6 +785,8 @@ var defaultConf = Config{
 		GhostConcurrentRowcount:            true,
 		GhostCutOver:                       "atomic",
 		GhostCutOverLockTimeoutSeconds:     3,
+		GhostCheckPoint:                    false,
+		GhostCheckPointSeconds:             300,
 		GhostDefaultRetries:                60,
 		GhostHeartbeatIntervalMillis:       500,
 		GhostMaxLagMillis:                  1500,
@@ -783,6 +795,7 @@ var defaultConf = Config{
 		GhostDmlBatchSize:                  10,
 		GhostOkToDropTable:                 true,
 		GhostSkipForeignKeyChecks:          true,
+		GhostSkipMetadataLockCheck:         false,
 		GhostTimestampOldTable:             false,
 	},
 	IncLevel: defaultLevel,
