@@ -8690,6 +8690,9 @@ func (s *session) explainOrAnalyzeSql(sql string) {
 	if s.dbType == DBTypeOceanBase {
 		explain = append(explain, "FORMAT=JSON ")
 	}
+	if s.dbType == DBTypeMysql && s.dbVersion >= 90000 {
+		explain = append(explain, "FORMAT=TRADITIONAL ")
+	}
 	explain = append(explain, sql)
 
 	// rows := s.getExplainInfo(strings.Join(explain, ""))
