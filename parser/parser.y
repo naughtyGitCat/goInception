@@ -376,7 +376,6 @@ import (
 	stop                   "STOP"
 	pause                  "PAUSE"
 	percent                "PERCENT"
-	persist                "PERSIST"
 	resume                 "RESUME"
 	committed              "COMMITTED"
 	compact                "COMPACT"
@@ -2443,11 +2442,7 @@ InceptionStmt:
 	}
 |	"INCEPTION" "SET" VariableAssignmentList
 	{
-		$$ = &ast.InceptionSetStmt{IsPersist: false, Variables: $3.([]*ast.VariableAssignment)}
-	}
-|	"INCEPTION" "SET" "PERSIST" VariableAssignmentList
-	{
-		$$ = &ast.InceptionSetStmt{IsPersist: true, Variables: $4.([]*ast.VariableAssignment)}
+		$$ = &ast.InceptionSetStmt{Variables: $3.([]*ast.VariableAssignment)}
 	}
 |	"INCEPTION" "SET" "LEVEL" VariableAssignmentList
 	{
@@ -5925,7 +5920,6 @@ UnReservedKeyword:
 |	"LANGUAGE"
 |	"BERNOULLI"
 |	"PERCENT"
-|	"PERSIST"
 |	"SYSTEM"
 |	"SKIP"
 |	"LOCKED"

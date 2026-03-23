@@ -513,7 +513,6 @@ var tokenMap = map[string]int{
 	"NOPARALLEL":               noparallel,
 	"PASSWORD":                 password,
 	"PERCENT":                  percent,
-	"PERSIST":                  persist,
 	"PLUGINS":                  plugins,
 	"POSITION":                 position,
 	"PRE_SPLIT_REGIONS":        preSplitRegions,
