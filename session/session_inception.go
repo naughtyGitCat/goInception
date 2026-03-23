@@ -2233,6 +2233,21 @@ func (s *session) setLockWaitTimeout() {
 	}
 }
 
+func (s *session) setOptimizerSwitch() {
+	log.Debug("setOptimizerSwitch")
+
+	sql := "set session optimizer_switch='hypergraph_optimizer=off';"
+
+	if _, err := s.exec(sql, true); err != nil {
+		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	}
+}
+
 func (s *session) checkBinlogIsOn() bool {
 	log.Debug("checkBinlogIsOn")
 

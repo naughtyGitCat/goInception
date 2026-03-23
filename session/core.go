@@ -555,6 +555,9 @@ func (s *session) checkOptions() error {
 	}
 	s.setSqlSafeUpdates()
 	s.setLockWaitTimeout()
+	if s.dbVersion >= 80022 {
+		s.setOptimizerSwitch()
+	}
 
 	if s.opt.Backup && s.dbType == DBTypeTiDB {
 		s.appendErrorMsg("TiDB暂不支持备份功能.")
