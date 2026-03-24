@@ -250,6 +250,7 @@ const (
 	ErrFieldTypeNotAllowedAsPartitionField
 	ErrWarnDataOutOfRange
 	ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN
+	ErrPartitionMgmtOnNonpartitioned
 )
 
 var ErrorsDefault = map[ErrorCode]string{
@@ -467,6 +468,7 @@ var ErrorsDefault = map[ErrorCode]string{
 	ErrFieldTypeNotAllowedAsPartitionField:        "Field '%-.192s' is of a not allowed type for this type of partitioning",
 	ErrWarnDataOutOfRange:                         "Out of range value for column '%s' at row %d",
 	ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN: "Alter column that the prefix index column depends on not supported '%s'.",
+	ErrPartitionMgmtOnNonpartitioned:              "Partition management on a not partitioned table is not possible '%s'.",
 }
 
 var ErrorsChinese = map[ErrorCode]string{
@@ -675,6 +677,7 @@ var ErrorsChinese = map[ErrorCode]string{
 	ErrFieldTypeNotAllowedAsPartitionField:        "字段'%-.192s'的类型不允许用于此分区类型.",
 	ErrWarnDataOutOfRange:                         "数据超出范围: '%s'.",
 	ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN: "依赖前缀索引列的列不支持修改 '%s'.",
+	ErrPartitionMgmtOnNonpartitioned:              "表'%s'不是分区表,无法进行分区管理.",
 }
 
 func GetErrorLevel(code ErrorCode) uint8 {
@@ -813,7 +816,8 @@ func GetErrorLevel(code ErrorCode) uint8 {
 		ErrValuesIsNotIntType,
 		ErrFieldTypeNotAllowedAsPartitionField,
 		ErrWarnDataOutOfRange,
-		ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN:
+		ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN,
+		ErrPartitionMgmtOnNonpartitioned:
 		return 2
 
 	default:
@@ -1272,6 +1276,8 @@ func (e ErrorCode) String() string {
 		return "er_warn_data_out_of_range"
 	case ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN:
 		return "er_cannot_alter_prefix_index_dependent_column"
+	case ErrPartitionMgmtOnNonpartitioned:
+		return "er_partition_mgmt_on_nonpartitioned"
 	}
 	return ""
 }

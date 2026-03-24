@@ -4347,6 +4347,9 @@ func (s *session) checkAlterTable(node *ast.AlterTableStmt, sql string, mergeOnl
 			if !s.inc.EnablePartitionTable {
 				s.appendErrorNo(ER_PARTITION_NOT_ALLOWED)
 			} else {
+				if table.Partitions == nil {
+					s.appendErrorNo(ErrPartitionMgmtOnNonpartitioned, table.Name)
+				}
 				_ = s.fetchPartitionFromDB(table)
 				s.checkPartitionNameUnique(alter.PartDefinitions)
 				s.checkPartitionNameExists(table, alter.PartDefinitions)
