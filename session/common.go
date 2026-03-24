@@ -353,6 +353,7 @@ type IndexInfo struct {
 	IndexName  string `gorm:"Column:Key_name"`
 	Seq        int    `gorm:"Column:Seq_in_index"`
 	ColumnName string `gorm:"Column:Column_name"`
+	SubPart    string `gorm:"Column:Sub_part"`
 	IndexType  string `gorm:"Column:Index_type"`
 
 	IsDeleted bool `gorm:"-"`
