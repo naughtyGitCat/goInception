@@ -4876,6 +4876,15 @@ func (s *session) checkChangeColumn(t *TableInfo, c *ast.AlterTableSpec) {
 func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 	log.Debug("checkModifyColumn")
 
+	var prefixIndex string
+	if s.dbType == DBTypeOceanBase {
+		for _, idx := range t.Indexes {
+			if idx.SubPart != "" {
+				prefixIndex = idx.ColumnName
+			}
+		}
+	}
+
 	for _, nc := range c.NewColumns {
 		// varchar类型字段长度是否发生了改变
 		varcharLengthChanged := false
@@ -4897,6 +4906,11 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 
 		// 列名未变
 		if c.OldColumnName == nil || c.OldColumnName.Name.L == nc.Name.Name.L {
+
+			if s.dbType == DBTypeOceanBase && nc.Name.Name.L == prefixIndex {
+				s.appendErrorNo(ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN, prefixIndex)
+			}
+
 			for i, field := range t.Fields {
 				if strings.EqualFold(field.Field, nc.Name.Name.O) {
 					found = true
@@ -5041,6 +5055,11 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			oldFound := false
 			newFound := false
 			foundIndexOld := -1
+
+			if s.dbType == DBTypeOceanBase && c.OldColumnName.Name.L == prefixIndex {
+				s.appendErrorNo(ER_CANNOT_ALTER_PREFIX_INDEX_DEPENDENT_COLUMN, prefixIndex)
+			}
+
 			for i, field := range t.Fields {
 				if strings.EqualFold(field.Field, c.OldColumnName.Name.L) && !field.IsDeleted {
 					oldFound = true
