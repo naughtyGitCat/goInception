@@ -2209,6 +2209,18 @@ PARTITION BY RANGE (TO_DAYS(hiredate) ) (
 	sql = `ALTER TABLE t1 ADD PARTITION (  PARTITION p20250625 VALUES LESS THAN (20250810));`
 	s.testErrorCode(c, sql,
 		session.NewErr(session.ErrRangeNotIncreasing, "20251213"))
+
+	sql = `drop table if exists t1;CREATE TABLE t1 (
+			customer_id int(10) unsigned NOT NULL COMMENT '登录用户ID',
+			login_time DATETIME NOT NULL COMMENT '用户登录时间',
+			month_id varchar(6) NOT NULL COMMENT '月',
+			day_id varchar(2) NOT NULL COMMENT '日'
+		  ) ENGINE=InnoDB;	  `
+	s.mustRunExec(c, sql)
+
+	sql = `ALTER TABLE t1 ADD PARTITION (  PARTITION p20250625 VALUES LESS THAN (20250810));`
+	s.testErrorCode(c, sql,
+		session.NewErr(session.ErrPartitionMgmtOnNonpartitioned, "t1"))
 }
 
 func (s *testSessionIncSuite) TestSubSelect(c *C) {
