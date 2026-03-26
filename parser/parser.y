@@ -1011,7 +1011,7 @@ import (
 	PartDefOptionList             "PartDefOption list"
 	PartDefOption                 "COMMENT [=] xxx | TABLESPACE [=] tablespace_name | ENGINE [=] xxx"
 	PasswordOpt                   "Password option"
-	ColumnPosition                "Column position [First|After ColumnName]"
+	ColumnPosition                "Column position [First|After|Before ColumnName]"
 	PrepareSQL                    "Prepare statement sql string"
 	Priority                      "Statement priority"
 	PriorityOpt                   "Statement priority option"
@@ -1990,6 +1990,13 @@ ColumnPosition:
 	{
 		$$ = &ast.ColumnPosition{
 			Tp:             ast.ColumnPositionAfter,
+			RelativeColumn: $2.(*ast.ColumnName),
+		}
+	}
+|	"BEFORE" ColumnName
+	{
+		$$ = &ast.ColumnPosition{
+			Tp:             ast.ColumnPositionBefore,
 			RelativeColumn: $2.(*ast.ColumnName),
 		}
 	}
