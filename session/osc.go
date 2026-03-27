@@ -142,7 +142,6 @@ func (s *session) mysqlExecuteAlterTableOsc(r *Record) {
 		buf.WriteString(fmt.Sprintf("%d", s.osc.OscMaxLag))
 	} else {
 		buf.WriteString(" --nocheck-plan ")
-		buf.WriteString(" --noanalyze-before-swap ")
 		buf.WriteString(" --critical-load ")
 		buf.WriteString("Threads_connected:")
 		buf.WriteString(strconv.Itoa(s.osc.OscCriticalThreadConnected))
