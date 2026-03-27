@@ -6296,25 +6296,24 @@ sub get_row_estimate {
       die "I need a $arg argument" unless $args{$arg};
    }
    my ($cxn, $tbl) = @args{@required_args};
-
-   # Query information_schema.tables to get row count estimate
-   my $sql = "SELECT table_rows FROM information_schema.tables "
+   my $vp = VersionParser->new($cxn->dbh());
+   my $sql;
+   if ( $vp->flavor() =~ m/OceanBase/i ) {
+      $sql = "SELECT null as \"key\", table_rows as \"rows\" FROM information_schema.tables "
            . "WHERE table_schema='$tbl->{db}' "
            . " AND table_name='$tbl->{tbl}'";
+   } else {
+      $sql = "EXPLAIN SELECT * FROM $tbl->{name} "
+           . "WHERE " . ($args{where} || '1=1');
+   }
    PTDEBUG && _d($sql);
    my $expl = $cxn->dbh()->selectrow_hashref($sql);
    PTDEBUG && _d(Dumper($expl));
-   
-   # Check if primary key exists
-   my $primary_sql = "SELECT index_name FROM information_schema.statistics "
-                   . "WHERE table_schema='$tbl->{db}' "
-                   . " AND table_name='$tbl->{tbl}' "
-                   . " AND index_name='PRIMARY'";
-   PTDEBUG && _d($primary_sql);
-   my $primary_expl = $cxn->dbh()->selectrow_hashref($primary_sql);
-   my $mysql_index = $primary_expl ? 'PRIMARY' : '';
-   
-   return ($expl->{table_rows} || 0), $mysql_index;
+   my $mysql_index = $expl->{key} || '';
+   if ( $mysql_index ne 'PRIMARY' ) {
+      $mysql_index = lc($mysql_index);
+   }
+   return ($expl->{rows} || 0), $mysql_index;
 }
 
 sub _prepare_sths {
@@ -9112,7 +9111,8 @@ sub main {
       # User did not specify --analyze-before-swap on command line, and it
       # defaults to "yes", so auto-check for the conditions it's affected by
       # and enable only if those conditions are true.
-      if ( $server_version >= '5.6' ) {
+      my $vp = VersionParser->new($cxn->dbh());
+      if ( $server_version >= '5.6' && $vp->flavor() !~ m/OceanBase/i ) {
          my (undef, $innodb_stats_persistent) = $cxn->dbh->selectrow_array(
             "SHOW VARIABLES LIKE 'innodb_stats_persistent'");
          if ($innodb_stats_persistent eq 'ON' || $innodb_stats_persistent eq '1') {
@@ -9123,8 +9123,12 @@ sub main {
             $analyze_table = 0;
          }
       } else {
-         PTDEBUG && _d('MySQL < 5.6, disabling --analyze-before-swap');
-         $analyze_table = 0;
+         if ( $vp->flavor() !~ m/OceanBase/i ) {
+            PTDEBUG && _d('MySQL < 5.6, disabling --analyze-before-swap');
+            $analyze_table = 0;
+         } else {
+            $analyze_table = 1;
+         }
       }
    }
 
@@ -11455,7 +11459,7 @@ sub swap_tables {
    my $table_name   = $orig_tbl->{tbl} . ($args{suffix} || '');
    my $name_tries   = 20;  # don't try forever
    my $table_exists = qr/table.+?already exists/i;
-
+   my $vp = VersionParser->new($cxn->dbh());
    # This sub only works for --execute.  Since the options are
    # mutually exclusive and we return in the if case, the elsif
    # is just a paranoid check because swapping the tables is one
@@ -11473,7 +11477,13 @@ sub swap_tables {
       # https://bugs.launchpad.net/percona-toolkit/+bug/1491261
       if ( $args{analyze_table} ) {
          print ts("Analyzing new table...\n");
-         my $sql_analyze = "ANALYZE TABLE $new_tbl->{name} /* pt-online-schema-change */";
+         my $sql_analyze;
+         my $degree = $o->get('degree');
+         if ( $vp->flavor() =~ m/OceanBase/i ) {
+            $sql_analyze = "CALL DBMS_STATS.GATHER_TABLE_STATS('$new_tbl->{db}', '$new_tbl->{tbl}', degree=>$degree) /* pt-online-schema-change */";
+         } else {
+            $sql_analyze = "ANALYZE TABLE $new_tbl->{name} /* pt-online-schema-change */";
+         } 
          osc_retry(
             Cxn     => $cxn,
             Retry   => $retry,
@@ -13170,6 +13180,12 @@ short form: -F; type: string
 
 Only read mysql options from the given file.  You must give an absolute
 pathname.
+
+=item --degree
+
+type: size; default: 1
+
+Number of concurrent threads to use when collecting statistics
 
 =item --[no]drop-new-table
 
