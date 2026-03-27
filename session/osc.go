@@ -116,28 +116,42 @@ func (s *session) mysqlExecuteAlterTableOsc(r *Record) {
 		buf.WriteString(" --print ")
 	}
 	buf.WriteString(fmt.Sprintf("  --set-vars lock_wait_timeout=%d", s.osc.OscLockWaitTimeout))
-	buf.WriteString(" --charset=utf8 ")
+	buf.WriteString(" --charset=utf8mb4 ")
 	buf.WriteString(" --chunk-time ")
 	buf.WriteString(fmt.Sprintf("%g ", s.osc.OscChunkTime))
-
-	buf.WriteString(" --critical-load ")
-	buf.WriteString("Threads_connected:")
-	buf.WriteString(strconv.Itoa(s.osc.OscCriticalThreadConnected))
-	buf.WriteString(",Threads_running:")
-	buf.WriteString(strconv.Itoa(s.osc.OscCriticalThreadRunning))
-	buf.WriteString(" ")
-
-	buf.WriteString(" --max-load ")
-	buf.WriteString("Threads_connected:")
-	buf.WriteString(strconv.Itoa(s.osc.OscMaxThreadConnected))
-	buf.WriteString(",Threads_running:")
-	buf.WriteString(strconv.Itoa(s.osc.OscMaxThreadRunning))
-	buf.WriteString(" ")
 
 	buf.WriteString(" --sleep=")
 	buf.WriteString(fmt.Sprintf("%g", s.osc.OscSleep))
 
-	buf.WriteString(" --recurse=1 ")
+	if s.dbType != DBTypeOceanBase {
+		buf.WriteString(" --critical-load ")
+		buf.WriteString("Threads_connected:")
+		buf.WriteString(strconv.Itoa(s.osc.OscCriticalThreadConnected))
+		buf.WriteString(",Threads_running:")
+		buf.WriteString(strconv.Itoa(s.osc.OscCriticalThreadRunning))
+		buf.WriteString(" ")
+
+		buf.WriteString(" --max-load ")
+		buf.WriteString("Threads_connected:")
+		buf.WriteString(strconv.Itoa(s.osc.OscMaxThreadConnected))
+		buf.WriteString(",Threads_running:")
+		buf.WriteString(strconv.Itoa(s.osc.OscMaxThreadRunning))
+		buf.WriteString(" ")
+		buf.WriteString(" --recurse=1 ")
+		buf.WriteString(" --max-lag=")
+		buf.WriteString(fmt.Sprintf("%d", s.osc.OscMaxLag))
+	} else {
+		buf.WriteString(" --nocheck-plan ")
+		buf.WriteString(" --noanalyze-before-swap ")
+		buf.WriteString(" --critical-load ")
+		buf.WriteString("Threads_connected:")
+		buf.WriteString(strconv.Itoa(s.osc.OscCriticalThreadConnected))
+		buf.WriteString(" ")
+		buf.WriteString(" --max-load ")
+		buf.WriteString("Threads_connected:")
+		buf.WriteString(strconv.Itoa(s.osc.OscMaxThreadConnected))
+		buf.WriteString(" ")
+	}
 
 	buf.WriteString(" --check-interval ")
 	buf.WriteString(fmt.Sprintf("%d ", s.osc.OscCheckInterval))
@@ -171,8 +185,6 @@ func (s *session) mysqlExecuteAlterTableOsc(r *Record) {
 
 	buf.WriteString(" --execute ")
 	buf.WriteString(" --statistics ")
-	buf.WriteString(" --max-lag=")
-	buf.WriteString(fmt.Sprintf("%d", s.osc.OscMaxLag))
 
 	if s.isClusterNode && s.dbVersion > 50600 && s.osc.OscMaxFlowCtl >= 0 {
 		buf.WriteString(" --max-flow-ctl=")
@@ -192,8 +204,6 @@ func (s *session) mysqlExecuteAlterTableOsc(r *Record) {
 	buf.WriteString(strings.Replace(s.opt.Password, "'", "'\"'\"'", -1))
 	buf.WriteString("' --host=")
 	buf.WriteString(s.opt.Host)
-	buf.WriteString(" --port=")
-	buf.WriteString(strconv.Itoa(s.opt.Port))
 
 	buf.WriteString(" D=")
 	buf.WriteString(r.TableInfo.Schema)
@@ -203,9 +213,13 @@ func (s *session) mysqlExecuteAlterTableOsc(r *Record) {
 	if s.opt.Port != 3306 {
 		buf.WriteString(",P=")
 		buf.WriteString(strconv.Itoa(s.opt.Port))
+	} else {
+		buf.WriteString(" --port=")
+		buf.WriteString(strconv.Itoa(s.opt.Port))
 	}
 
 	str := buf.String()
+
 	_ = s.execCommand(r, "", "sh", []string{"-c", str})
 }
 
