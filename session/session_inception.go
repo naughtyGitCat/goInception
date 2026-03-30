@@ -4666,10 +4666,6 @@ func checkDDLOfflineCommon(node *ast.AlterTableStmt, t *TableInfo) bool {
 			}
 		case ast.AlterTableDropColumn:
 			return true
-		case ast.AlterTableDropPartition:
-			return true
-		case ast.AlterTableTruncatePartition:
-			return true
 		case ast.AlterTablePartition:
 			return true
 		case ast.AlterTableOption:
