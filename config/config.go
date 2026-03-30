@@ -485,6 +485,12 @@ type Osc struct {
 	// 对应参数pt-online-schema-change中的参数--check-interval，意义是Sleep time between checks for --max-lag。默认值：5
 	OscCheckInterval int `toml:"osc_check_interval" json:"osc_check_interval"`
 
+	// 对应参数pt-online-schema-change中的参数--degree。默认值：1 (Oceanbase专用参数)
+	OscAnalyzeDegree int `toml:"osc_analyze_degree" json:"osc_analyze_degree"`
+
+	// 对应参数pt-online-schema-change中的参数--table_mode。默认值：normal (Oceanbase专用参数)
+	OscTableMode string `toml:"osc_table_mode" json:"osc_table_mode"`
+
 	OscBinDir string `toml:"osc_bin_dir" json:"osc_bin_dir"`
 }
 
@@ -773,6 +779,8 @@ var defaultConf = Config{
 		OscChunkSizeLimit:          4,
 		OscChunkSize:               1000,
 		OscCheckInterval:           5,
+		OscAnalyzeDegree:           1,
+		OscTableMode:               "normal",
 		OscBinDir:                  "/usr/local/bin",
 	},
 	Ghost: Ghost{
