@@ -150,6 +150,10 @@ func (s *session) mysqlExecuteAlterTableOsc(r *Record) {
 		buf.WriteString("Threads_connected:")
 		buf.WriteString(strconv.Itoa(s.osc.OscMaxThreadConnected))
 		buf.WriteString(" ")
+		buf.WriteString(" --degree ")
+		buf.WriteString(fmt.Sprintf("%d ", s.osc.OscAnalyzeDegree))
+		buf.WriteString(" --table_mode=")
+		buf.WriteString(s.osc.OscTableMode)
 	}
 
 	buf.WriteString(" --check-interval ")

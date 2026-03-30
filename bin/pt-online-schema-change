@@ -9923,9 +9923,15 @@ sub main {
       );
    }
 
+   #my $vp = VersionParser->new($cxn->dbh());
+   my $table_mode = $o->get('table_mode');
    if ( my $alter = $o->get('alter') ) {
       print "Altering new table...\n";
       my $sql = "ALTER TABLE $new_tbl->{name} $alter";
+      if ( $vp->flavor() =~ m/OceanBase/i ) {
+         print "Altering new table mode to $table_mode...\n";
+         $sql = "ALTER TABLE $new_tbl->{name} TABLE_MODE='$table_mode'"
+      }
       print $sql, "\n" if $o->get('print');
       PTDEBUG && _d($sql);
       eval {
@@ -11496,6 +11502,23 @@ sub swap_tables {
          );
       }
 
+      if ( $vp->flavor() =~ m/OceanBase/i ) {
+         print "Altering new table mode to normal...\n";
+         my $sql = "ALTER TABLE $new_tbl->{name} TABLE_MODE='normal'";
+         print $sql, "\n" if $o->get('print');
+         PTDEBUG && _d($sql);
+         eval {
+         $cxn->dbh()->do($sql);
+         };
+         if ( $EVAL_ERROR ) {
+            if ( $plugin && $plugin->can('before_die') ) {
+            $plugin->before_die(exit_status => $EVAL_ERROR);
+            }
+            # this is trapped by a signal handler. Don't replace it with _die
+            die "Error altering new table mode: $EVAL_ERROR\n";
+         }
+         print "Altered table mode OK.\n";
+      }
       print ts("Swapping tables...\n");
       while ( $name_tries-- ) {
 
@@ -13694,6 +13717,12 @@ How many times to try critical operations.  If certain operations fail due
 to non-fatal, recoverable errors, the tool waits and tries the operation
 again.  These are the operations that are retried, with their default number
 of tries and wait time between tries (in seconds):
+
+=item --table_mode
+
+type: string; default: normal
+
+Adaptive merge table mode
 
 =for comment ignore-pt-internal-value
 MAGIC_tries
