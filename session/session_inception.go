@@ -4614,20 +4614,16 @@ func (s *session) checkDDLOffline(node *ast.AlterTableStmt, t *TableInfo) {
 	if !s.myRecord.useOsc || s.dbType != DBTypeOceanBase {
 		return
 	}
-	if checkDDLOfflineCommon(node, t) {
+	if s.checkDDLOfflineOperation(node, t) {
 		s.myRecord.useOsc = true
-		return
-	}
-	if s.dbVersion < 42500 {
-		if checkDDLOffline421(node) {
-			s.myRecord.useOsc = true
-		}
 	}
 }
 
-func checkDDLOfflineCommon(node *ast.AlterTableStmt, t *TableInfo) bool {
-	log.Debug("checkDDLOfflineCommon")
+func (s *session) checkDDLOfflineOperation(node *ast.AlterTableStmt, t *TableInfo) bool {
+	log.Debug("checkDDLOfflineOperation")
 
+	OnlineSpecs := 0
+	OfflineSpecs := 0
 	var foundField FieldInfo
 
 	for _, alter := range node.Specs {
@@ -4641,56 +4637,57 @@ func checkDDLOfflineCommon(node *ast.AlterTableStmt, t *TableInfo) bool {
 					}
 				}
 				if nc.Tp.CompactStr() != foundField.Type {
-					return true
+					OfflineSpecs++
 				}
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionAutoIncrement:
-						return true
+						OfflineSpecs++
+					default:
+						OnlineSpecs++
 					}
 				}
 			}
 			if alter.Position.Tp != ast.ColumnPositionNone {
-				return true
+				OfflineSpecs++
 			}
 		case ast.AlterTableAddColumns:
 			for _, nc := range alter.NewColumns {
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionAutoIncrement:
-						return true
+						OfflineSpecs++
 					case ast.ColumnOptionGenerated:
-						return true
+						OfflineSpecs++
+					default:
+						OnlineSpecs++
 					}
 				}
 			}
+			if alter.Position.Tp != ast.ColumnPositionNone && s.dbVersion < 42500 {
+				OfflineSpecs++
+			} else {
+				OnlineSpecs++
+			}
 		case ast.AlterTableDropColumn:
-			return true
+			OfflineSpecs++
 		case ast.AlterTablePartition:
-			return true
+			OfflineSpecs++
 		case ast.AlterTableOption:
 			for _, op := range alter.Options {
 				switch op.Tp {
 				case ast.TableOptionCharset:
 					if op.UintValue == 1 {
-						return true
-
+						OfflineSpecs++
 					}
+				default:
+					OnlineSpecs++
 				}
 			}
 		}
 	}
-	return false
-}
-
-func checkDDLOffline421(node *ast.AlterTableStmt) bool {
-	for _, alter := range node.Specs {
-		switch alter.Tp {
-		case ast.AlterTableAddColumns:
-			if alter.Position.Tp != ast.ColumnPositionNone {
-				return true
-			}
-		}
+	if OfflineSpecs > 0 && OnlineSpecs >= 0 {
+		return true
 	}
 	return false
 }
