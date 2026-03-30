@@ -198,6 +198,12 @@ osc_chunk_size = 1000
 # 对应参数pt-online-schema-change中的参数--check-interval，意义是Sleep time between checks for --max-lag。默认值：5
 osc_check_interval = 5
 
+# 对应参数pt-online-schema-change中的参数--degree。默认值：1 (Oceanbase专用参数)
+osc_analyze_degree = 1
+
+#对应参数pt-online-schema-change中的参数--table_mode。默认值：normal (Oceanbase专用参数)
+osc_table_mode = "normal"
+
 osc_bin_dir = "/usr/local/bin"
 
 [ghost]
