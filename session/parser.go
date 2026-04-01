@@ -311,6 +311,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 	}()
 
 	var started bool
+	var payloadEvent bool
 
 	for {
 		e, err := logSync.GetEvent(context.Background())
@@ -426,6 +427,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 				}
 			}
 		case replication.TRANSACTION_PAYLOAD_EVENT:
+			payloadEvent = true
 			if event, ok := e.Event.(*replication.TransactionPayloadEvent); ok {
 				for _, e := range event.Events {
 					switch e.Header.EventType {
@@ -518,7 +520,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 			// if (record.StageStatus == StatusExecFail && record.AffectedRows > 0) ||
 			// 	record.StageStatus == StatusExecOK || record.StageStatus == StatusBackupFail {
 			if record.AffectedRows > 0 {
-				if int64(changeRows) >= record.AffectedRows {
+				if int64(changeRows) >= record.AffectedRows || (s.opt.tranBatch > 1 && payloadEvent) {
 					record.StageStatus = StatusBackupOK
 				}
 			}
