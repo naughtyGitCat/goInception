@@ -1,6 +1,6 @@
 module github.com/hanchuanchuan/goInception
 
-go 1.23.10
+go 1.24.0
 
 toolchain go1.24.7
 
@@ -17,7 +17,7 @@ replace github.com/etcd-io/gofail => go.etcd.io/gofail v0.0.0-20180808172546-51c
 // replace github.com/hanchuanchuan/gh-ost => ../gh-ost
 
 require (
-	github.com/BurntSushi/toml v1.3.2
+	github.com/BurntSushi/toml v1.6.0
 	github.com/CorgiMan/json2 v0.0.0-20150213135156-e72957aba209
 	github.com/blacktear23/go-proxyprotocol v0.0.0-20171102103907-62e368e1c470
 	github.com/coreos/etcd v3.3.13+incompatible
@@ -25,7 +25,7 @@ require (
 	github.com/cznic/strutil v0.0.0-20181122101858-275e90344537
 	github.com/cznic/y v0.0.0-20181122101901-b05e8c2e8d7b
 	github.com/etcd-io/gofail v0.0.0-00010101000000-000000000000
-	github.com/go-mysql-org/go-mysql v1.13.0
+	github.com/go-mysql-org/go-mysql v1.14.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/golang/protobuf v1.5.4
@@ -42,19 +42,19 @@ require (
 	github.com/ngaut/sync2 v0.0.0-20141008032647-7a24ed77b2ef
 	github.com/percona/go-mysql v0.0.0-20190307200310-f5cfaf6a5e55
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
-	github.com/pingcap/errors v0.11.5-0.20250318082626-8f80e5cb09ec
+	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
 	github.com/pingcap/goleveldb v0.0.0-20171020122428-b9ff6c35079e
 	github.com/pingcap/kvproto v0.0.0-20181206061346-54cf0a0dfe55
 	github.com/pingcap/pd v2.1.0+incompatible
 	github.com/pingcap/tipb v0.0.0-20190428032612-535e1abaa330
-	github.com/shopspring/decimal v1.2.0
+	github.com/shopspring/decimal v1.4.0
 	github.com/siddontang/go-log v0.0.0-20180807004314-8d05993dda07
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/spf13/viper v1.19.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.38.0
-	golang.org/x/text v0.24.0
+	golang.org/x/text v0.34.0
 	google.golang.org/grpc v1.66.2
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/mathutil v1.6.0
@@ -63,7 +63,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coreos/bbolt v1.3.2 // indirect
@@ -77,7 +77,7 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
-	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang/glog v1.2.4 // indirect
@@ -93,7 +93,7 @@ require (
 	github.com/jonboulle/clockwork v0.2.2 // indirect
 	github.com/juju/loggo v0.0.0-20180524022052-584905176618 // indirect
 	github.com/juju/testing v0.0.0-20180920084828-472a3e8b2073 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/lib/pq v1.10.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
@@ -105,7 +105,7 @@ require (
 	github.com/outbrain/golib v0.0.0-20180830062331-ab954725f502 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pingcap/log v1.1.1-0.20241212030209-7e3ff8601a2a // indirect
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20250421232622-526b2c79173d // indirect
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20260219190905-9b9281fa8d6d // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -128,7 +128,7 @@ require (
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
+	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect

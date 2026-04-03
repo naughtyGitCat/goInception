@@ -404,6 +404,9 @@ type Inc struct {
 
 	// 自定义的关键字，用于检查字段名是否符合规范
 	CustomKeywords []string `toml:"custom_keywords" json:"custom_keywords"`
+
+	// 支持mysql加密TransactionPayloadEvent binlog并发解码。
+	BinlogConcurrency int `toml:"binlog_concurrency" json:"binlog_concurrency"`
 }
 
 // Osc online schema change 工具参数配置
@@ -753,7 +756,8 @@ var defaultConf = Config{
 		UniqIndexPrefix: "uniq_", // 默认不检查,由CheckIndexPrefix控制
 		TablePrefix:     "",      // 默认不检查表前缀
 
-		CustomKeywords: []string{},
+		CustomKeywords:    []string{},
+		BinlogConcurrency: 1,
 	},
 	Osc: Osc{
 		OscPrintNone:               false,
