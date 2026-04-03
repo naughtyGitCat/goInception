@@ -72,6 +72,8 @@ enable_identifer_keyword = false
 # 额外的自定义关键字
 custom_keywords = []
 
+binlog_concurrency = 1
+
 # 审核列类型变更
 check_column_type_change = true
 

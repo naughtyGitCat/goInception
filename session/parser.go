@@ -260,6 +260,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 		UseDecimal: true,
 		// RawModeEnabled:  p.cfg.RawMode,
 		// SemiSyncEnabled: p.cfg.SemiSync,
+		PayloadDecoderConcurrency: s.inc.BinlogConcurrency,
 	}
 
 	if s.opt.ssl != "" {
