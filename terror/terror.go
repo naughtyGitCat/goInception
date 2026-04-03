@@ -324,7 +324,7 @@ func MustNil(err error, closeFuns ...func()) {
 		for _, f := range closeFuns {
 			f()
 		}
-		log.Fatalf(errors.ErrorStack(err))
+		log.Fatalf("%s", errors.ErrorStack(err))
 	}
 }
 

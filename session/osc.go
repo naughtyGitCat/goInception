@@ -950,7 +950,7 @@ func (s *session) execCommand(r *Record, socketFile string, commandName string, 
 	}
 
 	if p.Percent < 100 || s.myRecord.ErrLevel == 2 {
-		return fmt.Errorf(allMessage)
+		return fmt.Errorf("%s", allMessage)
 	}
 
 	// 执行完成或中止后清理osc进程信息

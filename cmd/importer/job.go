@@ -33,24 +33,24 @@ func addJobs(jobCount int, jobChan chan struct{}) {
 func doInsert(table *table, db *sql.DB, count int) {
 	sqls, err := genRowDatas(table, count)
 	if err != nil {
-		log.Fatalf(errors.ErrorStack(err))
+		log.Fatalf("%s", errors.ErrorStack(err))
 	}
 
 	txn, err := db.Begin()
 	if err != nil {
-		log.Fatalf(errors.ErrorStack(err))
+		log.Fatalf("%s", errors.ErrorStack(err))
 	}
 
 	for _, sql := range sqls {
 		_, err = txn.Exec(sql)
 		if err != nil {
-			log.Fatalf(errors.ErrorStack(err))
+			log.Fatalf("%s", errors.ErrorStack(err))
 		}
 	}
 
 	err = txn.Commit()
 	if err != nil {
-		log.Fatalf(errors.ErrorStack(err))
+		log.Fatalf("%s", errors.ErrorStack(err))
 	}
 }
 

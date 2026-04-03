@@ -9504,7 +9504,7 @@ func (s *session) queryIndexFromDB(db string, tableName string, reportNotExists 
 }
 
 func (s *session) appendErrorMsg(msg string) {
-	s.appendErrorMsgf(msg)
+	s.appendErrorMsgf("%s", msg)
 }
 
 func (s *session) appendErrorMsgf(format string, args ...interface{}) {
