@@ -27,7 +27,6 @@ const (
 	DBTypeMariaDB
 	DBTypeTiDB
 	DBTypeOceanBase
-	DBTypeDrds
 )
 
 // 审核阶段

@@ -985,9 +985,6 @@ func (s *session) checkPartitionNameExists(t *TableInfo, defs []*ast.PartitionDe
 }
 
 func (s *session) checkPartitionDrop(t *TableInfo, parts []model.CIStr) {
-	if s.supportDrds() {
-		return
-	}
 	for _, part := range parts {
 		found := false
 		for _, oldPart := range t.Partitions {

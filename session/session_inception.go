@@ -1888,24 +1888,6 @@ func (s *session) checkBinlogRowImageIsFull() bool {
 	return format != "MINIMAL"
 }
 
-func (s *session) DrdsServerVersion() {
-	log.Debug("DrdsServerVersion")
-
-	if s.dbVersion > 0 {
-		return
-	}
-
-	sql := "show ds;"
-
-	rows, err := s.raw(sql)
-	if rows != nil {
-		defer rows.Close()
-	}
-	if err == nil {
-		s.dbType = DBTypeDrds
-	}
-}
-
 func (s *session) mysqlServerVersion() {
 	log.Debug("mysqlServerVersion")
 
@@ -2816,10 +2798,6 @@ func (s *session) mysqlShowSequence(db, seqname string) {
 
 func (s *session) supportTableGroup() bool {
 	return s.dbType == DBTypeOceanBase
-}
-
-func (s *session) supportDrds() bool {
-	return s.dbType == DBTypeDrds
 }
 
 type TableGroupColumn struct {
