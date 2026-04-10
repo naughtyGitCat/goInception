@@ -105,6 +105,7 @@ func (s *session) init() {
 	s.tableCacheList = make(map[string]*TableInfo)
 	s.dbCacheList = make(map[string]*DBInfo)
 	s.sequencesCacheList = make(map[string]*SequencesInfo)
+	s.routineCacheList = make(map[string]*RoutineInfo)
 	s.backupDBCacheList = make(map[string]bool)
 	s.backupTableCacheList = make(map[string]BackupTable)
 	s.disableTypes = make(map[string]uint8)
@@ -168,6 +169,11 @@ func (s *session) clear() {
 		delete(s.tableCacheList, key)
 	}
 
+	for key, t := range s.routineCacheList {
+		t.Fields = nil
+		delete(s.routineCacheList, key)
+	}
+
 	for key, t := range s.sequencesCacheList {
 		t.SequencesOption = nil
 		delete(s.sequencesCacheList, key)
@@ -176,6 +182,7 @@ func (s *session) clear() {
 	s.tableCacheList = nil
 	s.dbCacheList = nil
 	s.sequencesCacheList = nil
+	s.routineCacheList = nil
 	s.backupDBCacheList = nil
 	s.backupTableCacheList = nil
 	s.sqlFingerprint = nil

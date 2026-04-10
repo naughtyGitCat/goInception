@@ -3845,7 +3845,7 @@ func (s *testSessionIncSuite) TestDropProcedure(c *C) {
 	config.GetGlobalConfig().Inc.EnableDropProcedure = true
 	sql = "drop procedure sp_t1;"
 	s.testErrorCode(c, sql,
-		session.NewErr(session.ER_PROCEDURE_NOT_EXISTED_ERROR, "sp_t1"))
+		session.NewErr(session.ER_PROCEDURE_NOT_EXISTED_ERROR, "test_inc.sp_t1"))
 }
 
 func (s *testSessionIncSuite) TestCreateFunction(c *C) {
@@ -3870,7 +3870,7 @@ func (s *testSessionIncSuite) TestDropFunction(c *C) {
 	config.GetGlobalConfig().Inc.EnableDropFunction = true
 	sql = "drop function sp_t1;"
 	s.testErrorCode(c, sql,
-		session.NewErr(session.ER_FUNCTION_NOT_EXISTED_ERROR, "sp_t1"))
+		session.NewErr(session.ER_FUNCTION_NOT_EXISTED_ERROR, "test_inc.sp_t1"))
 }
 
 func (s *testSessionIncSuite) TestCreateTrigger(c *C) {
