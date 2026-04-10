@@ -5964,6 +5964,11 @@ func (s *session) checkCreateForeignKey(t *TableInfo, c *ast.Constraint) {
 			}
 		}
 	}
+
+	if s.opt.Execute {
+		s.alterRollbackBuffer = append(s.alterRollbackBuffer,
+			fmt.Sprintf("DROP FOREIGN KEY `%s`,", c.Name))
+	}
 }
 
 func (s *session) checkDropForeignKey(t *TableInfo, c *ast.AlterTableSpec) {
@@ -5986,6 +5991,28 @@ func (s *session) checkDropForeignKey(t *TableInfo, c *ast.AlterTableSpec) {
 		}
 	} else {
 		s.appendErrorNo(ER_NOT_SUPPORTED_YET)
+	}
+	if s.opt.Execute {
+		var rollbackSql string
+		rollbackSql += "ADD CONSTRAINT "
+		rollbackSql += fmt.Sprintf("`%s`", c.Name)
+		rollbackSql += " FOREIGN KEY ("
+		for _, col := range t.Foreigns {
+			if strings.EqualFold(c.Name, col.ConstraintName) {
+				rollbackSql += fmt.Sprintf("`%s`", col.ColumnName)
+				rollbackSql += ") REFERENCES "
+				rollbackSql += fmt.Sprintf("`%s`.`%s`", col.ReferencedTableSchema, col.ReferencedTableName)
+				rollbackSql += fmt.Sprintf("(`%s`)", col.ReferencedColumnName)
+				if col.UpdateRule != "NO ACTION" {
+					rollbackSql += fmt.Sprintf(" ON UPDATE %s", col.UpdateRule)
+				}
+				if col.DeleteRule != "NO ACTION" {
+					rollbackSql += fmt.Sprintf(" ON DELETE %s", col.DeleteRule)
+				}
+			}
+		}
+		rollbackSql += ";"
+		s.alterRollbackBuffer = append(s.alterRollbackBuffer, rollbackSql)
 	}
 }
 
@@ -9391,7 +9418,9 @@ func (s *session) queryTableOptionFromDB(db string, tableName string, reportNotE
 }
 
 func (s *session) queryPartitionFromDB(db string, tableName string, reportNotExists bool) []*PartitionInfo {
-
+	if db == "" {
+		db = s.dbName
+	}
 	var rows []*PartitionInfo
 	sql := fmt.Sprintf("SELECT PARTITION_NAME, PARTITION_METHOD, PARTITION_EXPRESSION, PARTITION_DESCRIPTION, TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME= '%s'", db, tableName)
 	if err := s.rawDB(&rows, sql); err != nil {
@@ -9414,9 +9443,46 @@ func (s *session) queryPartitionFromDB(db string, tableName string, reportNotExi
 }
 
 func (s *session) queryDataTypeFromDB(db string, tableName string, reportNotExists bool) []*DataInfo {
-
+	if db == "" {
+		db = s.dbName
+	}
 	var rows []*DataInfo
 	sql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, CHARACTER_SET_NAME, COLLATION_NAME, COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME= '%s'", db, tableName)
+	if err := s.rawDB(&rows, sql); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+			s.appendErrorMsg(myErr.Message + ".")
+		} else {
+			s.appendErrorMsg(err.Error() + ".")
+		}
+		return nil
+	}
+	return rows
+}
+
+func (s *session) queryForeignKeyFromDB(db string, tableName string, reportNotExists bool) []*ForeignKeyInfo {
+	if db == "" {
+		db = s.dbName
+	}
+	var rows []*ForeignKeyInfo
+	sql := fmt.Sprintf(`
+        SELECT 
+            rc.CONSTRAINT_SCHEMA,
+            rc.CONSTRAINT_NAME,
+            kcu.COLUMN_NAME,
+            kcu.REFERENCED_TABLE_SCHEMA,
+            kcu.REFERENCED_TABLE_NAME,
+            kcu.REFERENCED_COLUMN_NAME,
+            rc.UPDATE_RULE,
+            rc.DELETE_RULE
+        FROM 
+            information_schema.REFERENTIAL_CONSTRAINTS rc,
+            information_schema.KEY_COLUMN_USAGE kcu
+        WHERE 
+            rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME 
+            AND kcu.TABLE_SCHEMA = '%s'
+            AND kcu.TABLE_NAME = '%s'`, db, tableName)
+
 	if err := s.rawDB(&rows, sql); err != nil {
 		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
 			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
@@ -9849,6 +9915,9 @@ func (s *session) getTableFromCache(db string, tableName string, reportNotExists
 		}
 		if rows := s.queryDataTypeFromDB(db, tableName, reportNotExists); rows != nil {
 			newT.DataInfos = rows
+		}
+		if rows := s.queryForeignKeyFromDB(db, tableName, reportNotExists); rows != nil {
+			newT.Foreigns = rows
 		}
 		s.tableCacheList[key] = newT
 

@@ -250,6 +250,17 @@ type DataInfo struct {
 	ColumnType             string `gorm:"Column:COLUMN_TYPE"`
 }
 
+type ForeignKeyInfo struct {
+	ConstraintSchema      string `gorm:"Column:CONSTRAINT_SCHEMA"`
+	ConstraintName        string `gorm:"Column:CONSTRAINT_NAME"`
+	ColumnName            string `gorm:"Column:COLUMN_NAME"`
+	ReferencedTableSchema string `gorm:"Column:REFERENCED_TABLE_SCHEMA"`
+	ReferencedTableName   string `gorm:"Column:REFERENCED_TABLE_NAME"`
+	ReferencedColumnName  string `gorm:"Column:REFERENCED_COLUMN_NAME"`
+	UpdateRule            string `gorm:"Column:UPDATE_RULE"`
+	DeleteRule            string `gorm:"Column:DELETE_RULE"`
+}
+
 // MaskingFieldInfo 脱敏功能的字段信息
 type MaskingFieldInfo struct {
 	Index  uint16 `json:"index"`
@@ -296,6 +307,9 @@ type TableInfo struct {
 
 	// 数据类型信息
 	DataInfos []*DataInfo
+
+	// 外键信息
+	Foreigns []*ForeignKeyInfo
 
 	// 是否已删除
 	IsDeleted bool

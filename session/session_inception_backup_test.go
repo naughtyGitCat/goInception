@@ -900,6 +900,46 @@ func (s *testSessionIncBackupSuite) TestAlterTableDropIndex(c *C) {
 	}
 }
 
+func (s *testSessionIncBackupSuite) TestCreateForeignKey(c *C) {
+	config.GetGlobalConfig().Inc.EnableForeignKey = true
+
+	sql := `drop table if exists t1,t2;
+	create table t2(
+		id int primary key,
+		name varchar(50)
+	);
+	create table t1(
+		id int primary key,
+		t2_id int,
+		c1 varchar(50)
+	);`
+	s.mustRunExec(c, sql)
+	s.mustRunBackup(c, "alter table t1 add constraint fk_t1_t2 foreign key (t2_id) references t2(id);")
+	row := s.rows[s.getAffectedRows()-1]
+	backup := s.query("t1", row[7].(string))
+	c.Assert(backup, Equals, "ALTER TABLE `test_inc`.`t1` DROP FOREIGN KEY `fk_t1_t2`;", Commentf("%v", s.rows))
+}
+
+func (s *testSessionIncBackupSuite) TestDropForeignKey(c *C) {
+	config.GetGlobalConfig().Inc.EnableForeignKey = true
+	sql := `drop table if exists t1,t2;
+	create table t2(
+		id int primary key,
+		name varchar(50)
+	);
+	create table t1(
+		id int primary key,
+		t2_id int,
+		c1 varchar(50),
+		constraint fk_t1_t2 foreign key (t2_id) references t2(id)
+	);`
+	s.mustRunExec(c, sql)
+	s.mustRunBackup(c, "alter table t1 drop foreign key fk_t1_t2;")
+	row := s.rows[s.getAffectedRows()-1]
+	backup := s.query("t1", row[7].(string))
+	c.Assert(backup, Equals, "ALTER TABLE `test_inc`.`t1` ADD CONSTRAINT `fk_t1_t2` FOREIGN KEY (`t2_id`) REFERENCES `test_inc`.`t2`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT;", Commentf("%v", s.rows))
+}
+
 func (s *testSessionIncBackupSuite) TestAlterTable(c *C) {
 	config.GetGlobalConfig().Inc.CheckColumnComment = false
 	config.GetGlobalConfig().Inc.CheckTableComment = false
