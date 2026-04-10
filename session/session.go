@@ -186,7 +186,7 @@ type session struct {
 	tableCacheList     map[string]*TableInfo
 	dbCacheList        map[string]*DBInfo
 	sequencesCacheList map[string]*SequencesInfo
-
+	routineCacheList   map[string]*RoutineInfo
 	// 备份库
 	backupDBCacheList map[string]bool
 	// 备份库中的备份表

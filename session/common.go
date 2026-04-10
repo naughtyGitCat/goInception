@@ -350,6 +350,24 @@ type TableInfo struct {
 	IsCte   bool
 }
 
+type RoutineInfo struct {
+	Schema string
+	Name   string
+	Fields []RoutineFieldInfo
+	// 是否已删除
+	IsDeleted bool
+	// 备份库是否已创建
+	IsCreated bool
+	// 表是否为新增
+	IsNew bool
+}
+
+type RoutineFieldInfo struct {
+	RoutineSchema string `gorm:"Column:ROUTINE_SCHEMA"`
+	RoutineName   string `gorm:"Column:ROUTINE_NAME"`
+	RoutineType   string `gorm:"Column:ROUTINE_TYPE"`
+}
+
 // BackupTable 表$_$inception_backup_information$_$相关信息
 type BackupTable struct {
 	// sql_statement字段类型字段的数据类型是否为text

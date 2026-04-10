@@ -944,7 +944,10 @@ func (s *session) checkSqlIsDDL(record *Record) bool {
 
 		// *ast.CreateDatabaseStmt,
 		// *ast.DropDatabaseStmt,
-
+		*ast.ProcedureInfo,
+		*ast.DropProcedureStmt,
+		*ast.FunctionInfo,
+		*ast.DropFunctionStmt,
 		*ast.CreateIndexStmt,
 		*ast.DropIndexStmt,
 		*ast.CreateSequenceStmt,
@@ -2935,17 +2938,37 @@ func (s *session) checkCreateProcedure(node *ast.ProcedureInfo) {
 		s.appendErrorNo(ER_PROCEDURE_NOT_ALLOWED)
 		return
 	}
-	s.checkKeyWords(node.ProcedureName.Schema.O)
 
 	if node.ProcedureName.Schema.O == "" {
 		node.ProcedureName.Schema = model.NewCIStr(s.dbName)
 	}
 
-	if s.checkProcedureExists(node.ProcedureName.Schema.O, node.ProcedureName.Name.O, false) {
+	if !s.checkDBExists(node.ProcedureName.Schema.O, true) {
+		return
+	}
+
+	s.checkKeyWords(node.ProcedureName.Name.O)
+
+	routine := s.getRoutineFromCache(node.ProcedureName.Schema.O, node.ProcedureName.Name.O, true, false)
+	if routine != nil {
 		if !node.IfNotExists {
 			s.appendErrorNo(ER_PROCEDURE_EXISTS_ERROR, node.ProcedureName.Name.O)
 			return
 		}
+		s.myRecord.DBName = node.ProcedureName.Schema.O
+		s.myRecord.TableName = node.ProcedureName.Name.O
+	} else {
+		routine := &RoutineInfo{
+			IsNew: true,
+		}
+		if node.ProcedureName.Schema.O == "" {
+			routine.Schema = s.dbName
+		} else {
+			routine.Schema = node.ProcedureName.Schema.O
+		}
+		routine.Name = node.ProcedureName.Name.O
+
+		s.myRecord.RoutineInfo = routine
 	}
 
 	if !s.hasError() && s.opt.Execute {
@@ -2959,50 +2982,24 @@ func (s *session) checkDropProcedure(node *ast.DropProcedureStmt) {
 		s.appendErrorNo(ER_CANT_DROP_PROCEDURE, node.ProcedureName.Name.O)
 		return
 	}
-	s.checkKeyWords(node.ProcedureName.Name.O)
 
 	if node.ProcedureName.Schema.O == "" {
 		node.ProcedureName.Schema = model.NewCIStr(s.dbName)
 	}
 
-	if !s.checkProcedureExists(node.ProcedureName.Schema.O, node.ProcedureName.Name.O, false) && !node.IfExists {
-		s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, node.ProcedureName.Name.O)
-	}
-}
-
-func (s *session) checkProcedureExists(dbName string, procname string, reportNotExists bool) bool {
-	var db string
-	var name string
-
-	sql := fmt.Sprintf(`SELECT ROUTINE_SCHEMA,ROUTINE_NAME FROM information_schema.ROUTINES
-	WHERE ROUTINE_SCHEMA='%s' AND ROUTINE_NAME='%s' and ROUTINE_TYPE = 'PROCEDURE';`, dbName, procname)
-
-	rows, err := s.raw(sql)
-	if rows != nil {
-		defer rows.Close()
-	}
-
-	if err != nil {
-		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
-		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-			s.appendErrorMsg(myErr.Message)
-		} else {
-			s.appendErrorMsg(err.Error())
+	routine := s.getRoutineFromCache(node.ProcedureName.Schema.O, node.ProcedureName.Name.O, true, false)
+	if routine == nil {
+		if !node.IfExists {
+			s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", node.ProcedureName.Schema.O, node.ProcedureName.Name.O))
 		}
-	} else if rows != nil {
-		for rows.Next() {
-			rows.Scan(&db, &name)
+	} else {
+		if s.opt.Execute {
+			// 生成回滚语句
+			s.mysqlShowCreateRoutine(routine, true)
 		}
+		s.myRecord.RoutineInfo = routine
+		s.myRecord.RoutineInfo.IsDeleted = true
 	}
-
-	found := false
-	if strings.EqualFold(dbName, db) && strings.EqualFold(procname, name) {
-		found = true
-	}
-	if !found && reportNotExists {
-		s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, procname)
-	}
-	return found
 }
 
 func (s *session) checkCreateFunction(node *ast.FunctionInfo) {
@@ -3011,17 +3008,37 @@ func (s *session) checkCreateFunction(node *ast.FunctionInfo) {
 		s.appendErrorNo(ER_FUNCTION_NOT_ALLOWED)
 		return
 	}
-	s.checkKeyWords(node.FunctionName.Schema.O)
 
 	if node.FunctionName.Schema.O == "" {
 		node.FunctionName.Schema = model.NewCIStr(s.dbName)
 	}
 
-	if s.checkFunctionExists(node.FunctionName.Schema.O, node.FunctionName.Name.O, false) {
+	if !s.checkDBExists(node.FunctionName.Schema.O, true) {
+		return
+	}
+
+	s.checkKeyWords(node.FunctionName.Name.O)
+
+	routine := s.getRoutineFromCache(node.FunctionName.Schema.O, node.FunctionName.Name.O, false, false)
+	if routine != nil {
 		if !node.IfNotExists {
 			s.appendErrorNo(ER_FUNCTION_EXISTS_ERROR, node.FunctionName.Name.O)
 			return
 		}
+		s.myRecord.DBName = node.FunctionName.Schema.O
+		s.myRecord.TableName = node.FunctionName.Name.O
+	} else {
+		routine := &RoutineInfo{
+			IsNew: true,
+		}
+		if node.FunctionName.Schema.O == "" {
+			routine.Schema = s.dbName
+		} else {
+			routine.Schema = node.FunctionName.Schema.O
+		}
+		routine.Name = node.FunctionName.Name.O
+
+		s.myRecord.RoutineInfo = routine
 	}
 
 	if !s.hasError() && s.opt.Execute {
@@ -3035,14 +3052,24 @@ func (s *session) checkDropFunction(node *ast.DropFunctionStmt) {
 		s.appendErrorNo(ER_CANT_DROP_FUNCTION, node.FunctionName.Name.O)
 		return
 	}
-	s.checkKeyWords(node.FunctionName.Name.O)
 
 	if node.FunctionName.Schema.O == "" {
 		node.FunctionName.Schema = model.NewCIStr(s.dbName)
 	}
 
-	if !s.checkFunctionExists(node.FunctionName.Schema.O, node.FunctionName.Name.O, false) && !node.IfExists {
-		s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, node.FunctionName.Name.O)
+	routine := s.getRoutineFromCache(node.FunctionName.Schema.O, node.FunctionName.Name.O, false, false)
+	if routine == nil {
+		if !node.IfExists {
+			s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", node.FunctionName.Schema.O, node.FunctionName.Name.O))
+		}
+	} else {
+		if s.opt.Execute {
+			// 生成回滚语句
+			s.mysqlShowCreateRoutine(routine, false)
+		}
+
+		s.myRecord.RoutineInfo = routine
+		s.myRecord.RoutineInfo.IsDeleted = true
 	}
 }
 
@@ -3081,41 +3108,6 @@ func (s *session) checkDropTrigger(node *ast.DropTriggerStmt) {
 	if !s.checkTriggerExists(node.TriggerName.Schema.O, node.TriggerName.Name.O, false) && !node.IfExists {
 		s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, node.TriggerName.Name.O)
 	}
-}
-
-func (s *session) checkFunctionExists(dbName string, funcname string, reportNotExists bool) bool {
-	var db string
-	var name string
-
-	sql := fmt.Sprintf(`SELECT ROUTINE_SCHEMA,ROUTINE_NAME FROM information_schema.ROUTINES
-	WHERE ROUTINE_SCHEMA='%s' AND ROUTINE_NAME='%s' and ROUTINE_TYPE = 'FUNCTION';`, dbName, funcname)
-
-	rows, err := s.raw(sql)
-	if rows != nil {
-		defer rows.Close()
-	}
-
-	if err != nil {
-		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
-		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-			s.appendErrorMsg(myErr.Message)
-		} else {
-			s.appendErrorMsg(err.Error())
-		}
-	} else if rows != nil {
-		for rows.Next() {
-			rows.Scan(&db, &name)
-		}
-	}
-
-	found := false
-	if strings.EqualFold(dbName, db) && strings.EqualFold(funcname, name) {
-		found = true
-	}
-	if !found && reportNotExists {
-		s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, funcname)
-	}
-	return found
 }
 
 func (s *session) checkTriggerExists(dbName string, triggerName string, reportNotExists bool) bool {
@@ -3266,6 +3258,44 @@ func (s *session) mysqlGetTableSize(t *TableInfo) {
 	}
 }
 
+// mysqlShowCreateRoutine 获取Routine结构
+func (s *session) mysqlShowCreateRoutine(t *RoutineInfo, isProc bool) {
+
+	if t.IsNew {
+		return
+	}
+
+	var sql string
+	if isProc {
+		sql = fmt.Sprintf("SHOW CREATE PROCEDURE `%s`.`%s`;", t.Schema, t.Name)
+	} else {
+		sql = fmt.Sprintf("SHOW CREATE FUNCTION `%s`.`%s`;", t.Schema, t.Name)
+	}
+
+	type Object struct {
+		Proc string `gorm:"Column:Create Procedure"`
+		Func string `gorm:"Column:Create Function"`
+	}
+
+	var rows []Object
+	if err := s.rawScan(sql, &rows); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	}
+	if rows != nil {
+		row := rows[0]
+		if isProc {
+			s.myRecord.DDLRollback = row.Proc
+		} else {
+			s.myRecord.DDLRollback = row.Func
+		}
+		s.myRecord.DDLRollback += ";"
+	}
+}
+
 // mysqlShowCreateTable 生成回滚语句
 func (s *session) mysqlShowCreateTable(t *TableInfo, isView, isMvView bool) {
 
@@ -3390,8 +3420,6 @@ func (s *session) checkOptimizeTable(node *ast.OptimizeTableStmt) {
 
 func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 	log.Debug("checkCreateTable")
-
-	// tidb暂不支持临时表 create temporary table t1
 
 	if node.Table.Schema.O == "" {
 		node.Table.Schema = model.NewCIStr(s.dbName)
@@ -9362,6 +9390,26 @@ func (s *session) querySequencesFromDB(db string, sequencesName string, reportNo
 	return rows
 }
 
+func (s *session) queryRoutineFromDB(db string, routineName string, isProc bool, reportNotExists bool) []RoutineFieldInfo {
+	if db == "" {
+		db = s.dbName
+	}
+	var rows []RoutineFieldInfo
+	var sql string
+	if isProc {
+		sql = fmt.Sprintf(`SELECT ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE FROM information_schema.ROUTINES
+	WHERE ROUTINE_TYPE='PROCEDURE' and ROUTINE_SCHEMA='%s' AND ROUTINE_NAME='%s';`, db, routineName)
+	} else {
+		sql = fmt.Sprintf(`SELECT ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE FROM information_schema.ROUTINES
+	WHERE ROUTINE_TYPE='FUNCTION' and ROUTINE_SCHEMA='%s' AND ROUTINE_NAME='%s';`, db, routineName)
+	}
+	if err := s.rawScan(sql, &rows); err != nil {
+		s.appendErrorMsg(err.Error() + ".")
+		return nil
+	}
+	return rows
+}
+
 func (s *session) queryTableFromDB(db string, tableName string, reportNotExists bool) []FieldInfo {
 	if db == "" {
 		db = s.dbName
@@ -9860,6 +9908,55 @@ func (s *session) getSequencesFromCache(db string, sequencesName string, reportN
 		return newT
 	}
 
+	return nil
+}
+
+func (s *session) getRoutineFromCache(db string, routineName string, isProc bool, reportNotExists bool) *RoutineInfo {
+	if db == "" {
+		db = s.dbName
+	}
+
+	if db == "" {
+		s.appendErrorNo(ER_WRONG_DB_NAME, "")
+		return nil
+	}
+
+	if !s.checkDBExists(db, reportNotExists) {
+		return nil
+	}
+
+	key := fmt.Sprintf("%s.%s", db, routineName)
+	if s.IgnoreCase() {
+		key = strings.ToLower(key)
+	}
+
+	if t, ok := s.routineCacheList[key]; ok {
+		// 如果ROUTINE已删除, 之后又使用到,则报错
+		if t.IsDeleted {
+			if reportNotExists {
+				for _, c := range t.Fields {
+					if c.RoutineType == "FUNCTION" {
+						s.appendErrorNo(ER_FUNCTION_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", t.Schema, t.Name))
+					} else {
+						s.appendErrorNo(ER_PROCEDURE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", t.Schema, t.Name))
+					}
+				}
+			}
+			return nil
+		}
+	}
+
+	rows := s.queryRoutineFromDB(db, routineName, isProc, reportNotExists)
+	if rows != nil {
+		newT := &RoutineInfo{
+			Schema: db,
+			Name:   routineName,
+			Fields: rows,
+		}
+		s.routineCacheList[key] = newT
+
+		return newT
+	}
 	return nil
 }
 

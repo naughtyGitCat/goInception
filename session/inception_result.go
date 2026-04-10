@@ -83,6 +83,7 @@ type Record struct {
 	TableName     string
 	TableInfo     *TableInfo
 	SequencesInfo *SequencesInfo
+	RoutineInfo   *RoutineInfo
 	// ddl回滚
 	DDLRollback string
 	OPID        string
