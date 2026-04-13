@@ -358,7 +358,7 @@ type RoutineInfo struct {
 	IsDeleted bool
 	// 备份库是否已创建
 	IsCreated bool
-	// 表是否为新增
+	// ROUTINE是否为新增
 	IsNew bool
 }
 
@@ -366,6 +366,23 @@ type RoutineFieldInfo struct {
 	RoutineSchema string `gorm:"Column:ROUTINE_SCHEMA"`
 	RoutineName   string `gorm:"Column:ROUTINE_NAME"`
 	RoutineType   string `gorm:"Column:ROUTINE_TYPE"`
+}
+
+type TriggerInfo struct {
+	Schema string
+	Name   string
+	Fields []TriggerFieldInfo
+	// 是否已删除
+	IsDeleted bool
+	// 备份库是否已创建
+	IsCreated bool
+	// TRIGGER是否为新增
+	IsNew bool
+}
+
+type TriggerFieldInfo struct {
+	TriggerSchema string `gorm:"Column:TRIGGER_SCHEMA"`
+	TriggerName   string `gorm:"Column:TRIGGER_NAME"`
 }
 
 // BackupTable 表$_$inception_backup_information$_$相关信息
