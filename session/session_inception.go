@@ -4547,6 +4547,7 @@ func checkDDLInstantMySQL57(node *ast.AlterTableStmt) (canInstant bool) {
 				isPrimary := false
 				isUnique := false
 				var isStore bool
+				var isVirt bool
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionPrimaryKey:
@@ -4556,11 +4557,13 @@ func checkDDLInstantMySQL57(node *ast.AlterTableStmt) (canInstant bool) {
 					case ast.ColumnOptionGenerated:
 						if op.Stored {
 							isStore = true
+						} else {
+							isVirt = true
 						}
 					}
 				}
 				if !isPrimary && !isUnique {
-					if !isStore {
+					if !isStore && isVirt {
 						virtualColumns++
 					}
 				}
