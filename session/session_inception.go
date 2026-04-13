@@ -3092,6 +3092,11 @@ func (s *session) checkCreateTrigger(node *ast.TriggerInfo) {
 
 	s.checkKeyWords(node.TriggerName.Name.O)
 
+	table := s.getTableFromCache(node.TriggerName.Schema.O, node.Table.Name.O, false)
+	if table == nil {
+		s.appendErrorNo(ER_TABLE_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", node.TriggerName.Schema.O, node.Table.Name.O))
+	}
+
 	trigger := s.getTriggerFromCache(node.TriggerName.Schema.O, node.TriggerName.Name.O, false)
 	if trigger != nil {
 		s.appendErrorNo(ER_FUNCTION_EXISTS_ERROR, node.TriggerName.Name.O)
