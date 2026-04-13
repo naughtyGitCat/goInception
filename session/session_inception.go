@@ -4664,6 +4664,9 @@ func (s *session) checkDDLOffline(node *ast.AlterTableStmt, t *TableInfo) {
 	}
 	if s.checkDDLOfflineOperation(node, t) {
 		s.myRecord.useOsc = true
+	} else {
+		// online DDL 在 OceanBase 中不锁表，无需 pt-osc/gh-ost
+		s.myRecord.useOsc = false
 	}
 }
 
