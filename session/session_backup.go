@@ -74,12 +74,17 @@ func (s *session) runBackup(ctx context.Context) {
 			} else if record.RoutineInfo != nil {
 				longDataType, hostMaxLength := s.mysqlCreateBackupRoutineTable(record)
 				s.mysqlBackupSql(record, longDataType, hostMaxLength)
+			} else if record.TriggerInfo != nil {
+				longDataType, hostMaxLength := s.mysqlCreateBackupTriggerTable(record)
+				s.mysqlBackupSql(record, longDataType, hostMaxLength)
 			} else {
 				if record.TableInfo == nil {
 					s.appendErrorNo(ErrNotFoundTableInfo)
 				} else if record.SequencesInfo == nil {
 					s.appendErrorNo(ErrNotFoundTableInfo)
 				} else if record.RoutineInfo == nil {
+					s.appendErrorNo(ErrNotFoundTableInfo)
+				} else if record.TriggerInfo == nil {
 					s.appendErrorNo(ErrNotFoundTableInfo)
 				}
 			}
@@ -221,6 +226,10 @@ func (s *session) mysqlExecuteBackupInfoInsertSql(record *Record, longDataType b
 		typeStr = "DROPPROCEDURE"
 	case *ast.ProcedureInfo:
 		typeStr = "CREATEPROCEDURE"
+	case *ast.DropTriggerStmt:
+		typeStr = "DROPTRIGGER"
+	case *ast.TriggerInfo:
+		typeStr = "CREATETRIGGER"
 	default:
 		log.Warning("类型未知: ", record.Type)
 	}
@@ -271,6 +280,9 @@ func (s *session) mysqlExecuteBackupInfoInsertSql(record *Record, longDataType b
 	} else if record.RoutineInfo != nil {
 		values = append(values, record.RoutineInfo.Schema)
 		values = append(values, record.RoutineInfo.Name)
+	} else if record.TriggerInfo != nil {
+		values = append(values, record.TriggerInfo.Schema)
+		values = append(values, record.TriggerInfo.Name)
 	}
 
 	values = append(values, strconv.Itoa(s.opt.Port))
@@ -374,6 +386,21 @@ func (s *session) mysqlCreateSqlFromRoutineInfo(dbname string, ti *RoutineInfo) 
 	return buf.String()
 }
 
+func (s *session) mysqlCreateSqlFromTriggerInfo(dbname string, ti *TriggerInfo) string {
+	buf := bytes.NewBufferString("CREATE TABLE if not exists ")
+	buf.WriteString(fmt.Sprintf("`%s`.`%s`", dbname, ti.Name))
+	buf.WriteString("(")
+
+	buf.WriteString("id bigint auto_increment primary key, ")
+	buf.WriteString("rollback_statement mediumtext, ")
+	buf.WriteString("opid_time varchar(50),")
+	buf.WriteString("KEY `idx_opid_time` (`opid_time`)")
+
+	buf.WriteString(") ENGINE INNODB DEFAULT CHARSET UTF8MB4;")
+
+	return buf.String()
+}
+
 func (s *session) getRemoteBackupDBName(record *Record) string {
 
 	if record.BackupDBName != "" {
@@ -386,6 +413,8 @@ func (s *session) getRemoteBackupDBName(record *Record) string {
 		v = fmt.Sprintf("%s_%d_%s", s.opt.Host, s.opt.Port, record.SequencesInfo.Schema)
 	} else if record.RoutineInfo != nil {
 		v = fmt.Sprintf("%s_%d_%s", s.opt.Host, s.opt.Port, record.RoutineInfo.Schema)
+	} else if record.TriggerInfo != nil {
+		v = fmt.Sprintf("%s_%d_%s", s.opt.Host, s.opt.Port, record.TriggerInfo.Schema)
 	}
 
 	if len(v) > mysql.MaxDatabaseNameLength {
@@ -689,6 +718,102 @@ func (s *session) mysqlCreateBackupRoutineTable(record *Record) (
 		hostMaxLength = cache.hostMaxLength
 	}
 	record.RoutineInfo.IsCreated = true
+	return
+}
+
+func (s *session) mysqlCreateBackupTriggerTable(record *Record) (
+	longDataType bool, hostMaxLength int) {
+
+	if record.TriggerInfo == nil {
+		return
+	}
+
+	backupDBName := s.getRemoteBackupDBName(record)
+	if backupDBName == "" {
+		return
+	}
+
+	if record.TriggerInfo.IsCreated {
+		// 返回longDataType值
+		key := fmt.Sprintf("%s.%s", backupDBName, remoteBackupTable)
+		if cache, ok := s.backupTableCacheList[key]; ok {
+			return cache.longDataType, cache.hostMaxLength
+		}
+		return
+	}
+
+	if _, ok := s.backupDBCacheList[backupDBName]; !ok {
+		sql := fmt.Sprintf("create database if not exists `%s`;", backupDBName)
+		if err := s.backupdb.Exec(sql).Error; err != nil {
+			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+			if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+				if myErr.Number != 1007 { /*ER_DB_CREATE_EXISTS*/
+					s.appendErrorMsg(myErr.Message)
+					return
+				}
+			} else {
+				s.appendErrorMsg(err.Error())
+				return
+			}
+		}
+		s.backupDBCacheList[backupDBName] = true
+	}
+
+	key := fmt.Sprintf("%s.%s", backupDBName, record.TriggerInfo.Name)
+	if _, ok := s.backupTableCacheList[key]; !ok {
+		createSql := s.mysqlCreateSqlFromTriggerInfo(backupDBName, record.TriggerInfo)
+		if err := s.backupdb.Exec(createSql).Error; err != nil {
+			log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+			if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+				if myErr.Number != 1050 { /*ER_TABLE_EXISTS_ERROR*/
+					s.appendErrorMsg(myErr.Message)
+					return
+				}
+			} else {
+				s.appendErrorMsg(err.Error())
+				return
+			}
+		}
+		s.backupTableCacheList[key] = BackupTable{
+			longDataType:  false,
+			hostMaxLength: backupTableHostDataLength,
+		}
+	}
+
+	key = fmt.Sprintf("%s.%s", backupDBName, remoteBackupTable)
+	if _, ok := s.backupTableCacheList[key]; !ok {
+		createSql := s.mysqlCreateSqlBackupTable(backupDBName)
+		if err := s.backupdb.Exec(createSql).Error; err != nil {
+			if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+				if myErr.Number != 1050 { /*ER_TABLE_EXISTS_ERROR*/
+					log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
+					s.appendErrorMsg(myErr.Message)
+					return
+				}
+				// 获取sql_statement字段类型,用以兼容类型为text的旧表结构
+				//longDataType = s.checkBackupTableSqlStmtColumnType(backupDBName)
+				// host字段长度
+				hostMaxLength = s.checkBackupTableHostMaxLength(backupDBName)
+			} else {
+				s.appendErrorMsg(err.Error())
+				return
+			}
+		} else {
+			longDataType = false
+			hostMaxLength = backupTableHostDataLength
+		}
+		s.backupTableCacheList[key] = BackupTable{
+			longDataType:  longDataType,
+			hostMaxLength: hostMaxLength,
+		}
+	}
+
+	// 从remoteBackupTable表获取cache
+	if cache, ok := s.backupTableCacheList[key]; ok {
+		longDataType = cache.longDataType
+		hostMaxLength = cache.hostMaxLength
+	}
+	record.TriggerInfo.IsCreated = true
 	return
 }
 

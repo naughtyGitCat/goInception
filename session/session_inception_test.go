@@ -3895,5 +3895,5 @@ func (s *testSessionIncSuite) TestDropTrigger(c *C) {
 	config.GetGlobalConfig().Inc.EnableDropTrigger = true
 	sql = "drop trigger t1;"
 	s.testErrorCode(c, sql,
-		session.NewErr(session.ER_TRIGGER_NOT_EXISTED_ERROR, "t1"))
+		session.NewErr(session.ER_TRIGGER_NOT_EXISTED_ERROR, "test_inc.t1"))
 }

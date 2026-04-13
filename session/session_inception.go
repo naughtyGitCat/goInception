@@ -948,6 +948,8 @@ func (s *session) checkSqlIsDDL(record *Record) bool {
 		*ast.DropProcedureStmt,
 		*ast.FunctionInfo,
 		*ast.DropFunctionStmt,
+		*ast.TriggerInfo,
+		*ast.DropTriggerStmt,
 		*ast.CreateIndexStmt,
 		*ast.DropIndexStmt,
 		*ast.CreateSequenceStmt,
@@ -3079,15 +3081,33 @@ func (s *session) checkCreateTrigger(node *ast.TriggerInfo) {
 		s.appendErrorNo(ER_TRIGGER_NOT_ALLOWED)
 		return
 	}
-	s.checkKeyWords(node.TriggerName.Name.O)
 
 	if node.TriggerName.Schema.O == "" {
 		node.TriggerName.Schema = model.NewCIStr(s.dbName)
 	}
-	if s.checkTriggerExists(node.TriggerName.Schema.O, node.TriggerName.Name.O, false) {
-		s.appendErrorNo(ER_TRIGGER_EXISTS_ERROR, node.TriggerName.Name.O)
-		return
 
+	if !s.checkDBExists(node.TriggerName.Schema.O, true) {
+		return
+	}
+
+	s.checkKeyWords(node.TriggerName.Name.O)
+
+	trigger := s.getTriggerFromCache(node.TriggerName.Schema.O, node.TriggerName.Name.O, false)
+	if trigger != nil {
+		s.appendErrorNo(ER_FUNCTION_EXISTS_ERROR, node.TriggerName.Name.O)
+		return
+	} else {
+		trigger := &TriggerInfo{
+			IsNew: true,
+		}
+		if node.TriggerName.Schema.O == "" {
+			trigger.Schema = s.dbName
+		} else {
+			trigger.Schema = node.TriggerName.Schema.O
+		}
+		trigger.Name = node.TriggerName.Name.O
+
+		s.myRecord.TriggerInfo = trigger
 	}
 	if !s.hasError() && s.opt.Execute {
 		s.myRecord.DDLRollback = fmt.Sprintf("DROP TRIGGER `%s`.`%s`;", node.TriggerName.Schema.O, node.TriggerName.Name.O)
@@ -3100,45 +3120,26 @@ func (s *session) checkDropTrigger(node *ast.DropTriggerStmt) {
 		s.appendErrorNo(ER_CANT_DROP_TRIGGER, node.TriggerName.Name.O)
 		return
 	}
-	s.checkKeyWords(node.TriggerName.Name.O)
 
 	if node.TriggerName.Schema.O == "" {
 		node.TriggerName.Schema = model.NewCIStr(s.dbName)
 	}
-	if !s.checkTriggerExists(node.TriggerName.Schema.O, node.TriggerName.Name.O, false) && !node.IfExists {
-		s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, node.TriggerName.Name.O)
-	}
-}
 
-func (s *session) checkTriggerExists(dbName string, triggerName string, reportNotExists bool) bool {
-	var db string
-	var name string
-	sql := fmt.Sprintf(`SELECT TRIGGER_SCHEMA,TRIGGER_NAME FROM information_schema.TRIGGERS
-	WHERE TRIGGER_SCHEMA='%s' AND TRIGGER_NAME='%s';`, dbName, triggerName)
-	rows, err := s.raw(sql)
-	if rows != nil {
-		defer rows.Close()
-	}
-	if err != nil {
-		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
-		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
-			s.appendErrorMsg(myErr.Message)
-		} else {
-			s.appendErrorMsg(err.Error())
+	trigger := s.getTriggerFromCache(node.TriggerName.Schema.O, node.TriggerName.Name.O, false)
+	if trigger == nil {
+		if !node.IfExists {
+			s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", node.TriggerName.Schema.O, node.TriggerName.Name.O))
 		}
-	} else if rows != nil {
-		for rows.Next() {
-			rows.Scan(&db, &name)
+	} else {
+		if s.opt.Execute {
+			// 生成回滚语句
+			s.mysqlShowCreateTrigger(trigger, false)
 		}
+
+		s.myRecord.TriggerInfo = trigger
+		s.myRecord.TriggerInfo.IsDeleted = true
 	}
-	found := false
-	if strings.EqualFold(dbName, db) && strings.EqualFold(triggerName, name) {
-		found = true
-	}
-	if !found && reportNotExists {
-		s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, triggerName)
-	}
-	return found
+
 }
 
 // mysqlShowTableStatus 获取表估计的受影响行数
@@ -3292,6 +3293,34 @@ func (s *session) mysqlShowCreateRoutine(t *RoutineInfo, isProc bool) {
 		} else {
 			s.myRecord.DDLRollback = row.Func
 		}
+		s.myRecord.DDLRollback += ";"
+	}
+}
+
+// mysqlShowCreateTrigger 获取Trigger结构
+func (s *session) mysqlShowCreateTrigger(t *TriggerInfo, isProc bool) {
+
+	if t.IsNew {
+		return
+	}
+
+	sql := fmt.Sprintf("SHOW CREATE TRIGGER `%s`.`%s`;", t.Schema, t.Name)
+
+	type Object struct {
+		Trigger string `gorm:"Column:SQL Original Statement"`
+	}
+
+	var rows []Object
+	if err := s.rawScan(sql, &rows); err != nil {
+		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
+			s.appendErrorMsg(myErr.Message)
+		} else {
+			s.appendErrorMsg(err.Error())
+		}
+	}
+	if rows != nil {
+		row := rows[0]
+		s.myRecord.DDLRollback = row.Trigger
 		s.myRecord.DDLRollback += ";"
 	}
 }
@@ -9410,6 +9439,20 @@ func (s *session) queryRoutineFromDB(db string, routineName string, isProc bool,
 	return rows
 }
 
+func (s *session) queryTriggerFromDB(db string, triggerName string, reportNotExists bool) []TriggerFieldInfo {
+	if db == "" {
+		db = s.dbName
+	}
+	var rows []TriggerFieldInfo
+	sql := fmt.Sprintf(`SELECT TRIGGER_SCHEMA,TRIGGER_NAME FROM information_schema.TRIGGERS
+	WHERE TRIGGER_SCHEMA='%s' AND TRIGGER_NAME='%s';`, db, triggerName)
+	if err := s.rawScan(sql, &rows); err != nil {
+		s.appendErrorMsg(err.Error() + ".")
+		return nil
+	}
+	return rows
+}
+
 func (s *session) queryTableFromDB(db string, tableName string, reportNotExists bool) []FieldInfo {
 	if db == "" {
 		db = s.dbName
@@ -9954,6 +9997,49 @@ func (s *session) getRoutineFromCache(db string, routineName string, isProc bool
 			Fields: rows,
 		}
 		s.routineCacheList[key] = newT
+
+		return newT
+	}
+	return nil
+}
+
+func (s *session) getTriggerFromCache(db string, triggerName string, reportNotExists bool) *TriggerInfo {
+	if db == "" {
+		db = s.dbName
+	}
+
+	if db == "" {
+		s.appendErrorNo(ER_WRONG_DB_NAME, "")
+		return nil
+	}
+
+	if !s.checkDBExists(db, reportNotExists) {
+		return nil
+	}
+
+	key := fmt.Sprintf("%s.%s", db, triggerName)
+	if s.IgnoreCase() {
+		key = strings.ToLower(key)
+	}
+
+	if t, ok := s.triggerCacheList[key]; ok {
+		// 如果ROUTINE已删除, 之后又使用到,则报错
+		if t.IsDeleted {
+			if reportNotExists {
+				s.appendErrorNo(ER_TRIGGER_NOT_EXISTED_ERROR, fmt.Sprintf("%s.%s", t.Schema, t.Name))
+			}
+			return nil
+		}
+	}
+
+	rows := s.queryTriggerFromDB(db, triggerName, reportNotExists)
+	if rows != nil {
+		newT := &TriggerInfo{
+			Schema: db,
+			Name:   triggerName,
+			Fields: rows,
+		}
+		s.triggerCacheList[key] = newT
 
 		return newT
 	}

@@ -174,6 +174,30 @@ func (s *session) getNextBackupRecord() *Record {
 				continue
 
 			}
+		} else if r.TriggerInfo != nil {
+
+			lastBackupTable := fmt.Sprintf("`%s`.`%s`", s.getRemoteBackupDBName(r), r.TriggerInfo.Name)
+
+			if s.lastBackupTable == "" {
+				s.lastBackupTable = lastBackupTable
+			}
+
+			if s.checkSqlIsDDL(r) {
+				if s.lastBackupTable != lastBackupTable {
+					s.ch <- &chanData{sql: nil, table: s.lastBackupTable, record: s.myRecord}
+					s.lastBackupTable = lastBackupTable
+				}
+
+				s.ch <- &chanData{sqlStr: r.DDLRollback, opid: r.OPID,
+					table: s.lastBackupTable, record: r}
+
+				if r.StageStatus != StatusExecFail {
+					r.StageStatus = StatusBackupOK
+				}
+
+				continue
+
+			}
 		}
 	}
 }
