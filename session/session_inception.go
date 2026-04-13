@@ -4541,7 +4541,7 @@ func checkDDLInstantMySQL57(node *ast.AlterTableStmt) (canInstant bool) {
 			for _, nc := range alter.NewColumns {
 				isPrimary := false
 				isUnique := false
-				var isStore *bool
+				var isStore bool
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionPrimaryKey:
@@ -4549,11 +4549,13 @@ func checkDDLInstantMySQL57(node *ast.AlterTableStmt) (canInstant bool) {
 					case ast.ColumnOptionUniqKey:
 						isUnique = true
 					case ast.ColumnOptionGenerated:
-						isStore = &op.Stored
+						if op.Stored {
+							isStore = true
+						}
 					}
 				}
 				if !isPrimary && !isUnique {
-					if isStore != nil && !*isStore {
+					if !isStore {
 						virtualColumns++
 					}
 				}
@@ -4585,7 +4587,7 @@ func checkDDLInstantMySQL80(node *ast.AlterTableStmt, t *TableInfo, dbVersion in
 			for _, nc := range alter.NewColumns {
 				isPrimary := false
 				isUnique := false
-				var isStore *bool
+				var isStore bool
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionPrimaryKey:
@@ -4593,14 +4595,16 @@ func checkDDLInstantMySQL80(node *ast.AlterTableStmt, t *TableInfo, dbVersion in
 					case ast.ColumnOptionUniqKey:
 						isUnique = true
 					case ast.ColumnOptionGenerated:
-						isStore = &op.Stored
+						if op.Stored {
+							isStore = true
+						}
 					}
 				}
 
 				if !isPrimary && !isUnique {
 					// 此时已经排除主键/唯一键的情况
 					// 8.0版本下只有STORED column不支持Only Modifies Metadata
-					if isStore == nil || !*isStore {
+					if !isStore {
 						virtualColumns++
 					}
 				}
@@ -4614,15 +4618,19 @@ func checkDDLInstantMySQL80(node *ast.AlterTableStmt, t *TableInfo, dbVersion in
 			}
 			if virtualColumns == newColumns {
 				canInstantSpecs++
-			} else {
-				return
 			}
 
 		case ast.AlterTableDropColumn:
 			for _, field := range t.Fields {
 				if strings.EqualFold(field.Field, alter.OldColumnName.Name.O) && !field.IsDeleted {
-					if strings.Contains(field.Extra, "VIRTUAL") {
-						canInstantSpecs++
+					if dbVersion < 80029 {
+						if strings.Contains(field.Extra, "VIRTUAL") {
+							canInstantSpecs++
+						}
+					} else {
+						if !strings.Contains(field.Extra, "STORED") {
+							canInstantSpecs++
+						}
 					}
 					break
 				}
