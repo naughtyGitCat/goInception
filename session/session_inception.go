@@ -9575,23 +9575,24 @@ func (s *session) queryForeignKeyFromDB(db string, tableName string, reportNotEx
 		db = s.dbName
 	}
 	var rows []*ForeignKeyInfo
-	sql := fmt.Sprintf(`
-        SELECT 
-            rc.CONSTRAINT_SCHEMA,
-            rc.CONSTRAINT_NAME,
-            kcu.COLUMN_NAME,
-            kcu.REFERENCED_TABLE_SCHEMA,
-            kcu.REFERENCED_TABLE_NAME,
-            kcu.REFERENCED_COLUMN_NAME,
-            rc.UPDATE_RULE,
-            rc.DELETE_RULE
-        FROM 
-            information_schema.REFERENTIAL_CONSTRAINTS rc,
-            information_schema.KEY_COLUMN_USAGE kcu
-        WHERE 
-            rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME 
-            AND kcu.TABLE_SCHEMA = '%s'
-            AND kcu.TABLE_NAME = '%s'`, db, tableName)
+	sql := fmt.Sprintf(`SELECT 
+    	rc.CONSTRAINT_SCHEMA,
+    	rc.CONSTRAINT_NAME,
+    	kcu.COLUMN_NAME,
+    	kcu.REFERENCED_TABLE_SCHEMA,
+    	kcu.REFERENCED_TABLE_NAME,
+    	kcu.REFERENCED_COLUMN_NAME,
+    	rc.UPDATE_RULE,
+    	rc.DELETE_RULE
+	FROM 
+    	information_schema.REFERENTIAL_CONSTRAINTS rc
+	INNER JOIN 
+    	information_schema.KEY_COLUMN_USAGE kcu 
+    	USING (CONSTRAINT_SCHEMA, CONSTRAINT_NAME)
+	WHERE 
+    	rc.CONSTRAINT_SCHEMA = '%s'
+    	AND kcu.TABLE_SCHEMA = '%s' 
+    	AND kcu.TABLE_NAME = '%s'`, db, db, tableName)
 
 	if err := s.rawDB(&rows, sql); err != nil {
 		if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
