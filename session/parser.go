@@ -558,7 +558,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 					}
 
 					// 如果操作已超过binlog范围,切换到下一日志
-					if !s.needTransactionMark() && e.Header.EventType != replication.QUERY_EVENT && e.Header.EventType != replication.TABLE_MAP_EVENT {
+					if !s.needTransactionMark() && !s.checkPayLoadEventMark(e) {
 						// sql被kill后,如果备份时可以检测到行,则认为执行成功
 						// 工单只有执行成功,才允许标记为备份成功
 						// if (record.StageStatus == StatusExecFail && record.AffectedRows > 0) ||

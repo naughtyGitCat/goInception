@@ -898,6 +898,16 @@ func (s *session) checkBackupTableHostMaxLength(dbname string) (length int) {
 
 }
 
+func (s *session) checkPayLoadEventMark(e *replication.BinlogEvent) bool {
+	switch e.Header.EventType {
+	case replication.QUERY_EVENT:
+		return true
+	case replication.TABLE_MAP_EVENT:
+		return true
+	}
+	return false
+}
+
 func (s *session) needTransactionMark() bool {
 	return s.dbType == DBTypeOceanBase
 }
