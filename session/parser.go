@@ -361,7 +361,6 @@ func (s *session) parserBinlog(ctx context.Context) {
 	}()
 
 	var started bool
-	var payloadEvent bool
 
 	for {
 		e, err := logSync.GetEvent(context.Background())
@@ -477,7 +476,6 @@ func (s *session) parserBinlog(ctx context.Context) {
 				}
 			}
 		case replication.TRANSACTION_PAYLOAD_EVENT:
-			payloadEvent = true
 			if event, ok := e.Event.(*replication.TransactionPayloadEvent); ok {
 				for _, e := range event.Events {
 					switch e.Header.EventType {
@@ -485,7 +483,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 						if event, ok := e.Event.(*replication.TableMapEvent); ok {
 							if !strings.EqualFold(string(event.Schema), record.TableInfo.Schema) ||
 								!strings.EqualFold(string(event.Table), record.TableInfo.Name) {
-								goto ENDCHECK
+								goto ENDPAYCHECK
 							}
 						}
 					case replication.QUERY_EVENT:
@@ -495,7 +493,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 						// }
 
 						if s.dbType == DBTypeOceanBase || (s.dbType == DBTypeMariaDB && s.dbVersion >= 100000) {
-							goto ENDCHECK
+							goto ENDPAYCHECK
 						}
 
 						if event, ok := e.Event.(*replication.QueryEvent); ok {
@@ -511,7 +509,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 									log.Error(err)
 								}
 							} else {
-								goto ENDCHECK
+								goto ENDPAYCHECK
 							}
 						}
 
@@ -529,7 +527,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 									log.Error(err)
 								}
 							} else {
-								goto ENDCHECK
+								goto ENDPAYCHECK
 							}
 						}
 
@@ -546,8 +544,83 @@ func (s *session) parserBinlog(ctx context.Context) {
 									log.Error(err)
 								}
 							} else {
-								goto ENDCHECK
+								goto ENDPAYCHECK
 							}
+						}
+					}
+				ENDPAYCHECK:
+					if s.needTransactionMark() {
+						txMark := s.toTransactionMark(e)
+						if txMark != nil && txMark.MarkType == transactionMarkTypeEnd && txMark.LogFile == record.StartFile && txMark.LogPosition == record.StartPosition {
+							log.Infof("found transaction end mark: %+v, binlog parsing finished", txMark)
+							break
+						}
+					}
+
+					// 如果操作已超过binlog范围,切换到下一日志
+					if !s.needTransactionMark() && e.Header.EventType != replication.QUERY_EVENT && e.Header.EventType != replication.TABLE_MAP_EVENT {
+						// sql被kill后,如果备份时可以检测到行,则认为执行成功
+						// 工单只有执行成功,才允许标记为备份成功
+						// if (record.StageStatus == StatusExecFail && record.AffectedRows > 0) ||
+						// 	record.StageStatus == StatusExecOK || record.StageStatus == StatusBackupFail {
+						if record.AffectedRows > 0 {
+							if int64(changeRows) >= record.AffectedRows {
+								record.StageStatus = StatusBackupOK
+							}
+						}
+
+						record.BackupCostTime = fmt.Sprintf("%.3f", time.Since(startTime).Seconds())
+
+						changeRows = 0
+						next := s.getNextBackupRecord()
+						if next != nil {
+							startPosition = mysql.Position{Name: next.StartFile,
+								Pos: uint32(next.StartPosition)}
+							stopPosition = mysql.Position{Name: next.EndFile,
+								Pos: uint32(next.EndPosition)}
+							startTime = time.Now()
+
+							s.myRecord = next
+							record = next
+						} else {
+							if s.needTransactionMark() {
+								continue
+							}
+							log.Info("all binlog records processed, exit binlog parser")
+							break
+						}
+					} else if s.opt.tranBatch > 1 {
+						if int64(changeRows) >= record.AffectedRows &&
+							(s.dbType != DBTypeMariaDB || s.dbVersion < 100000) {
+							if record.AffectedRows > 0 {
+								record.StageStatus = StatusBackupOK
+							}
+							record.BackupCostTime = fmt.Sprintf("%.3f", time.Since(startTime).Seconds())
+
+							changeRows = 0
+							next := s.getNextBackupRecord()
+							if next != nil {
+								startPosition = mysql.Position{Name: next.StartFile,
+									Pos: uint32(next.StartPosition)}
+								stopPosition = mysql.Position{Name: next.EndFile,
+									Pos: uint32(next.EndPosition)}
+								startTime = time.Now()
+
+								s.myRecord = next
+								record = next
+							} else {
+								break
+							}
+						}
+					}
+
+					// 如果执行阶段已经kill,则不再检查
+					if !s.killExecute {
+						// 进程Killed
+						if err := checkClose(ctx); err != nil {
+							log.Warn("Killed: ", err)
+							s.appendErrorMsg("Operation has been killed!")
+							break
 						}
 					}
 				}
@@ -570,7 +643,7 @@ func (s *session) parserBinlog(ctx context.Context) {
 			// if (record.StageStatus == StatusExecFail && record.AffectedRows > 0) ||
 			// 	record.StageStatus == StatusExecOK || record.StageStatus == StatusBackupFail {
 			if record.AffectedRows > 0 {
-				if int64(changeRows) >= record.AffectedRows || (s.opt.tranBatch > 1 && payloadEvent) {
+				if int64(changeRows) >= record.AffectedRows {
 					record.StageStatus = StatusBackupOK
 				}
 			}
