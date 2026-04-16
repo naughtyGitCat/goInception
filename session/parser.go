@@ -558,16 +558,13 @@ func (s *session) parserBinlog(ctx context.Context) {
 					}
 
 					// 如果操作已超过binlog范围,切换到下一日志
-					if !s.needTransactionMark() && !s.checkPayLoadEventMark(e) {
+					if !s.needTransactionMark() && s.checkPayEventEndMark(record.AffectedRows, changeRows) {
 						// sql被kill后,如果备份时可以检测到行,则认为执行成功
 						// 工单只有执行成功,才允许标记为备份成功
 						// if (record.StageStatus == StatusExecFail && record.AffectedRows > 0) ||
 						// 	record.StageStatus == StatusExecOK || record.StageStatus == StatusBackupFail {
-						if record.AffectedRows > 0 {
-							if int64(changeRows) >= record.AffectedRows {
-								record.StageStatus = StatusBackupOK
-							}
-						}
+
+						record.StageStatus = StatusBackupOK
 
 						record.BackupCostTime = fmt.Sprintf("%.3f", time.Since(startTime).Seconds())
 
