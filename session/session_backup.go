@@ -898,12 +898,11 @@ func (s *session) checkBackupTableHostMaxLength(dbname string) (length int) {
 
 }
 
-func (s *session) checkPayLoadEventMark(e *replication.BinlogEvent) bool {
-	switch e.Header.EventType {
-	case replication.QUERY_EVENT:
-		return true
-	case replication.TABLE_MAP_EVENT:
-		return true
+func (s *session) checkPayEventEndMark(affectedRows int64, changeRows int) bool {
+	if affectedRows > 0 {
+		if int64(changeRows) >= affectedRows {
+			return true
+		}
 	}
 	return false
 }
