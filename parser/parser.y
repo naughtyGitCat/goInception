@@ -991,6 +991,7 @@ import (
 	OfTablesOpt                   "OF table_name [, ...]"
 	OptFull                       "Full or empty"
 	OptTemporary                  "TEMPORARY or empty"
+	OptAsofMode                   "TIMESTAMP or SNAPSHOT"
 	Order                         "Ordering keyword: ASC or DESC"
 	OrderBy                       "ORDER BY clause"
 	OrReplace                     "or replace"
@@ -5459,6 +5460,17 @@ HavingClause:
 		$$ = &ast.HavingClause{Expr: $2}
 	}
 
+
+OptAsofMode:
+	"TIMESTAMP"
+	{
+		$$ = ast.TimestampReadExactTimestamp
+	}
+|	"SNAPSHOT"
+	{
+		$$ = ast.SnapShotReadExactTimestamp
+	}
+
 AsOfClauseOpt:
 	%prec empty
 	{
@@ -5467,10 +5479,10 @@ AsOfClauseOpt:
 |	AsOfClause
 
 AsOfClause:
-	asof "TIMESTAMP" Expression
+	asof OptAsofMode Expression
 	{
 		$$ = &ast.AsOfClause{
-			Mode:   ast.TimestampReadExactTimestamp,
+			Mode:   $2.(ast.AsOfReadModes),
 			TsExpr: $3.(ast.ExprNode),
 		}
 	}
