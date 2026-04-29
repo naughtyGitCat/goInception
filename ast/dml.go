@@ -656,12 +656,13 @@ const (
 	TimestampBoundMinReadTimestamp
 )
 
-type TimestampReadModes int
+type AsOfReadModes int
 
 const (
-	TimestampReadStrong TimestampReadModes = iota
+	TimestampReadStrong AsOfReadModes = iota
 	TimestampReadBoundTimestamp
 	TimestampReadExactTimestamp
+	SnapShotReadExactTimestamp
 )
 
 type TimestampBound struct {
@@ -669,15 +670,28 @@ type TimestampBound struct {
 	Timestamp ExprNode
 }
 
+type AsOfKeyword int
+
+const (
+	AsOfTimestamp AsOfKeyword = iota
+	AsOfSnapshot
+)
+
 type AsOfClause struct {
 	node
-	Mode   TimestampReadModes
+	AsOfKeyword
+	Mode   AsOfReadModes
 	TsExpr ExprNode
 }
 
 // Restore implements Node interface.
 func (n *AsOfClause) Restore(ctx *RestoreCtx) error {
-	ctx.WriteKeyWord("AS OF TIMESTAMP ")
+	switch n.AsOfKeyword {
+	case AsOfTimestamp:
+		ctx.WriteKeyWord("AS OF TIMESTAMP ")
+	case AsOfSnapshot:
+		ctx.WriteKeyWord("AS OF SNAPSHOT ")
+	}
 	if err := n.TsExpr.Restore(ctx); err != nil {
 		return errors.Annotate(err, "An error occurred while restore AsOfClause.Expr")
 	}
