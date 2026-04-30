@@ -23,7 +23,11 @@ goInception是一个集审核、执行、备份及生成回滚语句于一身的
 **[[Document]](https://hanchuanchuan.github.io/goInception/)**
 **[[中文文档]](https://hanchuanchuan.github.io/goInception/zh/)**
 
-**[[更新日志]](https://github.com/hanchuanchuan/inc-docs/blob/master/changelog.md)**
+**[[上游更新日志]](https://github.com/hanchuanchuan/inc-docs/blob/master/changelog.md)**
+
+**Fork 自定义变更：**
+- [[zmix999 Fork 改造详解]](docs/zmix999-changelog.md) — OceanBase 适配、加密 binlog 备份、parser 增强等
+- [[OceanBase DDL 设计文档]](docs/oceanbase-ddl.md) — pt-osc 适配、Online/Offline DDL 判定等
 
 ----
 
@@ -85,26 +89,3 @@ QQ群 **499262190**
 
 This project exists thanks to all the people who contribute. [[Contribute](CONTRIBUTING.md)].
 <a href="https://github.com/hanchuanchuan/goInception/graphs/contributors"><img src="https://opencollective.com/goInception/contributors.svg?width=890&button=false" /></a>
-
-### Financial Contributors
-
-Become a financial contributor and help us sustain our community. [[Contribute](https://opencollective.com/goInception/contribute)]
-
-#### Individuals
-
-<a href="https://opencollective.com/goInception"><img src="https://opencollective.com/goInception/individuals.svg?width=890"></a>
-
-#### Organizations
-
-Support this project with your organization. Your logo will show up here with a link to your website. [[Contribute](https://opencollective.com/goInception/contribute)]
-
-<a href="https://opencollective.com/goInception/organization/0/website"><img src="https://opencollective.com/goInception/organization/0/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/1/website"><img src="https://opencollective.com/goInception/organization/1/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/2/website"><img src="https://opencollective.com/goInception/organization/2/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/3/website"><img src="https://opencollective.com/goInception/organization/3/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/4/website"><img src="https://opencollective.com/goInception/organization/4/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/5/website"><img src="https://opencollective.com/goInception/organization/5/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/6/website"><img src="https://opencollective.com/goInception/organization/6/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/7/website"><img src="https://opencollective.com/goInception/organization/7/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/8/website"><img src="https://opencollective.com/goInception/organization/8/avatar.svg"></a>
-<a href="https://opencollective.com/goInception/organization/9/website"><img src="https://opencollective.com/goInception/organization/9/avatar.svg"></a>
