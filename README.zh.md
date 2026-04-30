@@ -74,7 +74,7 @@ go build -o goInception tidb-server/main.go
 
 #### 交流
 
-QQ群 **499262190**
+e-mail: `psyduck007@outlook.com`
 
 *(通用问题建议提issue以便于记录及帮助他人)*
 

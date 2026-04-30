@@ -73,8 +73,7 @@ go build -o goInception tidb-server/main.go
 
 #### Contact
 
-QQ group talk: **499262190**
-e-mail: `chuanchuanhan@gmail.com`
+e-mail: `psyduck007@outlook.com`
 
 ### Contributing
 
