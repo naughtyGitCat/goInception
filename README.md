@@ -5,7 +5,7 @@
 > `master` 分支仅与原始上游 `hanchuanchuan/goInception` 保持同步参考，所有 OceanBase 适配、加密 binlog 备份、parser 增强等本 fork 自定义改造都在 `production` 分支。
 >
 > - 编译/部署/查变更日志请切到 [`production`](../../tree/production)
-> - Fork 改造历史详见 [`docs/zmix999-changelog.md`](../../blob/production/docs/zmix999-changelog.md)（在 production 分支上）
+> - 本 fork 变更历史详见 [`docs/naughtygitcat-changelog.md`](../../blob/production/docs/naughtygitcat-changelog.md)（在 production 分支上）
 
 ---
 
