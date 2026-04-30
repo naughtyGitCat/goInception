@@ -26,7 +26,8 @@ goInception是一个集审核、执行、备份及生成回滚语句于一身的
 **[[上游更新日志]](https://github.com/hanchuanchuan/inc-docs/blob/master/changelog.md)**
 
 **Fork 自定义变更：**
-- [[zmix999 Fork 改造详解]](docs/zmix999-changelog.md) — OceanBase 适配、加密 binlog 备份、parser 增强等
+- [[naughtyGitCat fork 变更历史]](docs/naughtygitcat-changelog.md) — 本 fork 的原创 commit、PR 状态、维护流程
+- [[zmix999 Fork 改造详解]](docs/zmix999-changelog.md) — 上游 zmix999 相对 hanchuanchuan 的改动详解（OceanBase 适配等）
 - [[OceanBase DDL 设计文档]](docs/oceanbase-ddl.md) — pt-osc 适配、Online/Offline DDL 判定等
 
 ----

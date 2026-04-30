@@ -23,7 +23,8 @@ goInception is a MySQL maintenance tool, which can be used to review, implement,
 **[[Upstream Changelog]](https://hanchuanchuan.github.io/goInception/changelog.html)**
 
 **Fork-specific changes:**
-- [[zmix999 Fork 改造详解]](docs/zmix999-changelog.md) — OceanBase 适配、加密 binlog 备份、parser 增强等
+- [[naughtyGitCat fork 变更历史]](docs/naughtygitcat-changelog.md) — 本 fork 的原创 commit、PR 状态、维护流程
+- [[zmix999 Fork 改造详解]](docs/zmix999-changelog.md) — 上游 zmix999 相对 hanchuanchuan 的改动详解（OceanBase 适配等）
 - [[OceanBase DDL 设计文档]](docs/oceanbase-ddl.md) — pt-osc 适配、Online/Offline DDL 判定等
 
 
