@@ -3651,6 +3651,22 @@ ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `
 	c.Assert(comment, Equals, "check")
 }
 
+func (s *testParserSuite) TestAlterTableTableMode(c *C) {
+	defer testleak.AfterTest(c)()
+	parser := New()
+	stmt, err := parser.ParseOneStmt("ALTER TABLE t SET TABLE_MODE='normal'", "", "")
+	c.Assert(err, IsNil)
+	al, ok := stmt.(*ast.AlterTableStmt)
+	c.Assert(ok, IsTrue)
+	c.Assert(al.Specs, HasLen, 1)
+	spec := al.Specs[0]
+	c.Assert(spec.Tp, Equals, ast.AlterTableOption)
+	c.Assert(spec.Options, HasLen, 1)
+	opt := spec.Options[0]
+	c.Assert(opt.Tp, Equals, ast.TableOptionTableMode)
+	c.Assert(opt.StrValue, Equals, "NORMAL")
+}
+
 func (s *testParserSuite) TestNotExistsSubquery(c *C) {
 	defer testleak.AfterTest(c)()
 	table := []testCase{

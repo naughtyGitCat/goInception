@@ -1291,6 +1291,7 @@ import (
 	logOr             "logical or operator"
 	LinearOpt         "linear or empty"
 	FieldsOrColumns   "Fields or columns"
+	TableModeValue    "TABLE_MODE value"
 
 %type	<ident>
 	Identifier                      "identifier or unreserved keyword"
@@ -10472,13 +10473,23 @@ TableOption:
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionNoParallel, UintValue: $3.(uint64)}
 	}
-|	"TABLE_MODE" eq StringName
+|	SetOpt "TABLE_MODE" eq TableModeValue
 	{
-		$$ = &ast.TableOption{Tp: ast.TableOptionTableMode, StrValue: $3.(string)}
+		$$ = &ast.TableOption{Tp: ast.TableOptionTableMode, StrValue: $4}
 	}
 |	"DUPLICATE_SCOPE" eq StringName
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionDuplicateScope, StrValue: $3.(string)}
+	}
+
+TableModeValue:
+	stringLit
+	{
+		$$ = strings.ToUpper($1)
+	}
+|	Identifier
+	{
+		$$ = strings.ToUpper($1)
 	}
 
 ForceOpt:

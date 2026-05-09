@@ -3593,6 +3593,8 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 					if opt.UintValue > 1 {
 						s.appendErrorNo(ER_INC_INIT_ERR)
 					}
+				case ast.TableOptionTableMode:
+					s.checkTableMode(opt.StrValue)
 				}
 			}
 
@@ -3976,6 +3978,8 @@ func (s *session) checkTableOptions(t *TableInfo, options []*ast.TableOption, ta
 				s.appendErrorMsg(fmt.Sprintf("shard_row_id_bits for table '%s' is too long (max = %d)",
 					table, TABLE_SHARD_ROW_ID_BITS_MAXLEN))
 			}
+		case ast.TableOptionTableMode:
+			s.checkTableMode(opt.StrValue)
 		default:
 			s.appendErrorNo(ER_NOT_SUPPORTED_ALTER_OPTION)
 		}
@@ -8612,6 +8616,16 @@ func (s *session) checkCollation(collation string) bool {
 		return false
 	}
 	return true
+}
+
+func (s *session) checkTableMode(mode string) bool {
+	switch strings.ToUpper(mode) {
+	case "NORMAL", "QUEUING", "MODERATE", "SUPER", "EXTREME":
+		return true
+	default:
+		s.appendErrorMsg(fmt.Sprintf("TABLE_MODE value '%s' is invalid, supported values: NORMAL, QUEUING, MODERATE, SUPER, EXTREME", mode))
+		return false
+	}
 }
 
 func (s *session) checkEngine(engine string) bool {
