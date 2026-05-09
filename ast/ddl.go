@@ -4631,12 +4631,18 @@ var (
 
 type SubPartitionDefinition struct {
 	Name    model.CIStr
+	Clause  PartitionDefinitionClause
 	Options []*TableOption
 }
 
 func (spd *SubPartitionDefinition) Restore(ctx *RestoreCtx) error {
 	ctx.WriteKeyWord("SUBPARTITION ")
 	ctx.WriteName(spd.Name.O)
+	if spd.Clause != nil {
+		if err := spd.Clause.restore(ctx); err != nil {
+			return errors.Annotate(err, "An error occurred while restore SubPartitionDefinition.Clause")
+		}
+	}
 	for i, opt := range spd.Options {
 		ctx.WritePlain(" ")
 		if err := opt.Restore(ctx); err != nil {

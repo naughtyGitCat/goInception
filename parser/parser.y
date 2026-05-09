@@ -4088,7 +4088,39 @@ SubPartitionOpt:
 		method.Num = $4.(uint64)
 		$$ = method
 	}
+|	"SUBPARTITION" "BY" "RANGE" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:   model.PartitionTypeRange,
+			Expr: $5.(ast.ExprNode),
+		}
+	}
+|	"SUBPARTITION" "BY" "RANGE" "COLUMNS" '(' ColumnNameList ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:          model.PartitionTypeRange,
+			ColumnNames: $6.([]*ast.ColumnName),
+		}
+	}
+|	"SUBPARTITION" "BY" "LIST" '(' Expression ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:   model.PartitionTypeList,
+			Expr: $5.(ast.ExprNode),
+		}
+	}
+|	"SUBPARTITION" "BY" "LIST" "COLUMNS" '(' ColumnNameList ')'
+	{
+		$$ = &ast.PartitionMethod{
+			Tp:          model.PartitionTypeList,
+			ColumnNames: $6.([]*ast.ColumnName),
+		}
+	}
 
+// 注：SUBPARTITION ... TEMPLATE (...) 形式被刻意省略。OB Integration 8b50b21b
+// 加的 6 条 TEMPLATE 规则，会与本仓 parser.y 的 PredicateExpr (Expression 内部
+// 优先级) 在 ')' 上产生 shift/reduce 冲突；本仓 goyacc 默认 AllowConflicts:
+// false 直接拒绝生成。详见 docs/naughtygitcat-changelog.md。
 
 SubPartitionNumOpt:
 	{
@@ -4172,11 +4204,17 @@ SubPartDefinitionList:
 	}
 
 SubPartDefinition:
-	"SUBPARTITION" Identifier PartDefOptionList
+	"SUBPARTITION" Identifier PartDefValuesOpt PartDefOptionList
 	{
+		clause := $3.(ast.PartitionDefinitionClause)
+		// If clause is PartitionDefinitionClauseNone, set it to nil
+		if _, ok := clause.(*ast.PartitionDefinitionClauseNone); ok {
+			clause = nil
+		}
 		$$ = &ast.SubPartitionDefinition{
 			Name:    model.NewCIStr($2),
-			Options: $3.([]*ast.TableOption),
+			Clause:  clause,
+			Options: $4.([]*ast.TableOption),
 		}
 	}
 
@@ -4257,6 +4295,10 @@ PartDefValuesOpt:
 			}
 		}
 		$$ = &ast.PartitionDefinitionClauseIn{Values: values}
+	}
+|	"VALUES" "IN" '(' "DEFAULT" ')'
+	{
+		$$ = &ast.PartitionDefinitionClauseIn{}
 	}
 |	"HISTORY"
 	{

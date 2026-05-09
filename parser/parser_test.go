@@ -3607,8 +3607,8 @@ ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `
 		{"create table t1 (a int) partition by list (a) (partition x values in ())", false, ""},
 		{"create table t1 (a int) partition by list (a) (partition x default)", true, "CREATE TABLE `t1` (`a` INT) PARTITION BY LIST (`a`) (PARTITION `x` DEFAULT)"},
 
-		// only hash and key subpartitions are allowed
-		{"create table t1 (a int, b int) partition by range (a) subpartition by range (b) (partition x values less than maxvalue)", false, ""},
+		// OceanBase supports range and list subpartitions (in addition to hash and key)
+		{"create table t1 (a int, b int) partition by range (a) subpartition by range (b) (partition x values less than maxvalue)", true, "CREATE TABLE `t1` (`a` INT,`b` INT) PARTITION BY RANGE (`a`) SUBPARTITION BY RANGE (`b`) (PARTITION `x` VALUES LESS THAN (MAXVALUE))"},
 
 		// number of partitions/subpartitions must be matching
 		{"create table t1 (a int) partition by hash (a) partitions 2 (partition x)", false, ""},
@@ -3644,6 +3644,30 @@ ENGINE=INNODB PARTITION BY LINEAR HASH (a) PARTITIONS 1;`, true, "CREATE TABLE `
 		{
 			"create table t1 (a int, b int) partition by range(a) subpartition by hash(b) (partition x values less than maxvalue (subpartition y engine InnoDB comment 'xxxx' data directory '/var/data' index directory '/var/index' max_rows 70000 min_rows 50 tablespace `innodb_file_per_table` nodegroup 255))", true,
 			"CREATE TABLE `t1` (`a` INT,`b` INT) PARTITION BY RANGE (`a`) SUBPARTITION BY HASH (`b`) SUBPARTITIONS 1 (PARTITION `x` VALUES LESS THAN (MAXVALUE) (SUBPARTITION `y` ENGINE = InnoDB COMMENT = 'xxxx' DATA DIRECTORY = '/var/data' INDEX DIRECTORY = '/var/index' MAX_ROWS = 70000 MIN_ROWS = 50 TABLESPACE = `innodb_file_per_table` NODEGROUP = 255))",
+		},
+
+		// OceanBase partition syntax support - VALUES IN (DEFAULT)
+		{
+			"CREATE TABLE tbl1_l (col1 BIGINT PRIMARY KEY,col2 VARCHAR(50)) PARTITION BY LIST(col1) (PARTITION p0 VALUES IN (1, 2, 3), PARTITION p1 VALUES IN (5, 6), PARTITION p2 VALUES IN (DEFAULT))", true,
+			"CREATE TABLE `tbl1_l` (`col1` BIGINT PRIMARY KEY,`col2` VARCHAR(50)) PARTITION BY LIST (`col1`) (PARTITION `p0` VALUES IN (1, 2, 3),PARTITION `p1` VALUES IN (5, 6),PARTITION `p2` DEFAULT)",
+		},
+		{
+			"CREATE TABLE tbl1_lc (id INT,partition_id VARCHAR(2)) PARTITION BY LIST COLUMNS(partition_id) (PARTITION p0 VALUES IN ('00','01'), PARTITION p1 VALUES IN ('02','03'), PARTITION p2 VALUES IN (DEFAULT))", true,
+			"CREATE TABLE `tbl1_lc` (`id` INT,`partition_id` VARCHAR(2)) PARTITION BY LIST COLUMNS (`partition_id`) (PARTITION `p0` VALUES IN ('00', '01'),PARTITION `p1` VALUES IN ('02', '03'),PARTITION `p2` DEFAULT)",
+		},
+
+		// 注：SUBPARTITION TEMPLATE (...) 的 4 个用例从 OB Integration 8b50b21b
+		// 拣出来时被拿掉了，因为 TEMPLATE 语法在本仓 parser.y 上下文里产生 yacc
+		// shift/reduce 冲突。详见 docs/naughtygitcat-changelog.md。
+
+		// OceanBase partition syntax support - Non-templated subpartition with VALUES
+		{
+			"CREATE TABLE t2_f_rclc (col1 INT,col2 INT) PARTITION BY RANGE COLUMNS(col1) SUBPARTITION BY LIST COLUMNS(col2) (PARTITION p0 VALUES LESS THAN(100) (SUBPARTITION sp0 VALUES IN(1,3), SUBPARTITION sp1 VALUES IN(4,6), SUBPARTITION sp2 VALUES IN(7,9)), PARTITION p1 VALUES LESS THAN(200) (SUBPARTITION sp3 VALUES IN(1,3), SUBPARTITION sp4 VALUES IN(4,6), SUBPARTITION sp5 VALUES IN(7,9)))", true,
+			"CREATE TABLE `t2_f_rclc` (`col1` INT,`col2` INT) PARTITION BY RANGE COLUMNS (`col1`) SUBPARTITION BY LIST COLUMNS (`col2`) (PARTITION `p0` VALUES LESS THAN (100) (SUBPARTITION `sp0` VALUES IN (1, 3),SUBPARTITION `sp1` VALUES IN (4, 6),SUBPARTITION `sp2` VALUES IN (7, 9)),PARTITION `p1` VALUES LESS THAN (200) (SUBPARTITION `sp3` VALUES IN (1, 3),SUBPARTITION `sp4` VALUES IN (4, 6),SUBPARTITION `sp5` VALUES IN (7, 9)))",
+		},
+		{
+			"CREATE TABLE t2_f_hr (col1 INT,col2 INT) PARTITION BY Hash(col1) SUBPARTITION BY RANGE(col2) (PARTITION p1 (SUBPARTITION sp0 VALUES LESS THAN (2020), SUBPARTITION sp1 VALUES LESS THAN (2021)), PARTITION p2 (SUBPARTITION sp4 VALUES LESS THAN (2020), SUBPARTITION sp5 VALUES LESS THAN (2021)))", true,
+			"CREATE TABLE `t2_f_hr` (`col1` INT,`col2` INT) PARTITION BY HASH (`col1`) SUBPARTITION BY RANGE (`col2`) (PARTITION `p1` (SUBPARTITION `sp0` VALUES LESS THAN (2020),SUBPARTITION `sp1` VALUES LESS THAN (2021)),PARTITION `p2` (SUBPARTITION `sp4` VALUES LESS THAN (2020),SUBPARTITION `sp5` VALUES LESS THAN (2021)))",
 		},
 	}
 	s.RunTest(c, table, false)
