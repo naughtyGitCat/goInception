@@ -351,6 +351,7 @@ import (
 	binding                "BINDING"
 	binlog                 "BINLOG"
 	bitType                "BIT"
+	blockSize              "BLOCK_SIZE"
 	booleanType            "BOOLEAN"
 	boolType               "BOOL"
 	btree                  "BTREE"
@@ -498,6 +499,7 @@ import (
 	partitioning           "PARTITIONING"
 	password               "PASSWORD"
 	partitions             "PARTITIONS"
+	pctfree                "PCTFREE"
 	pipesAsOr
 	plugins                "PLUGINS"
 	preSplitRegions        "PRE_SPLIT_REGIONS"
@@ -524,6 +526,7 @@ import (
 	reorganize             "REORGANIZE"
 	repair                 "REPAIR"
 	repeatable             "REPEATABLE"
+	replicaNum             "REPLICA_NUM"
 	replication            "REPLICATION"
 	reverse                "REVERSE"
 	rollback               "ROLLBACK"
@@ -568,6 +571,7 @@ import (
 	tableNameKwd 		   "TABLE_NAME"
 	tablespace             "TABLESPACE"
 	tableMode              "TABLE_MODE"
+	tabletSize             "TABLET_SIZE"
 	temporary              "TEMPORARY"
 	temptable              "TEMPTABLE"
 	textType               "TEXT"
@@ -583,6 +587,7 @@ import (
 	uncommitted            "UNCOMMITTED"
 	unknown                "UNKNOWN"
 	nulls                  "NULLS"
+	useBloomFilter         "USE_BLOOM_FILTER"
 	user                   "USER"
 	validation             "VALIDATION"
 	undefined              "UNDEFINED"
@@ -1292,6 +1297,9 @@ import (
 	LinearOpt         "linear or empty"
 	FieldsOrColumns   "Fields or columns"
 	TableModeValue    "TABLE_MODE value"
+
+%type	<item>
+	BoolLiteral "Boolean literal"
 
 %type	<ident>
 	Identifier                      "identifier or unreserved keyword"
@@ -5711,6 +5719,7 @@ UnReservedKeyword:
 |	"BTREE"
 |	"BYTE"
 |	"BROADCAST"
+|	"BLOCK_SIZE"
 |	"CLEANUP"
 |	"CLOSE"
 |	"CHARSET"
@@ -5766,6 +5775,7 @@ UnReservedKeyword:
 |	"OFFSET"
 |	"PARSER"
 |	"PASSWORD" %prec lowerThanEq
+|	"PCTFREE"
 |	"PREPARE"
 |	"PRECEDES"
 |	"PRESERVE"
@@ -5795,6 +5805,7 @@ UnReservedKeyword:
 |	"TABLE_NAME"
 |	"TABLESPACE"
 |	"TABLE_MODE"
+|	"TABLET_SIZE"
 |	"TEXT"
 |	"THAN"
 |	"TIME" %prec lowerThanStringLitToken
@@ -5812,6 +5823,7 @@ UnReservedKeyword:
 |	"ANY"
 |	"SOME"
 |	"USER"
+|	"USE_BLOOM_FILTER"
 |	"IDENTIFIED"
 |	"COLLATION"
 |	"COMMENT"
@@ -5884,6 +5896,7 @@ UnReservedKeyword:
 |	"MAX_UPDATES_PER_HOUR"
 |	"MAX_USER_CONNECTIONS"
 |	"REPLICATION"
+|	"REPLICA_NUM"
 |	"CLIENT"
 |	"SLAVE"
 |	"RELOAD"
@@ -10480,6 +10493,36 @@ TableOption:
 |	"DUPLICATE_SCOPE" eq StringName
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionDuplicateScope, StrValue: $3.(string)}
+	}
+|	"REPLICA_NUM" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionReplicaNum, UintValue: $3.(uint64)}
+	}
+|	"BLOCK_SIZE" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionBlockSize, UintValue: $3.(uint64)}
+	}
+|	"USE_BLOOM_FILTER" EqOpt BoolLiteral
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionUseBloomFilter, BoolValue: $3.(bool)}
+	}
+|	"TABLET_SIZE" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionTabletSize, UintValue: $3.(uint64)}
+	}
+|	"PCTFREE" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionPctFree, UintValue: $3.(uint64)}
+	}
+
+BoolLiteral:
+	"TRUE"
+	{
+		$$ = true
+	}
+|	"FALSE"
+	{
+		$$ = false
 	}
 
 TableModeValue:

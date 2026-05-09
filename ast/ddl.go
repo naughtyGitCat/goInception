@@ -2911,6 +2911,12 @@ const (
 	TableOptionParallel
 	TableOptionTableMode
 	TableOptionDuplicateScope
+	// OceanBase specific options
+	TableOptionReplicaNum
+	TableOptionBlockSize
+	TableOptionUseBloomFilter
+	TableOptionTabletSize
+	TableOptionPctFree
 	TableOptionPlacementPrimaryRegion       = TableOptionType(PlacementOptionPrimaryRegion)
 	TableOptionPlacementRegions             = TableOptionType(PlacementOptionRegions)
 	TableOptionPlacementFollowerCount       = TableOptionType(PlacementOptionFollowerCount)
@@ -3181,6 +3187,30 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 	case TableOptionParallel:
 		ctx.WriteKeyWord("PARALLEL ")
 		ctx.WritePlain(" ")
+		ctx.WritePlainf("%d", n.UintValue)
+	case TableOptionReplicaNum:
+		ctx.WriteKeyWord("REPLICA_NUM ")
+		ctx.WritePlain("= ")
+		ctx.WritePlainf("%d", n.UintValue)
+	case TableOptionBlockSize:
+		ctx.WriteKeyWord("BLOCK_SIZE ")
+		ctx.WritePlain("= ")
+		ctx.WritePlainf("%d", n.UintValue)
+	case TableOptionUseBloomFilter:
+		ctx.WriteKeyWord("USE_BLOOM_FILTER ")
+		ctx.WritePlain("= ")
+		if n.BoolValue {
+			ctx.WritePlain("true")
+		} else {
+			ctx.WritePlain("false")
+		}
+	case TableOptionTabletSize:
+		ctx.WriteKeyWord("TABLET_SIZE ")
+		ctx.WritePlain("= ")
+		ctx.WritePlainf("%d", n.UintValue)
+	case TableOptionPctFree:
+		ctx.WriteKeyWord("PCTFREE ")
+		ctx.WritePlain("= ")
 		ctx.WritePlainf("%d", n.UintValue)
 	case TableOptionPlacementPrimaryRegion, TableOptionPlacementRegions, TableOptionPlacementFollowerCount, TableOptionPlacementLeaderConstraints, TableOptionPlacementLearnerCount, TableOptionPlacementVoterCount, TableOptionPlacementSchedule, TableOptionPlacementConstraints, TableOptionPlacementFollowerConstraints, TableOptionPlacementVoterConstraints, TableOptionPlacementLearnerConstraints, TableOptionPlacementPolicy:
 		placementOpt := PlacementOption{

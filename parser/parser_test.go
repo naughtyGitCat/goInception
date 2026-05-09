@@ -1922,6 +1922,13 @@ func (s *testParserSuite) TestDDL(c *C) {
 		{"create table t (c int) password = 'abc'", true, "CREATE TABLE `t` (`c` INT) PASSWORD = 'abc'"},
 		{"create table t (c int) password 'abc'", true, "CREATE TABLE `t` (`c` INT) PASSWORD = 'abc'"},
 		{"create table t (c int) DELAY_KEY_WRITE=1", true, "CREATE TABLE `t` (`c` INT) DELAY_KEY_WRITE = 1"},
+		// OceanBase specific table options
+		{"create table t (c int) REPLICA_NUM = 3", true, "CREATE TABLE `t` (`c` INT) REPLICA_NUM = 3"},
+		{"create table t (c int) BLOCK_SIZE = 16384", true, "CREATE TABLE `t` (`c` INT) BLOCK_SIZE = 16384"},
+		{"create table t (c int) USE_BLOOM_FILTER = false", true, "CREATE TABLE `t` (`c` INT) USE_BLOOM_FILTER = false"},
+		{"create table t (c int) TABLET_SIZE = 134217728", true, "CREATE TABLE `t` (`c` INT) TABLET_SIZE = 134217728"},
+		{"create table t (c int) PCTFREE = 0", true, "CREATE TABLE `t` (`c` INT) PCTFREE = 0"},
+		{"create table tt4 (id int primary key, name varchar(100)) default CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = false TABLET_SIZE = 134217728 PCTFREE = 0 COMMENT = 'test'", true, "CREATE TABLE `tt4` (`id` INT PRIMARY KEY,`name` VARCHAR(100)) DEFAULT CHARACTER SET = UTF8MB4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = false TABLET_SIZE = 134217728 PCTFREE = 0 COMMENT = 'test'"},
 		{"create table t (c int) DELAY_KEY_WRITE 1", true, "CREATE TABLE `t` (`c` INT) DELAY_KEY_WRITE = 1"},
 		{"create table t (c int) ROW_FORMAT = default", true, "CREATE TABLE `t` (`c` INT) ROW_FORMAT = DEFAULT"},
 		{"create table t (c int) ROW_FORMAT default", true, "CREATE TABLE `t` (`c` INT) ROW_FORMAT = DEFAULT"},

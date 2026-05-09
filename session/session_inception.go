@@ -3595,6 +3595,13 @@ func (s *session) checkCreateTable(node *ast.CreateTableStmt, sql string) {
 					}
 				case ast.TableOptionTableMode:
 					s.checkTableMode(opt.StrValue)
+				case ast.TableOptionReplicaNum, ast.TableOptionBlockSize,
+					ast.TableOptionUseBloomFilter, ast.TableOptionTabletSize,
+					ast.TableOptionPctFree:
+					// OceanBase 专属属性
+					if s.dbType != DBTypeOceanBase {
+						s.appendErrorMsg("Table option is only supported for OceanBase database")
+					}
 				}
 			}
 
@@ -3980,6 +3987,13 @@ func (s *session) checkTableOptions(t *TableInfo, options []*ast.TableOption, ta
 			}
 		case ast.TableOptionTableMode:
 			s.checkTableMode(opt.StrValue)
+		case ast.TableOptionReplicaNum, ast.TableOptionBlockSize,
+			ast.TableOptionUseBloomFilter, ast.TableOptionTabletSize,
+			ast.TableOptionPctFree:
+			// OceanBase 专属属性
+			if s.dbType != DBTypeOceanBase {
+				s.appendErrorMsg("Table option is only supported for OceanBase database")
+			}
 		default:
 			s.appendErrorNo(ER_NOT_SUPPORTED_ALTER_OPTION)
 		}
