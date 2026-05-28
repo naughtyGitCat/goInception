@@ -80,19 +80,36 @@ cherry-pick 进来的 commit patch-id 与 zmix999/master 上对应 commit 相同
 
 ### 从 oceanbase/Integration cherry-pick
 
-OceanBase 团队在自己 fork 的 `Integration` 分支上做的 OB 增强，按主题挑选 + 主动跳过的方式同步。当前在 **`ob-integration-sync` 分支**累积，未直接合到 production。详细日志见该分支的 changelog。
+OceanBase 团队在自己 fork 的 `Integration` 分支上做的 OB 增强，按主题挑选 + 主动跳过的方式同步。**当前累积在 `ob-integration-sync` 分支**（基于最新 production，含 production 全部内容 + OB Integration 9 个 commit）。需要 OB 列存 / Offline DDL 这套功能时，可以 fast-forward `production` 到 `ob-integration-sync` 把内容合进来。
 
-已 cherry-pick 主题（截至 2026-05-09 第三轮）：
+已 cherry-pick 主题（截至 2026-05-28 第四轮）：
 
-- Offline DDL 检查（`CheckOfflineDDL` 配置、新增 7 个 OB DDL 错误码、`session/oceanbase_check.go`）
-- OB 3.x / 4.x 大版本识别
-- unsigned ↔ signed 整型转换支持
-- `TABLE_MODE` 选项值校验 + ALTER TABLE SET 前缀
-- OB 专属 table option：`REPLICA_NUM` / `BLOCK_SIZE` / `USE_BLOOM_FILTER` / `TABLET_SIZE` / `PCTFREE`
-- partition：`select from t partition(p)` 测试
-- partition：SUBPARTITION BY RANGE/LIST + `VALUES IN (DEFAULT)`
+| 轮次 | 主题 |
+|:--:|:--|
+| Round 1 | Offline DDL 检查（`CheckOfflineDDL` 配置 / 7 个 OB DDL 错误码 / `session/oceanbase_check.go`） |
+| Round 1 | OB 3.x / 4.x 大版本识别（`select version()` 解析 + 后续逻辑分流） |
+| Round 1 | unsigned ↔ signed 整型转换支持 |
+| Round 2 | `TABLE_MODE` 选项值校验 + `ALTER TABLE SET` 前缀 |
+| Round 2 | OB 专属 table option：`REPLICA_NUM` / `BLOCK_SIZE` / `USE_BLOOM_FILTER` / `TABLET_SIZE` / `PCTFREE` |
+| Round 2 | partition：`select from t partition(p)` 测试 |
+| Round 3 | partition：SUBPARTITION BY RANGE/LIST + `VALUES IN (DEFAULT)`（partial — 跳过 TEMPLATE 变体） |
+| Round 3 | partition：8 / 17 条非 TEMPLATE 测试用例 |
+| **Round 4** | **OB 4.x storage options：`ORGANIZATION INDEX/HEAP` / `DELTA_FORMAT` / `ENABLE_MACRO_BLOCK_BLOOM_FILTER` / `MERGE_ENGINE` / `SKIP_INDEX_LEVEL` / `DYNAMIC_PARTITION_POLICY`** |
 
-主动跳过：SUBPARTITION TEMPLATE（与 production 的 parser.y 优先级链冲突，参见 `ob-integration-sync` 分支文档）。
+主动跳过：
+
+- **SUBPARTITION TEMPLATE** —— 与 production 的 `parser.y` 中 `Expression` / `PredicateExpr` 优先级链产生 shift/reduce 冲突，goyacc 默认 `AllowConflicts: false` 直接拒绝。要 port 得整体同步 OB 的 expression 优先级声明，工作量超 cherry-pick 范畴。
+- **WITH COLUMN GROUP 的部分测试** —— Round 4 中 5 条纯 column group 测试，因 HEAD 已有自己的 column group 实现（`ColumnGroupOption{Tp: ColumnGroupOptionType}` + `WithColumnGroupOpt`）与 OB 的（`ColumnGroupOption{Items: []ColumnGroupType}` + `ColumnGroupOpt`）AST/grammar 都冲突，且 HEAD Restore 输出 `WITH COLUMN GROUP (...)` 比 OB 期待多一个空格，未引入。功能上 HEAD 能 parse 该语法，仅 round-trip 格式不一致。
+
+### 方法论沉淀
+
+四轮 cherry-pick 过程中提炼的几条经验：
+
+1. **多源 cherry-pick 模型下，"早期 cherry-pick 留下的同名实现"是最大的坑**。看到同名 struct / enum / grammar rule 时，先 grep 一下 HEAD 是不是已有不兼容版本（典型例子：Round 4 的 `ColumnGroupOption`）。
+2. **`parser.y` / `parser.go` 关系**：`parser.go` 是 yacc 生成的状态机，由 `make parser` 自动生成。两份 fork 的 `parser.y` 即使只差几行，重新生成的 `parser.go` 状态编号会全部偏移 → 看起来几千行 diff，绝大部分是噪音。cherry-pick 时**只关心 `parser.y` 冲突**，`parser.go` 用 `git checkout --ours` 丢掉后重新 `make parser` 即可。
+3. **`git cherry-pick` 在 AST 不兼容的语义重叠场景下必崩**，goyacc 会 panic 且 y.output 为空。这时改用**手工 Edit 加最小变更集**（不走 cherry-pick）比修 conflict 更省（典型例子：Round 4）。
+4. **拆 commit 看价值**：上游 commit 标题往往涵盖多个改动，单独 cherry-pick 时只挑真正净增的部分。例如 95c8f822 标题是"column group + table options"，但 column group 部分 HEAD 已有，**真正的净价值是 6 个新 table options**。
+5. **危险操作前打备份分支**：rebase / reset 前 `git branch ob-integration-sync-pre-rebase-<日期>`，确认一周无问题再删。
 
 ---
 
