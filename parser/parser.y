@@ -397,6 +397,7 @@ import (
 	declare                "DECLARE"
 	definer                "DEFINER"
 	delayKeyWrite          "DELAY_KEY_WRITE"
+	deltaFormat            "DELTA_FORMAT"
 	directory              "DIRECTORY"
 	disable                "DISABLE"
 	discard                "DISCARD"
@@ -404,9 +405,11 @@ import (
 	duplicate              "DUPLICATE"
 	duplicateScope         "DUPLICATE_SCOPE"
 	dynamic                "DYNAMIC"
+	dynamicPartitionPolicy "DYNAMIC_PARTITION_POLICY"
 	last				   "LAST"
 	lastval                "LASTVAL"
 	enable                 "ENABLE"
+	enableMacroBlockBloomFilter "ENABLE_MACRO_BLOCK_BLOOM_FILTER"
 	end                    "END"
 	engine                 "ENGINE"
 	engines                "ENGINES"
@@ -433,6 +436,7 @@ import (
 	grants                 "GRANTS"
 	handler                "HANDLER"
 	hash                   "HASH"
+	heap                   "HEAP"
 	history                "HISTORY"
 	hour                   "HOUR"
 	identified             "IDENTIFIED"
@@ -468,6 +472,7 @@ import (
 	maxUserConnections     "MAX_USER_CONNECTIONS"
 	member                 "MEMBER"
 	merge                  "MERGE"
+	mergeEngine            "MERGE_ENGINE"
 	minRows                "MIN_ROWS"
 	minValue        	   "MINVALUE"
 	modifies		   	   "MODIFIES"
@@ -494,6 +499,7 @@ import (
 	offset                 "OFFSET"
 	only                   "ONLY"
 	open                   "OPEN"
+	organization           "ORGANIZATION"
 	parser                 "PARSER"
 	partial                "PARTIAL"
 	partitioning           "PARTITIONING"
@@ -548,6 +554,7 @@ import (
 	signed                 "SIGNED"
 	simple                 "SIMPLE"
 	skip                   "SKIP"
+	skipIndexLevel         "SKIP_INDEX_LEVEL"
 	slave                  "SLAVE"
 	slow                   "SLOW"
 	snapshot               "SNAPSHOT"
@@ -1095,6 +1102,10 @@ import (
 	TableNameListOpt              "Table name list opt"
 	TableOption                   "create table option"
 	TableOptionList               "create table option list"
+	MergeEngineValue              "MERGE_ENGINE value"
+	DynamicPartitionPolicyInner   "DYNAMIC_PARTITION_POLICY inner k=v pairs"
+	DynamicPartitionPolicyPair    "DYNAMIC_PARTITION_POLICY pair"
+	DynamicPartitionPolicyValue   "DYNAMIC_PARTITION_POLICY value"
 	TableRef                      "table reference"
 	TableRefs                     "table references"
 	TableSampleOpt                "table sample clause optional"
@@ -5790,6 +5801,9 @@ UnReservedKeyword:
 |	"DUPLICATE"
 |   "DUPLICATE_SCOPE"
 |	"DYNAMIC"
+|	"DYNAMIC_PARTITION_POLICY"
+|	"DELTA_FORMAT"
+|	"ENABLE_MACRO_BLOCK_BLOOM_FILTER"
 |	"END"
 |	"ENFORCED"
 |	"ENGINE"
@@ -5806,6 +5820,7 @@ UnReservedKeyword:
 |	"FORMAT"
 |	"FULL"
 |	"HASH"
+|	"HEAP"
 |	"FOLLOWING"
 |	"FOLLOWS"
 |	"HOUR"
@@ -5815,6 +5830,7 @@ UnReservedKeyword:
 |	"LOCALITY"
 |	"NAMES"
 |	"OFFSET"
+|	"ORGANIZATION"
 |	"PARSER"
 |	"PASSWORD" %prec lowerThanEq
 |	"PCTFREE"
@@ -5831,6 +5847,7 @@ UnReservedKeyword:
 |	"SIGNED"
 |	"PARTIAL"
 |	"SIMPLE"
+|	"SKIP_INDEX_LEVEL"
 |	"SNAPSHOT"
 |	"START"
 |	"STATUS"
@@ -5949,6 +5966,7 @@ UnReservedKeyword:
 |	"DEFINER"
 |	"INVOKER"
 |	"MERGE"
+|	"MERGE_ENGINE"
 |	"MEMBER"
 |	"TEMPTABLE"
 |	"UNDEFINED"
@@ -10555,6 +10573,78 @@ TableOption:
 |	"PCTFREE" EqOpt LengthNum
 	{
 		$$ = &ast.TableOption{Tp: ast.TableOptionPctFree, UintValue: $3.(uint64)}
+	}
+|	"ORGANIZATION" "INDEX"
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionOrganizationIndex}
+	}
+|	"ORGANIZATION" "HEAP"
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionOrganizationHeap}
+	}
+|	"DELTA_FORMAT" EqOpt stringLit
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionDeltaFormat, StrValue: $3}
+	}
+|	"ENABLE_MACRO_BLOCK_BLOOM_FILTER" EqOpt BoolLiteral
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionEnableMacroBlockBloomFilter, BoolValue: $3.(bool)}
+	}
+|	"MERGE_ENGINE" EqOpt MergeEngineValue
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionMergeEngine, StrValue: $3.(string)}
+	}
+|	"SKIP_INDEX_LEVEL" EqOpt LengthNum
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionSkipIndexLevel, UintValue: $3.(uint64)}
+	}
+|	"DYNAMIC_PARTITION_POLICY" EqOpt '(' DynamicPartitionPolicyInner ')'
+	{
+		$$ = &ast.TableOption{Tp: ast.TableOptionDynamicPartitionPolicy, StrValue: $4.(string)}
+	}
+
+MergeEngineValue:
+	Identifier
+	{
+		$$ = strings.ToUpper($1)
+	}
+|	stringLit
+	{
+		$$ = strings.ToUpper($1)
+	}
+
+DynamicPartitionPolicyInner:
+	DynamicPartitionPolicyPair
+	{
+		$$ = $1.(string)
+	}
+|	DynamicPartitionPolicyInner ',' DynamicPartitionPolicyPair
+	{
+		$$ = $1.(string) + ", " + $3.(string)
+	}
+
+DynamicPartitionPolicyPair:
+	Identifier EqOpt DynamicPartitionPolicyValue
+	{
+		$$ = $1 + " = " + $3.(string)
+	}
+
+DynamicPartitionPolicyValue:
+	stringLit
+	{
+		$$ = "'" + strings.Replace($1, "'", "''", -1) + "'"
+	}
+|	BoolLiteral
+	{
+		if $1.(bool) {
+			$$ = "true"
+		} else {
+			$$ = "false"
+		}
+	}
+|	Identifier
+	{
+		$$ = $1
 	}
 
 BoolLiteral:

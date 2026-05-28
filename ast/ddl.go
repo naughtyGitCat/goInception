@@ -2917,6 +2917,14 @@ const (
 	TableOptionUseBloomFilter
 	TableOptionTabletSize
 	TableOptionPctFree
+	// OceanBase 4.x storage / partition options (oceanbase/Integration#95c8f822)
+	TableOptionDynamicPartitionPolicy
+	TableOptionOrganizationIndex
+	TableOptionOrganizationHeap
+	TableOptionDeltaFormat
+	TableOptionEnableMacroBlockBloomFilter
+	TableOptionMergeEngine
+	TableOptionSkipIndexLevel
 	TableOptionPlacementPrimaryRegion       = TableOptionType(PlacementOptionPrimaryRegion)
 	TableOptionPlacementRegions             = TableOptionType(PlacementOptionRegions)
 	TableOptionPlacementFollowerCount       = TableOptionType(PlacementOptionFollowerCount)
@@ -3210,6 +3218,36 @@ func (n *TableOption) Restore(ctx *format.RestoreCtx) error {
 		ctx.WritePlainf("%d", n.UintValue)
 	case TableOptionPctFree:
 		ctx.WriteKeyWord("PCTFREE ")
+		ctx.WritePlain("= ")
+		ctx.WritePlainf("%d", n.UintValue)
+	// OceanBase 4.x storage / partition options (oceanbase/Integration#95c8f822)
+	case TableOptionDynamicPartitionPolicy:
+		ctx.WriteKeyWord("DYNAMIC_PARTITION_POLICY ")
+		ctx.WritePlain("(")
+		ctx.WritePlain(n.StrValue)
+		ctx.WritePlain(")")
+	case TableOptionOrganizationIndex:
+		ctx.WriteKeyWord("ORGANIZATION INDEX")
+	case TableOptionOrganizationHeap:
+		ctx.WriteKeyWord("ORGANIZATION HEAP")
+	case TableOptionDeltaFormat:
+		ctx.WriteKeyWord("DELTA_FORMAT ")
+		ctx.WritePlain("= ")
+		ctx.WriteString(n.StrValue)
+	case TableOptionEnableMacroBlockBloomFilter:
+		ctx.WriteKeyWord("ENABLE_MACRO_BLOCK_BLOOM_FILTER ")
+		ctx.WritePlain("= ")
+		if n.BoolValue {
+			ctx.WritePlain("true")
+		} else {
+			ctx.WritePlain("false")
+		}
+	case TableOptionMergeEngine:
+		ctx.WriteKeyWord("MERGE_ENGINE ")
+		ctx.WritePlain("= ")
+		ctx.WritePlain(n.StrValue)
+	case TableOptionSkipIndexLevel:
+		ctx.WriteKeyWord("SKIP_INDEX_LEVEL ")
 		ctx.WritePlain("= ")
 		ctx.WritePlainf("%d", n.UintValue)
 	case TableOptionPlacementPrimaryRegion, TableOptionPlacementRegions, TableOptionPlacementFollowerCount, TableOptionPlacementLeaderConstraints, TableOptionPlacementLearnerCount, TableOptionPlacementVoterCount, TableOptionPlacementSchedule, TableOptionPlacementConstraints, TableOptionPlacementFollowerConstraints, TableOptionPlacementVoterConstraints, TableOptionPlacementLearnerConstraints, TableOptionPlacementPolicy:
