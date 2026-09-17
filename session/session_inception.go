@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -8753,8 +8752,10 @@ func (s *session) getExplainInfo(sql string, sqlId string) {
 	var rows []ExplainInfo
 
 	if s.dbType == DBTypeOceanBase {
-		var plan OceanBaseQueryPlan
-		if err := s.rawScan(sql, &plan); err != nil {
+		// OceanBase 把 EXPLAIN FORMAT=JSON 按物理行拆成多行结果集返回，
+		// 必须扫进 slice 再拼行；扫进单个 struct 只会拿到第一行 "{"。
+		var plans []OceanBaseQueryPlan
+		if err := s.rawScan(sql, &plans); err != nil {
 			if myErr, ok := err.(*mysqlDriver.MySQLError); ok {
 				s.appendErrorMsg(myErr.Message)
 				if newRecord != nil {
@@ -8767,22 +8768,18 @@ func (s *session) getExplainInfo(sql string, sqlId string) {
 				}
 			}
 		}
-		var planValue map[string]interface{}
-		_ = json.Unmarshal([]byte(plan.QueryPlan), &planValue)
-		if len(planValue) > 0 {
-			info := OceanBaseExplainInfo{}
-			_ = info.Unmarshal(planValue)
-			if info.Operator != "" {
-				rows = append(rows, ExplainInfo{Rows: info.EstRows})
-			}
-			for _, v := range planValue {
-				childInfo := OceanBaseExplainInfo{}
-				_ = childInfo.Unmarshal(v)
-				if childInfo.Operator != "" {
-					rows = append(rows, ExplainInfo{Rows: childInfo.EstRows})
-				}
-			}
+
+		planJSON := joinOceanBaseQueryPlan(plans)
+		obRows, err := parseOceanBaseExplainRows(planJSON)
+		if err != nil {
+			// 只记日志、不 appendErrorMsg：解析不出行数不该让审核直接失败，
+			// 但必须留下痕迹 —— 此前这里是 `_ = json.Unmarshal(...)`，
+			// 解析失败无声无息，受影响行数恒为 0，max_update_rows 与调用方的
+			// 大 DML 分批全部静默失效。
+			log.Warnf("con:%d parse oceanbase explain failed: %v, planRows:%d, plan:%s",
+				s.sessionVars.ConnectionID, err, len(plans), planSnippet(planJSON, 500))
 		}
+		rows = obRows
 	} else {
 		// if err := s.db.Raw(sql).Scan(&rows).Error; err != nil {
 		if err := s.rawScan(sql, &rows); err != nil {

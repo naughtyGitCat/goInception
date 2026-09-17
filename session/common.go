@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -191,8 +193,86 @@ type ExplainInfo struct {
 }
 
 // OceanBaseQueryPlan OceanBase 执行计划信息
+// OceanBaseQueryPlan OceanBase EXPLAIN FORMAT=JSON 的单行输出。
+// 注意列名是 `Query Plan`（MySQL 是 `EXPLAIN`），且 OceanBase 把 JSON 按物理行
+// 拆成**多行结果集**返回，所以扫描目标必须是 slice，见 joinOceanBaseQueryPlan。
 type OceanBaseQueryPlan struct {
 	QueryPlan string `gorm:"Column:Query Plan"`
+}
+
+// planSnippet 截取执行计划片段用于日志。与 truncateString 不同：超长时保留**前缀**
+// 而不是转成 md5——排查解析失败时需要看到计划长什么样，hash 没有用。
+func planSnippet(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + fmt.Sprintf("...(共 %d 字节)", len(s))
+}
+
+// joinOceanBaseQueryPlan 把 EXPLAIN FORMAT=JSON 的多行输出拼回完整 JSON。
+//
+// OceanBase 不像 MySQL 那样一行装完整 JSON，而是按物理行拆开逐行返回
+// （实测 4.5.0.0 与 5.0.1.0 行为一致：`SELECT 1` 拆 8 行、复杂查询 160~208 行，
+// 首行只有 "{"）。历史实现把结果扫进单个 struct，只拿到第一行 "{"，
+// json 解析必然失败，导致 OceanBase 的受影响行数恒为 0 —— 依赖它的
+// max_update_rows 判断与调用方的大 DML 分批因此全部失效。
+//
+// 按行拼接对 N=1 同样正确（等价于原样返回），因此 OceanBase 将来若改成
+// 单行返回，这里无需再改。
+func joinOceanBaseQueryPlan(plans []OceanBaseQueryPlan) string {
+	if len(plans) == 0 {
+		return ""
+	}
+	if len(plans) == 1 {
+		return plans[0].QueryPlan
+	}
+	var sb strings.Builder
+	for i, p := range plans {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(p.QueryPlan)
+	}
+	return sb.String()
+}
+
+// parseOceanBaseExplainRows 解析 OceanBase 的 JSON 执行计划，取根算子及其直接子算子的
+// EST.ROWS。遍历深度与顺序沿用历史实现（生产 explain_rule=first，只取根算子），
+// 这里只负责把解析失败显式返回，不再静默吞掉。
+func parseOceanBaseExplainRows(planJSON string) ([]ExplainInfo, error) {
+	if strings.TrimSpace(planJSON) == "" {
+		return nil, errors.New("empty query plan")
+	}
+
+	var planValue map[string]interface{}
+	if err := json.Unmarshal([]byte(planJSON), &planValue); err != nil {
+		return nil, err
+	}
+	if len(planValue) == 0 {
+		return nil, errors.New("query plan has no fields")
+	}
+
+	var rows []ExplainInfo
+	info := OceanBaseExplainInfo{}
+	if err := info.Unmarshal(planValue); err != nil {
+		return nil, err
+	}
+	if info.Operator != "" {
+		rows = append(rows, ExplainInfo{Rows: info.EstRows})
+	}
+	for _, v := range planValue {
+		childInfo := OceanBaseExplainInfo{}
+		if err := childInfo.Unmarshal(v); err != nil {
+			continue
+		}
+		if childInfo.Operator != "" {
+			rows = append(rows, ExplainInfo{Rows: childInfo.EstRows})
+		}
+	}
+	if len(rows) == 0 {
+		return nil, errors.New("no operator found in query plan")
+	}
+	return rows, nil
 }
 
 // OceanBaseExplainInfo OceanBase 执行计划标准格式
