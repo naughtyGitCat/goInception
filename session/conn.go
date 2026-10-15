@@ -95,6 +95,12 @@ func (s *session) raw(sqlStr string) (rows *sql.Rows, err error) {
 // exec 执行sql语句,连接失败时自动重连,自动重置当前数据库
 func (s *session) exec(sqlStr string, retry bool) (res sql.Result, err error) {
 	log.Debug("exec")
+	if s.opt != nil && s.opt.SingleDML && s.stage == StageExec {
+		if s.singleDMLConn == nil || s.singleDMLContext == nil {
+			return nil, fmt.Errorf("single_dml_connection_not_ready")
+		}
+		return s.singleDMLConn.ExecContext(s.singleDMLContext, sqlStr)
+	}
 	// 连接断开无效时,自动重试
 	for i := 0; i < maxBadConnRetries; i++ {
 		var sqlDB *sql.DB
@@ -124,7 +130,11 @@ func (s *session) exec(sqlStr string, retry bool) (res sql.Result, err error) {
 		}
 
 		// 连接超时时自动重连数据库. 仅在超时设置超过10min时开启该功能
-		if s.inc.WaitTimeout >= 600 {
+		waitTimeout := s.inc.WaitTimeout
+		if s.opt != nil && s.opt.WaitTimeout > 0 {
+			waitTimeout = s.opt.WaitTimeout
+		}
+		if waitTimeout >= 600 {
 			if myErr, ok := err.(*mysqlDriver.MySQLError); ok &&
 				myErr.Number == 1046 && s.dbName != "" {
 				err1 := s.initConnection()

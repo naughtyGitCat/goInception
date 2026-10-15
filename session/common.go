@@ -155,6 +155,15 @@ type SourceOptions struct {
 	RealRowCount bool
 	// SELECT 查询最大执行时间
 	MaxExecutionTime int
+	// 远端数据库等待超时时间, 单位:秒
+	WaitTimeout int
+	// OceanBase 单 mutation 执行,使用专用连接且禁止重发
+	SingleDML bool
+	// Explicit, opt-in protection for OB single-DML internal COUNT only.
+	OBCountProtection bool
+	OBCountTimeout    int  // seconds; zero means the default 30 for API callers
+	OBCountCapability bool // CHECK-only versioned proof, body must contain one USE
+	obCountTimeoutSet bool // SQL explicit zero/invalid values must not become defaults
 	// 连接的数据库,默认为mysql
 	db string
 

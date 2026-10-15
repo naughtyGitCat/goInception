@@ -19,6 +19,7 @@ package session
 
 import (
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -175,6 +176,10 @@ type session struct {
 
 	db       *gorm.DB
 	backupdb *gorm.DB
+
+	singleDMLConn    *sql.Conn
+	singleDMLContext context.Context
+	obCountContext   context.Context
 
 	// 执行DDL操作的数据库连接. 仅用于事务功能
 	ddlDB *gorm.DB

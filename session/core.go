@@ -141,6 +141,7 @@ func (s *session) init() {
 
 // clear 清理变量或map等信息
 func (s *session) clear() {
+	s.closeSingleDMLConnection()
 	if s.db != nil {
 		if sqlDB, err := s.db.DB(); err == nil {
 			defer sqlDB.Close()
@@ -259,6 +260,8 @@ func (s *session) LoadOptions(opt SourceOptions) error {
 }
 
 func (s *session) audit(ctx context.Context, sql string) (err error) {
+	s.obCountContext = ctx
+	defer func() { s.obCountContext = nil }()
 
 	sqlList := strings.Split(sql, "\n")
 
@@ -304,8 +307,15 @@ func (s *session) audit(ctx context.Context, sql string) (err error) {
 
 	s.stage = StageCheck
 
+	if s.opt.SingleDML {
+		s.recordSets = NewRecordSets()
+		s.myRecord = &Record{Stage: StageCheck, Buf: new(bytes.Buffer)}
+	}
 	err = s.checkOptions()
 	if err != nil {
+		if s.opt.SingleDML {
+			s.rejectSingleDML(err)
+		}
 		return err
 	}
 
@@ -443,6 +453,15 @@ func (s *session) audit(ctx context.Context, sql string) (err error) {
 		}
 	}
 
+	if s.opt.SingleDML {
+		if s.opt.OBCountCapability {
+			s.proveOBCountCapability()
+			return nil
+		}
+		if _, err := validateSingleDMLRecords(s.recordSets.All()); err != nil {
+			s.rejectSingleDML(err)
+		}
+	}
 	return nil
 
 }
@@ -474,7 +493,7 @@ func (s *session) checkOptions() error {
 
 	// 不再检查密码是否为空
 	if s.opt.Host == "" || s.opt.Port == 0 || s.opt.User == "" {
-		log.Warningf("%#v", s.opt)
+		log.Warningf("invalid source: host=%q port=%d user=%q", s.opt.Host, s.opt.Port, s.opt.User)
 		msg := ""
 		if s.opt.Host == "" {
 			msg += "主机名为空,"
@@ -563,6 +582,9 @@ func (s *session) checkOptions() error {
 	}
 
 	s.mysqlServerVersion()
+	if err := validateSingleDMLOptions(s.opt, s.dbType); err != nil {
+		return err
+	}
 	s.setSqlSafeUpdates()
 	s.setLockWaitTimeout()
 	if s.dbVersion >= 80022 {

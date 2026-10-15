@@ -135,6 +135,8 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 }
 
 func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqlexec.RecordSet, err error) {
+	s.obCountContext = ctx
+	defer func() { s.obCountContext = nil }()
 	log.Debug("executeInc")
 	sqlList := strings.Split(sql, "\n")
 	// tidb执行的SQL关闭general日志
@@ -366,6 +368,13 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					s.executeCommit(ctx)
 					return s.makeResult()
 				default:
+					if s.opt != nil && s.opt.SingleDML {
+						if err := validateSingleDMLStatement(stmtNode); err != nil {
+							s.appendErrorMsg(err.Error())
+							s.recordSets.Append(s.myRecord)
+							return s.makeResult()
+						}
+					}
 					// TiDB原生执行器
 					if !s.haveBegin {
 						istidb, isFlush := s.isRunToTiDB(stmtNode)
@@ -586,6 +595,12 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	currentSql string) ([]sqlexec.RecordSet, error) {
 	log.Debug("processCommand")
 
+	if s.opt != nil && s.opt.SingleDML {
+		if err := validateSingleDMLStatement(stmtNode); err != nil {
+			s.appendErrorMsg(err.Error())
+			return nil, nil
+		}
+	}
 	s.checkAmbiguous = true
 	switch node := stmtNode.(type) {
 	case *ast.InsertStmt:
@@ -774,6 +789,10 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 }
 
 func (s *session) executeCommit(ctx context.Context) {
+	if s.opt != nil && s.opt.SingleDML {
+		s.executeSingleDML(ctx)
+		return
+	}
 
 	if s.opt.Check || s.opt.Print || s.opt.Masking || !s.opt.Execute || s.opt.split {
 		return
@@ -2126,12 +2145,25 @@ func (s *session) modifyBinlogFormatRow() {
 
 // 设置超时时间
 func (s *session) modifyWaitTimeout() {
-	if s.inc.WaitTimeout <= 0 {
+	var waitTimeout int
+	if s.opt != nil && s.opt.WaitTimeout > 0 {
+		waitTimeout = s.opt.WaitTimeout
+	} else if s.inc.WaitTimeout > 0 {
+		waitTimeout = s.inc.WaitTimeout
+	}
+	if waitTimeout <= 0 {
 		return
 	}
 	log.Debug("modifyWaitTimeout")
 
-	sql := fmt.Sprintf("set session wait_timeout=%d;", s.inc.WaitTimeout)
+	var sql string
+	if s.dbType == DBTypeOceanBase && s.opt != nil && s.opt.WaitTimeout > 0 {
+		obTimeoutUs := int64(waitTimeout) * 1000000
+		sql = fmt.Sprintf("set session wait_timeout=%d, ob_query_timeout=%d, ob_trx_timeout=%d;",
+			waitTimeout, obTimeoutUs, obTimeoutUs)
+	} else {
+		sql = fmt.Sprintf("set session wait_timeout=%d;", waitTimeout)
+	}
 
 	if _, err := s.exec(sql, true); err != nil {
 		log.Errorf("con:%d %v", s.sessionVars.ConnectionID, err)
@@ -2349,7 +2381,9 @@ func (s *session) parseOptions(sql string) {
 	viper.SetConfigType("yaml")
 	err := viper.ReadConfig(bytes.NewBuffer([]byte(opt)))
 	if err != nil {
-		log.Errorf("con:%d, config: %s, parsed: %#v (err: %v)", s.sessionVars.ConnectionID, opt, viper.AllSettings(), err)
+		log.Errorf("con:%d invalid source options: %v", s.sessionVars.ConnectionID, err)
+		s.appendErrorMsg("Invalid source options: " + err.Error())
+		return
 	}
 
 	// 设置默认值
@@ -2380,7 +2414,13 @@ func (s *session) parseOptions(sql string) {
 		split:        viper.GetBool("split"),
 		RealRowCount: viper.GetBool("realRowCount"),
 
-		MaxExecutionTime: viper.GetInt("maxExecutionTime"),
+		MaxExecutionTime:  viper.GetInt("maxExecutionTime"),
+		WaitTimeout:       viper.GetInt("waitTimeout"),
+		SingleDML:         viper.GetBool("singleDml"),
+		OBCountProtection: viper.GetBool("obCountProtection"),
+		OBCountTimeout:    viper.GetInt("obCountTimeout"),
+		OBCountCapability: viper.GetBool("obCountCapability"),
+		obCountTimeoutSet: viper.IsSet("obCountTimeout"),
 
 		db: viper.GetString("db"),
 
@@ -2392,6 +2432,58 @@ func (s *session) parseOptions(sql string) {
 
 		// 开启事务功能，设置一次提交多少记录
 		tranBatch: viper.GetInt("trans"),
+	}
+
+	for _, option := range []struct {
+		name string
+		dest *bool
+	}{
+		{"obCountProtection", &s.opt.OBCountProtection},
+		{"obCountCapability", &s.opt.OBCountCapability},
+	} {
+		if viper.IsSet(option.name) {
+			value, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get(option.name))))
+			if err != nil {
+				s.appendErrorMsg("ob_count_invalid_option: " + option.name)
+				return
+			}
+			*option.dest = value
+		}
+	}
+	if viper.IsSet("obCountTimeout") {
+		value, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(viper.Get("obCountTimeout"))))
+		if err != nil {
+			s.appendErrorMsg("ob_count_invalid_integer_option")
+			return
+		}
+		s.opt.OBCountTimeout = value
+	}
+
+	if viper.IsSet("singleDml") {
+		mode, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get("singleDml"))))
+		if err != nil {
+			s.appendErrorMsg("single_dml_invalid_option")
+			return
+		}
+		s.opt.SingleDML = mode
+	}
+	if s.opt.SingleDML {
+		for _, option := range []struct {
+			name string
+			dest *int
+		}{
+			{"waitTimeout", &s.opt.WaitTimeout},
+			{"trans", &s.opt.tranBatch},
+		} {
+			if viper.IsSet(option.name) {
+				value, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(viper.Get(option.name))))
+				if err != nil {
+					s.appendErrorMsg("single_dml_invalid_integer_option: " + option.name)
+					return
+				}
+				*option.dest = value
+			}
+		}
 	}
 
 	if s.opt.split || s.opt.Check || s.opt.Print || s.opt.Masking {
@@ -2407,7 +2499,7 @@ func (s *session) parseOptions(sql string) {
 	}
 
 	if err := s.checkOptions(); err != nil {
-		log.Errorf("con:%d, config: %s, parsed: %#v (err: %v)", s.sessionVars.ConnectionID, opt, viper.AllSettings(), err)
+		log.Errorf("con:%d source validation failed: %v", s.sessionVars.ConnectionID, err)
 		s.appendErrorMsg(err.Error())
 	}
 }
@@ -8928,9 +9020,15 @@ func (s *session) explainOrAnalyzeSql(sql string) {
 	// 	return
 	// }
 
-	sqlId, ok := s.checkFingerprint(sql)
-	if ok {
-		return
+	// Fingerprints must not bypass the protected COUNT for this actual predicate.
+	protectedCount := s.protectedOBCount()
+	var sqlId string
+	if !protectedCount {
+		var ok bool
+		sqlId, ok = s.checkFingerprint(sql)
+		if ok {
+			return
+		}
 	}
 
 	if s.opt.RealRowCount {
@@ -8946,7 +9044,11 @@ func (s *session) explainOrAnalyzeSql(sql string) {
 				s.appendErrorMsg(err.Error())
 			} else {
 				sql = rw.select2Count()
-				s.getRealRowCount(sql, sqlId)
+				if protectedCount {
+					s.getProtectedOBRowCount(sql)
+				} else {
+					s.getRealRowCount(sql, sqlId)
+				}
 			}
 		}
 		return
