@@ -9,6 +9,16 @@
 
 ---
 
+## 2026-10-16 — v1.3.5-ob-single-dml.1
+
+用户批准将 `test/ob-session-timeout` 快进合入实际工作分支 `production`，推送目标为 `origin`（`naughtyGitCat/goInception`），不修改参考分支 `master`。
+
+- 代码 `200751ad`：默认关闭的 `--single-dml` 安全模式，单 mutation、专用连接、会话超时、真实 COUNT 保护与无自动重发；COUNT 使用 WEAK/follower_first，mutation 使用 STRONG。
+- 证据 `a28ca756`：Homelab 验收记录。用户确认 #30 结项；真实调用方暂停/DBA通知及 HTTP DDL 完整链留到线上测试，结项不代表这两项已通过。
+- 本次发布前回归：`go test -vet=off ./session -run 'Test(SingleDML|OBCount)' -count=1`、`go test ./parser ./ast` 和 `go build` 通过。session 默认 vet 的历史 unreachable 问题未在本次修改，故该轮显式关闭 vet，不能宣称全包 vet 通过。
+- 本次仅合并、版本标记和推送，不替换生产服务、不启用 Orchestrator 灰度；旧 MySQL、DDL 及非 single-dml 路径保持原契约。
+- 版本沿用 Makefile 的 `git describe --tags` 注入机制，以 `v1.3.5-ob-single-dml.1` 标记此候选版本，历史 tag 保留。
+
 ## Fork 模型
 
 本 fork 是 `hanchuanchuan/goInception` 的下游，**不是任何其他 fork 的下游**。`production` 分支基于 hanchuanchuan/master，按需从多个活跃 fork 挑选 commit 加上自己的 patch。
