@@ -19,6 +19,39 @@
 - 本次仅合并、版本标记和推送，不替换生产服务、不启用 Orchestrator 灰度；旧 MySQL、DDL 及非 single-dml 路径保持原契约。
 - 版本沿用 Makefile 的 `git describe --tags` 注入机制，以 `v1.3.5-ob-single-dml.1` 标记此候选版本，历史 tag 保留。
 
+## Linux amd64 编译与版本核验
+
+在仓库根目录、实际工作分支 `production` 上编译。推荐使用已有 Makefile，自动注入版本、commit、分支、构建时间和 Go 版本：
+
+```bash
+GOOS=linux GOARCH=amd64 make server TARGET=goInception
+```
+
+Makefile 的 `GOBUILD` 已设置 `CGO_ENABLED=0`。产物为仓库根目录的 `goInception`，此命令只编译，不上传、不重启服务。
+
+如需直接调用 `go build`，必须显式传入版本注入参数；裸 `go build` 不会自动填写 `-V` 展示的变量，输出会是 `None`：
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+  -ldflags "\
+-X 'github.com/hanchuanchuan/goInception/mysql.TiDBReleaseVersion=$(git describe --tags --dirty)' \
+-X 'github.com/hanchuanchuan/goInception/util/printer.TiDBGitHash=$(git rev-parse HEAD)' \
+-X 'github.com/hanchuanchuan/goInception/util/printer.TiDBGitBranch=$(git branch --show-current)' \
+-X 'github.com/hanchuanchuan/goInception/util/printer.TiDBBuildTS=$(date -u '+%Y-%m-%d %H:%M:%S')' \
+-X 'github.com/hanchuanchuan/goInception/util/printer.GoVersion=$(go version)'" \
+  -o goInception tidb-server/main.go
+```
+
+直接编译命令的构建时间使用 UTC；现有 Makefile 使用构建机本地时间，若需要 UTC 可在 Makefile 命令前加 `TZ=UTC`。
+
+将 Linux 二进制复制到目标 Linux 机器后核验（macOS 不能直接运行此交叉编译产物）：
+
+```bash
+./bin/goInception -V
+```
+
+确认五项均非 `None`，commit 与候选源码一致、分支为 `production`。版本由 `git describe --tags --dirty` 生成：精确 tag 上是 `v1.3.5-ob-single-dml.1`；其后提交会带提交距离/hash，工作区有修改会带 `-dirty`，不得将 dirty 制品误记为干净 tag 制品。临时回归中的裸 `go build` 仅证明可编译，不是带发布元数据的制品。
+
 ## Fork 模型
 
 本 fork 是 `hanchuanchuan/goInception` 的下游，**不是任何其他 fork 的下游**。`production` 分支基于 hanchuanchuan/master，按需从多个活跃 fork 挑选 commit 加上自己的 patch。
