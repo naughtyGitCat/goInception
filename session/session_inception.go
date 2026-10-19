@@ -5942,7 +5942,7 @@ func (s *session) mysqlCheckField(t *TableInfo, field *ast.ColumnDef, alterTable
 	// } else if field.Tp.Tp == mysql.TypeJSON {
 	// 	s.appendErrorNo(ErrJsonTypeSupport, field.Name.Name)
 	// }
-	if !notNullFlag && !hasGenerated {
+	if !notNullFlag && !hasGenerated && !types.IsTypeBlob(field.Tp.Tp) && field.Tp.Tp != mysql.TypeJSON {
 		if isPrimary {
 			return
 		}

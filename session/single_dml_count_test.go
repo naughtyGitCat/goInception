@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"github.com/hanchuanchuan/goInception/ast"
 	"github.com/hanchuanchuan/goInception/parser"
 	"github.com/percona/go-mysql/query"
 	"io"
@@ -307,6 +308,47 @@ func TestOBCountAdditionalResultSetsFailClosed(t *testing.T) {
 		s.executeSingleDML(context.Background())
 		if r.ErrLevel != 2 || state.mutations != 0 || state.connections != 1 {
 			t.Fatalf("extra result accepted: level=%d mutations=%d", r.ErrLevel, state.mutations)
+		}
+	}
+}
+
+func TestBlobTextJsonNullableWhenEnableNullableFalse(t *testing.T) {
+	p := parser.New()
+	stmtNode, err := p.ParseOneStmt(`CREATE TABLE t_cap (
+		id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'pk',
+		title VARCHAR(64) DEFAULT NULL COMMENT 'nullable varchar should fail',
+		description TEXT DEFAULT NULL COMMENT 'nullable text allowed',
+		payload LONGTEXT NULL COMMENT 'nullable longtext allowed',
+		raw_blob BLOB NULL COMMENT 'nullable blob allowed',
+		meta_json JSON DEFAULT NULL COMMENT 'nullable json allowed'
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='test'`, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	createStmt := stmtNode.(*ast.CreateTableStmt)
+
+	s := NewInception()
+	s.init()
+	s.inc.EnableNullable = false
+	s.inc.EnableBlobType = true
+	s.inc.EnableJsonType = true
+	s.inc.EnableBlobNotNull = true
+	s.initDisableTypes()
+	s.recordSets = NewRecordSets()
+	s.myRecord = &Record{Stage: StageCheck, Buf: new(bytes.Buffer)}
+	tbl := &TableInfo{Name: "t_cap"}
+
+	for _, col := range createStmt.Cols {
+		s.mysqlCheckField(tbl, col, ast.AlterTableOption)
+	}
+
+	got := s.myRecord.Buf.String()
+	if !strings.Contains(got, "Column 'title' in table 't_cap' is not allowed to been nullable.") {
+		t.Fatalf("expected title nullable error, got: %s", got)
+	}
+	for _, allowed := range []string{"description", "payload", "raw_blob", "meta_json"} {
+		if strings.Contains(got, "Column '"+allowed+"' in table 't_cap' is not allowed to been nullable.") {
+			t.Fatalf("unexpected nullable error for %s: %s", allowed, got)
 		}
 	}
 }
