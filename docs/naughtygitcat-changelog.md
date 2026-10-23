@@ -9,6 +9,16 @@
 
 ---
 
+## 2026-10-23 — production `f950cc18` 上线（text/blob 同家族扩容放行）
+
+用户完成构建并替换线上 goInception。`production` 现为 `1a17ede4`，其中代码提交 `f950cc18`，`83c6c8e9` 为测试补充、`1a17ede4` 为文档，两者不改变行为。
+
+- 代码 `f950cc18`：`checkModifyColumn` 的列类型转换审核为 text/blob 家族补上方向判断——同家族扩容（tinytext < text < mediumtext < longtext，blob 同理）放行；缩容、跨家族（text ↔ blob，字符集 vs 二进制不等价）以及与非 LOB 类型互转仍报 `ER_CHANGE_COLUMN_TYPE`（errlevel=1）。动机是 `text -> mediumtext` 这类扩容被误判，导致下游把合法加长 DDL 判为失败（工单 469651190）。
+- 上线前验证（Homelab，真实 MySQL 8.0.45，inception 块经 MySQL 协议整块发送）：`text -> mediumtext`、`blob -> longblob` 告警消失且 `--execute=1` 执行成功；`mediumtext -> text`、`text -> blob`、`varchar(100) -> text` 仍 errlevel=1。另在 `upstream/master` 基线上编译了改动前后的两个二进制做同款对照，结果一致。
+- 线上尚未复验：失败工单 469651190 重新提交后的审核结果、以及缩容/跨家族方向在线上配置下的实际表现。
+- 配置前提：`enable_blob_type` 必须为 true（默认 false），否则 text/blob 家族在更早的 `initDisableTypes()` 阶段就被 `ER_INVALID_DATA_TYPE` 拦下，走不到本次的类型转换审核。
+- 本次未打新 tag，`git describe --tags` 为 `v1.3.5-ob-single-dml.1-5-g1a17ede4`，随构建点不同而变。同时向上游 `hanchuanchuan/goInception` 提了 PR #721（分支 `fix/text-blob-type-change-order`，基于 `upstream/master`），与线上这版是两条独立的线。
+
 ## 2026-10-16 — v1.3.5-ob-single-dml.1
 
 用户批准将 `test/ob-session-timeout` 快进合入实际工作分支 `production`，推送目标为 `origin`（`naughtyGitCat/goInception`），不修改参考分支 `master`。
