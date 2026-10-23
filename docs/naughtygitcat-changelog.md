@@ -144,6 +144,19 @@ OceanBase 团队在自己 fork 的 `Integration` 分支上做的 OB 增强，按
 - **SUBPARTITION TEMPLATE** —— 与 production 的 `parser.y` 中 `Expression` / `PredicateExpr` 优先级链产生 shift/reduce 冲突，goyacc 默认 `AllowConflicts: false` 直接拒绝。要 port 得整体同步 OB 的 expression 优先级声明，工作量超 cherry-pick 范畴。
 - **WITH COLUMN GROUP 的部分测试** —— Round 4 中 5 条纯 column group 测试，因 HEAD 已有自己的 column group 实现（`ColumnGroupOption{Tp: ColumnGroupOptionType}` + `WithColumnGroupOpt`）与 OB 的（`ColumnGroupOption{Items: []ColumnGroupType}` + `ColumnGroupOpt`）AST/grammar 都冲突，且 HEAD Restore 输出 `WITH COLUMN GROUP (...)` 比 OB 期待多一个空格，未引入。功能上 HEAD 能 parse 该语法，仅 round-trip 格式不一致。
 
+### 上游状态复查（2026-10-23）
+
+以 `git ls-remote oceanbase` 为准（不看本地缓存）：`Integration` 仍是 `95c8f822`（2026-05-27），即 Round 4 的同步点，无新增提交；`oceanbase/master` 是纯上游 `cfb88db9`，不含 OB 内容。
+
+唯一有新增的是旁支 `check-offline-ddl-err-message`：从共同祖先 `b8c391f4` 分出，落后 Integration 一个提交，另有 2 个自己未并入 Integration 的提交。
+
+| 提交 | 日期 | 内容 |
+|:--|:--|:--|
+| `77602d78` | 2026-04-20 | 新增配置 `ob_online_ddl_skip_osc`（默认 false），OB 开启后统一跳过 pt-osc/gh-ost |
+| `76080f70` | 2026-04-21 | 改为保守白名单分类器 `session/oceanbase_alter_classifier.go`：仅确认在线的 ALTER 才跳过 OSC，未识别语法保留 OSC；与 `check_offline_ddl` 解耦，另带约 320 行免数据库单测 |
+
+**结论：暂不引入。** 这两个提交上游自己没并进 Integration（4 月提交、5 月的 Integration 更新未包含），开关默认关闭；且与本 fork 的 `7c311f48`（OB online DDL 跳过 pt-osc）语义重叠——我们的 `checkDDLOfflineOperation` 对未知语法是"跳过 OSC"，他们是"保留 OSC"，要采纳就得改线上 DDL 走向。可行性已验证：cherry-pick 到 production 时 `77602d78` 仅 `config/config.go` 一处插入点冲突，`76080f70` 干净合入，`go build` / `go vet` / `gofmt` 均通过。待上游把这两个提交并进 Integration 时再复核。
+
 ### 方法论沉淀
 
 四轮 cherry-pick 过程中提炼的几条经验：
