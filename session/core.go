@@ -133,6 +133,7 @@ func (s *session) init() {
 
 	s.dbType = DBTypeMysql
 	s.dbVersion = 0
+	s.obVersion = oceanbaseVersion{}
 
 	// 自定义审核级别,通过解析config.GetGlobalConfig().IncLevel生成
 	s.parseIncLevel()

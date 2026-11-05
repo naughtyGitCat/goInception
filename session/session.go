@@ -225,6 +225,8 @@ type session struct {
 	dbType int
 	// 数据库版本号
 	dbVersion int
+	// OceanBase完整版本，保留dbVersion的历史主版本语义。
+	obVersion oceanbaseVersion
 
 	// 远程数据库线程ID,在启用备份功能时,用以记录线程ID来解析binlog
 	threadID uint32

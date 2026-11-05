@@ -1939,68 +1939,15 @@ func (s *session) mysqlServerVersion() {
 		}
 	} else {
 		emptyInnodbLargePrefix := true
+		var serverVersion, serverComment string
 		for rows.Next() {
 			rows.Scan(&name, &value)
 
 			switch name {
 			case "version":
-				if strings.Contains(strings.ToLower(value), "mariadb") {
-					s.dbType = DBTypeMariaDB
-				} else if strings.Contains(strings.ToLower(value), "tidb") {
-					s.dbType = DBTypeTiDB
-				} else if strings.Contains(strings.ToLower(value), "oceanbase") {
-					s.dbType = DBTypeOceanBase
-				} else {
-					s.dbType = DBTypeMysql
-				}
-
-				if s.dbType == DBTypeOceanBase {
-					versionStr := strings.Split(value, "-")[2]
-					versionBp := strings.Split(versionStr, "v")[1]
-					versionSeg := strings.Split(versionBp, ".")
-					if len(versionSeg) == 4 {
-						versionStr = fmt.Sprintf("%s%s%s%02s", versionSeg[0], versionSeg[1], versionSeg[2], versionSeg[3])
-						version, err := strconv.Atoi(versionStr)
-						if err != nil {
-							s.appendErrorMsg(err.Error())
-						}
-						s.dbVersion = version
-					} else {
-						s.appendErrorMsg(fmt.Sprintf("无法解析版本号:%s", value))
-					}
-				} else {
-					versionStr := strings.Split(value, "-")[0]
-					versionSeg := strings.Split(versionStr, ".")
-					if len(versionSeg) == 3 {
-						versionStr = fmt.Sprintf("%s%02s%02s", versionSeg[0], versionSeg[1], versionSeg[2])
-						version, err := strconv.Atoi(versionStr)
-						if err != nil {
-							s.appendErrorMsg(err.Error())
-						}
-						s.dbVersion = version
-					} else {
-						s.appendErrorMsg(fmt.Sprintf("无法解析版本号:%s", value))
-					}
-				}
-
-				// OverWrite version num when connect to OceanBase
-				if s.dbType == DBTypeOceanBase {
-					versionNum := strings.Split(value, "-")[2]
-					if len(versionNum) > 0 {
-						version, _ := strconv.Atoi(versionNum[1:2])
-						s.dbVersion = version
-					}
-				}
-				log.Debug("db version: ", s.dbVersion)
+				serverVersion = value
 			case "version_comment":
-				if strings.Contains(strings.ToLower(value), "oceanbase") {
-					s.dbType = DBTypeOceanBase
-					versionNum := strings.Split(value, " ")[1]
-					if len(versionNum) > 0 {
-						value, _ := strconv.Atoi(versionNum[:1])
-						s.dbVersion = value
-					}
-				}
+				serverComment = value
 			case "innodb_large_prefix":
 				emptyInnodbLargePrefix = false
 				s.innodbLargePrefix = (value == "ON" || value == "1")
@@ -2037,6 +1984,9 @@ func (s *session) mysqlServerVersion() {
 				}
 			}
 		}
+
+		s.setServerVersion(serverVersion, serverComment)
+		log.Debug("db version: ", s.dbVersion)
 
 		// 如果没有innodb_large_prefix系统变量
 		if emptyInnodbLargePrefix {
@@ -4853,21 +4803,11 @@ func (s *session) checkDDLOfflineOperation(node *ast.AlterTableStmt, t *TableInf
 			}
 		case ast.AlterTableAddColumns:
 			for _, nc := range alter.NewColumns {
-				for _, op := range nc.Options {
-					switch op.Tp {
-					case ast.ColumnOptionAutoIncrement:
-						OfflineSpecs++
-					case ast.ColumnOptionGenerated:
-						OfflineSpecs++
-					default:
-						OnlineSpecs++
-					}
+				if classifyOceanBaseAddColumn(s.obVersion, nc, alter.Position) == oceanbaseAddOnline {
+					OnlineSpecs++
+				} else {
+					OfflineSpecs++
 				}
-			}
-			if alter.Position.Tp != ast.ColumnPositionNone && s.dbVersion < 42500 {
-				OfflineSpecs++
-			} else {
-				OnlineSpecs++
 			}
 		case ast.AlterTableDropColumn:
 			OfflineSpecs++
@@ -6432,11 +6372,29 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			s.checkKeyWords(nc.Name.Name.O)
 			s.mysqlCheckField(t, nc, c.Tp)
 			s.checkAlterTableAutoIncrement(c)
+			if s.dbType == DBTypeOceanBase && s.inc.CheckOfflineDDL {
+				switch classifyOceanBaseAddColumn(s.obVersion, nc, c.Position) {
+				case oceanbaseAddAutoIncrement:
+					s.appendErrorNo(ER_CANT_ADD_AUTO_INCREMENT_COLUMN, nc.Name.Name.String())
+				case oceanbaseAddStored:
+					s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN, nc.Name.Name.String())
+				case oceanbaseAddUnknownPosition:
+					position := "unknown"
+					switch c.Position.Tp {
+					case ast.ColumnPositionFirst:
+						position = "FIRST"
+					case ast.ColumnPositionAfter:
+						position = "AFTER"
+					case ast.ColumnPositionBefore:
+						position = "BEFORE"
+					}
+					s.appendErrorMsgf("Cannot confirm Online ADD COLUMN '%s.%s' %s on OceanBase %d.%d.%d.%d.",
+						t.Name, nc.Name.Name, position, s.obVersion.major, s.obVersion.minor, s.obVersion.patch, s.obVersion.revision)
+				}
+			}
 			if !s.hasError() {
 				isPrimary := false
 				isUnique := false
-				var isStore *bool
-				isAutoIncrement := false
 				for _, op := range nc.Options {
 					switch op.Tp {
 					case ast.ColumnOptionPrimaryKey:
@@ -6453,33 +6411,6 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 									}
 								}
 							}
-						}
-					case ast.ColumnOptionGenerated:
-						isStore = &op.Stored
-					case ast.ColumnOptionAutoIncrement:
-						isAutoIncrement = true
-					}
-				}
-
-				// OceanBase offline DDL 检查（来自 oceanbase/Integration b3bf3198）
-				if s.inc.CheckOfflineDDL && isAutoIncrement {
-					if s.dbType == DBTypeOceanBase {
-						if s.dbVersion == 3 {
-							// Do Nothing, It's OnLine DDL under 3.x
-						} else if s.dbVersion == 4 {
-							s.appendErrorNo(ER_CANT_ADD_AUTO_INCREMENT_COLUMN)
-							break
-						}
-					}
-				}
-
-				if s.inc.CheckOfflineDDL && isStore != nil && *isStore {
-					if s.dbType == DBTypeOceanBase {
-						if s.dbVersion == 3 {
-							// Do Nothing, It's OnLine DDL under 3.x
-						} else if s.dbVersion == 4 {
-							s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN)
-							break
 						}
 					}
 				}
@@ -6570,16 +6501,7 @@ func (s *session) checkAddColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			}
 
 			if c.Position != nil && c.Position.Tp != ast.ColumnPositionNone {
-				if s.dbType == DBTypeOceanBase {
-					if s.dbVersion == 3 {
-						// Do Nothing, It's OnLine DDL under 3.x
-					} else if s.dbVersion == 4 {
-						s.appendErrorNo(ER_CANT_ADD_STORED_GENERATED_COLUMN)
-						break
-					}
-				} else {
-					s.appendErrorNo(ErCantChangeColumnPosition)
-				}
+				s.appendErrorNo(ErCantChangeColumnPosition, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name))
 			}
 
 			if s.opt.Execute {
