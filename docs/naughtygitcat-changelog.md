@@ -9,6 +9,16 @@
 
 ---
 
+## 2026-11-05 — v1.3.7-ob-add-position.1（production 合并候选，未部署）
+
+将 `fix/ob-add-column-position` 的代码提交 `4118e669` 快进合入实际工作分支 `production`，推送目标为 GitHub `origin`；参考分支 `master` 不变。沿用 Makefile 的 `git describe --tags` 注入机制，以注解 tag `v1.3.7-ob-add-position.1` 标记本次候选版本，历史 tag 保留。
+
+- 修复普通 `ADD COLUMN FIRST/AFTER` 被误报为 STORED：按 AST 分开普通列、VIRTUAL、真实 STORED 与 AUTO_INCREMENT，ADD 审核和 Online/Offline 分类共用判定；通用位置策略独立受 `check_column_position_change` 控制，真实 Offline 保护仍受 `check_offline_ddl` 控制，错误文案补全列名。
+- OceanBase 完整版本与历史 `dbVersion` 大版本分域，版本探测不再依赖返回行顺序，会话初始化清零；无法解析的 OB 版本拒绝继续审核。位置能力仅确认 OB 3.x 历史行为及文档对应的 4.2.5、4.3.5、4.5.0 版本线，未确认版本及 BEFORE 不推断为 Online。前序位置 warning 不得遮蔽后续真实 Offline 风险。
+- 验证：专项61顶层+135子测试全通过、0skip；真实 OB 4.5.0.0 同SQL旧版level2误报、新版level0，千行 FIRST/AFTER 新列依赖/同锚点/VIRTUAL及数据、默认值、列序、table_id验收通过。4.2.5/4.3.5仅有官方文档和纯回归证据，不宣称实际内核验收。
+- 完整隔离 MySQL 5.7.21 native 测试通过：每轮228个 suite 方法、12个包装重复执行，coverage67.2%。API 16个独立失败（coverage63.9%）在未改基线 `61724c80` 同环境完整重现，全部192个失败块断言签名及次数相同；其中禁用类型初始化缺口是既存服务问题，不当作纯断言问题，也未混修。非session默认测试的4个失败及static问题亦已核实为既存；不能宣称全仓全绿。real TiKV、race、leak未运行。
+- 本次仅合并、版本标记和推送，不上传或重启公司 goInception，不改变 Orchestrator/autowork 的配置、灰度或账号，不重放原工单。先前 homelab 验收 binary 带基线 dirty 元数据，不冒充此干净 tag 的制品。
+
 ## 2026-10-23 — v1.3.6-ob-lob-type.1（production `f950cc18` 上线）
 
 用户完成构建并替换线上 goInception。`production` 现为 `1a17ede4`，其中代码提交 `f950cc18`，`83c6c8e9` 为测试补充、`1a17ede4` 为文档，两者不改变行为。
