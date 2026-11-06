@@ -26,7 +26,7 @@
 
 - 代码 `f950cc18`：`checkModifyColumn` 的列类型转换审核为 text/blob 家族补上方向判断——同家族扩容（tinytext < text < mediumtext < longtext，blob 同理）放行；缩容、跨家族（text ↔ blob，字符集 vs 二进制不等价）以及与非 LOB 类型互转仍报 `ER_CHANGE_COLUMN_TYPE`（errlevel=1）。动机是 `text -> mediumtext` 这类扩容被误判，导致下游把合法加长 DDL 判为失败（工单 469651190）。
 - 上线前验证（Homelab，真实 MySQL 8.0.45，inception 块经 MySQL 协议整块发送）：`text -> mediumtext`、`blob -> longblob` 告警消失且 `--execute=1` 执行成功；`mediumtext -> text`、`text -> blob`、`varchar(100) -> text` 仍 errlevel=1。另在 `upstream/master` 基线上编译了改动前后的两个二进制做同款对照，结果一致。
-- 线上尚未复验：失败工单 469651190 重新提交后的审核结果、以及缩容/跨家族方向在线上配置下的实际表现。
+- 线上复验（2026-10-26，`10.104.17.136:4000`，只读 `--check=1`，目标库 `10.104.0.128:4306/kefu_ticket_agents_test`）：工单原文 `text -> mediumtext` errlevel=0；同列 `text -> text` 对照 errlevel=0；跨家族 `text -> blob` errlevel=1；缩容 `mediumtext -> text` errlevel=1。四项都拿不到 `ER_INVALID_DATA_TYPE`，反证线上 `enable_blob_type` 确实生效。失败工单 469651190 本身尚未重新提交（日志最后一条 `2026-10-22 21:02:32` 为 DBA 驳回），autowork 按 `(flowId, version)` 去重，需要改版重新提交才会再调一次 goInception。
 - 配置前提：`enable_blob_type` 必须为 true（默认 false），否则 text/blob 家族在更早的 `initDisableTypes()` 阶段就被 `ER_INVALID_DATA_TYPE` 拦下，走不到本次的类型转换审核。
 - 版本：上线构建时尚未打 tag，二进制内 `git describe` 为 `v1.3.5-ob-single-dml.1-5-g1a17ede4`（随构建点变化）；随后在记录提交上补打注解 tag `v1.3.6-ob-lob-type.1` 作为该版本标记。同时向上游 `hanchuanchuan/goInception` 提了 PR #721（分支 `fix/text-blob-type-change-order`，基于 `upstream/master`），与线上这版是两条独立的线。
 
