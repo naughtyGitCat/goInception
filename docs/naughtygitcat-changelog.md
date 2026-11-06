@@ -9,15 +9,16 @@
 
 ---
 
-## 2026-11-05 — v1.3.7-ob-add-position.1（production 合并候选，未部署）
+## 2026-11-05～11-06 — v1.3.7-ob-add-position.1（用户确认已部署生产）
 
-将 `fix/ob-add-column-position` 的代码提交 `4118e669` 快进合入实际工作分支 `production`，推送目标为 GitHub `origin`；参考分支 `master` 不变。沿用 Makefile 的 `git describe --tags` 注入机制，以注解 tag `v1.3.7-ob-add-position.1` 标记本次候选版本，历史 tag 保留。
+2026-11-05 将 `fix/ob-add-column-position` 的修复提交 `4118e669` 快进合入实际工作分支 `production`，版本说明提交为 `bdbc39a9fdfd608ac8b1b0b090b2ffa66eec59fd`；注解 tag `v1.3.7-ob-add-position.1` 与 `origin/production` 已推送并回读核验，参考分支 `master` 不变。2026-11-06 用户确认新版本已部署到生产环境；此为用户报告，尚未独立核对线上运行版本/hash、当前日志或新工单审核结果，不能记为生产效果验收完成。
 
-- 修复普通 `ADD COLUMN FIRST/AFTER` 被误报为 STORED：按 AST 分开普通列、VIRTUAL、真实 STORED 与 AUTO_INCREMENT，ADD 审核和 Online/Offline 分类共用判定；通用位置策略独立受 `check_column_position_change` 控制，真实 Offline 保护仍受 `check_offline_ddl` 控制，错误文案补全列名。
-- OceanBase 完整版本与历史 `dbVersion` 大版本分域，版本探测不再依赖返回行顺序，会话初始化清零；无法解析的 OB 版本拒绝继续审核。位置能力仅确认 OB 3.x 历史行为及文档对应的 4.2.5、4.3.5、4.5.0 版本线，未确认版本及 BEFORE 不推断为 Online。前序位置 warning 不得遮蔽后续真实 Offline 风险。
-- 验证：专项61顶层+135子测试全通过、0skip；真实 OB 4.5.0.0 同SQL旧版level2误报、新版level0，千行 FIRST/AFTER 新列依赖/同锚点/VIRTUAL及数据、默认值、列序、table_id验收通过。4.2.5/4.3.5仅有官方文档和纯回归证据，不宣称实际内核验收。
-- 完整隔离 MySQL 5.7.21 native 测试通过：每轮228个 suite 方法、12个包装重复执行，coverage67.2%。API 16个独立失败（coverage63.9%）在未改基线 `61724c80` 同环境完整重现，全部192个失败块断言签名及次数相同；其中禁用类型初始化缺口是既存服务问题，不当作纯断言问题，也未混修。非session默认测试的4个失败及static问题亦已核实为既存；不能宣称全仓全绿。real TiKV、race、leak未运行。
-- 本次仅合并、版本标记和推送，不上传或重启公司 goInception，不改变 Orchestrator/autowork 的配置、灰度或账号，不重放原工单。先前 homelab 验收 binary 带基线 dirty 元数据，不冒充此干净 tag 的制品。
+- 修复普通 `ADD COLUMN FIRST/AFTER` 被误报为 STORED：按 AST 区分普通列、VIRTUAL、真实 STORED 与 AUTO_INCREMENT，ADD 审核和 Online/Offline 分类共用判定；通用位置策略独立受 `check_column_position_change` 控制，真实 Offline 保护仍受 `check_offline_ddl` 控制，错误文案包含实际列名。
+- OceanBase 完整版本与历史 `dbVersion` 大版本分域，版本探测不依赖返回行顺序，会话初始化清零；无法解析 OB 版本时拒绝继续审核。保留 OB 3.x 历史行为；普通 FIRST/AFTER 的明确支持线为 4.2.5、4.3.5、4.5.0（修订号不限），不外推未确认版本或 BEFORE。前序位置 warning 不再遮蔽后续真实 Offline 风险。
+- 验证：专项61顶层+135子测试全通过、0skip；真实 OB 4.5.0.0 同SQL旧版level2误报、新版level0，千行 FIRST/AFTER 新列依赖/同锚点/VIRTUAL及数据、默认值、列序、table_id验收通过。4.2.5/4.3.5仅有官方文档和纯回归证据，不宣称真实内核验收；Online 不等于瞬时或不重写数据。
+- 完整隔离 MySQL 5.7.21 native 测试通过：228个独立 suite 方法、12个包装重复执行，coverage67.2%。API 16个独立失败（coverage63.9%）在未改基线 `61724c80` 同环境完整重现，全部192个失败块断言签名及次数相同；其中禁用类型初始化缺口是真实既存服务问题，未混修。非session默认测试4个失败及static问题亦已确认既存；不宣称全仓全绿。real TiKV、race、leak未运行。
+- [GitHub Release](https://github.com/naughtyGitCat/goInception/releases/tag/v1.3.7-ob-add-position.1) 已附 Linux amd64 静态二进制 `goInception-v1.3.7-ob-add-position.1-linux-amd64`（70,223,377 bytes）及 `SHA256SUMS`。二进制 SHA256 为 `204ab0fab8fa51b60e918fa318ed13fb82e8b6da5acf8dee309742e8167d6bfc`，GitHub API资产digest与本地一致；Linux实际 `-V` 冒烟确认新tag、完整bdbc39a9提交与production，不带dirty。先前隔离内核/完整集成测试使用相同修复源码，不冒充全部测试在该发布二进制上再次执行。
+- 助手未执行生产部署/重启、修改配置/账号/灰度或重放原工单。原 DDL 已由用户手工执行，后续应以新测试场景验收，不能直接整单重提；用户手工执行结果尚未独立核验。历史版本与其当时状态保留，不以旧“未部署”描述覆盖当前用户确认。
 
 ## 2026-10-23 — v1.3.6-ob-lob-type.1（production `f950cc18` 上线）
 
