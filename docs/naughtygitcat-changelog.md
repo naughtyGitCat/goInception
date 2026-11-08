@@ -9,6 +9,15 @@
 
 ---
 
+## 2026-11-08 — v1.3.8-manual-ddl-ast.1（候选版本，尚未部署）
+
+- 新增 opt-in `--enable-query-print-v1`，复用现有 parser 输出版本化、camelCase 类型摘要、稳定动作、对象引用及 exact SQL SHA-256；旧 PRINT 五列与原始 AST 不变。成功 final commit 才输出 batchEnd；解析/来源/部分响应、parser warning 和未覆盖结构保守拒绝，execute/backup 强制关闭。
+- 支持正常单表定义及窄 ALTER，包括 MEDIUMTEXT CHARACTER SET/COLLATE；TRUNCATE 与 DROP STATS 明确区分。补遍历 AST Accept 遗漏的列 REFERENCES 和表选项引用，不靠 SQL 禁词、原 AST 字段形状或内部数字枚举授权。
+- Orchestrator 0.1.8 消费该契约，PRINT 与同原句/目标 CHECK 严格配对，锁内执行前重验；未知/旧 Go 明确拒绝。发布应先 Go、后 Orchestrator，不自动部署或变更权限。
+- 验证：离线 race 72顶层+192子用例=264 pass，AST/parser、CGO0 build 及本机/Linux冒烟通过；homelab 20协议用例与33条HTTP断言、真实Meta/Go/新任务库/RPC/OB业务租户CREATE链通过，双start只1mutation，终态不重放，夹具/临时监听已清理。existing ALTER仍因审核视图SELECT不足被CHECK拒绝，未GRANT，不冒充TEXT扩容通过。
+- 全 session-short 未绿：既有源初始化拒绝后的 audit defer nil panic，由无网络空host对照在基线7b1fd580与当前代码四路径复现；不是完整套件同环境基线复跑，仍明确保留完整测试失败。未改无关测试/环境、未启动localhost数据库。
+- 契约与可执行fixture见 [AST v1说明](./manual-ddl-ast-contract-v1.md)；本轮集成原始证据在 `/tmp/manual-ddl-ast-integration-20261108/`，Orchestrator根docs附脱敏真实链JSON。候选标记不等于线上运行版本，本次不操作生产服务或五表DDL。
+
 ## 2026-11-05～11-06 — v1.3.7-ob-add-position.1（用户确认已部署生产）
 
 2026-11-05 将 `fix/ob-add-column-position` 的修复提交 `4118e669` 快进合入实际工作分支 `production`，版本说明提交为 `bdbc39a9fdfd608ac8b1b0b090b2ffa66eec59fd`；注解 tag `v1.3.7-ob-add-position.1` 与 `origin/production` 已推送并回读核验，参考分支 `master` 不变。2026-11-06 用户确认新版本已部署到生产环境；此为用户报告，尚未独立核对线上运行版本/hash、当前日志或新工单审核结果，不能记为生产效果验收完成。

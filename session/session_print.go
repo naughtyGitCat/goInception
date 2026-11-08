@@ -5,6 +5,7 @@
 package session
 
 import (
+	standardJSON "encoding/json"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -21,7 +22,17 @@ func (s *session) printCommand(ctx context.Context, stmtNode ast.StmtNode,
 	log.Debug("printCommand")
 
 	// b, err := json.MarshalIndent(stmtNode, "", "  ")
-	tree, err := json.Marshal(stmtNode)
+	var tree []byte
+	var err error
+	if s.opt != nil && s.opt.QueryPrintV1 {
+		summary := summarizeQueryPrintV1(stmtNode, currentSql)
+		if s.queryPrintV1ParseWarnings {
+			summary.Complete = false
+		}
+		tree, err = standardJSON.Marshal(summary)
+	} else {
+		tree, err = json.Marshal(stmtNode)
+	}
 	if err != nil {
 		log.Error(err)
 		s.printSets.Append(2, currentSql, "", err.Error())

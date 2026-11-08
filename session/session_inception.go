@@ -243,7 +243,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 
 			}
 
-			for i, stmtNode := range stmtNodes {
+			for stmtIndex, stmtNode := range stmtNodes {
 				//  是ASCII码160的特殊空格
 				currentSql := strings.Trim(stmtNode.Text(), " ;\t\n\v\f\r ")
 
@@ -322,6 +322,10 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					s.initDisableTypes()
 					continue
 				case *ast.InceptionCommitStmt:
+					if s.opt != nil && s.opt.QueryPrintV1 && (s.queryPrintV1ParseWarnings || stmtIndex != len(stmtNodes)-1 || strings.TrimSpace(strings.Join(sqlList[i+1:], "\n")) != "") {
+						s.printSets.Append(2, currentSql, "", "query_print_v1_invalid_batch_end")
+						return s.makeResult()
+					}
 					/******* jwx added 将对同一个表的多条alter语句合并成一条 ******/
 					if s.inc.AlterAutoMerge && s.opt.Check && !s.opt.Execute {
 						for _, info := range s.alterTableInfoList {
@@ -365,7 +369,14 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					}
 
 					s.haveCommit = true
-					s.executeCommit(ctx)
+					if s.opt.QueryPrintV1 {
+						// Only the successful commit path may attest that the PRINT batch ended.
+						if _, err := s.printCommand(ctx, stmtNode, "inception_magic_commit"); err != nil {
+							return nil, err
+						}
+					} else {
+						s.executeCommit(ctx)
+					}
 					return s.makeResult()
 				default:
 					if s.opt != nil && s.opt.SingleDML {
@@ -405,7 +416,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 						return s.makeResult()
 					}
 
-					s.SetMyProcessInfo(currentSql, time.Now(), float64(i)/float64(lineCount+1))
+					s.SetMyProcessInfo(currentSql, time.Now(), float64(stmtIndex)/float64(lineCount+1))
 
 					// 交互式命令行
 					if _, ok := stmtNode.(*ast.InceptionSetStmt); !need &&
@@ -2358,8 +2369,9 @@ func (s *session) parseOptions(sql string) {
 
 		fingerprint: viper.GetBool("fingerprint"),
 
-		Print:   viper.GetBool("queryPrint"),
-		Masking: viper.GetBool("masking"),
+		Print:        viper.GetBool("queryPrint"),
+		QueryPrintV1: viper.GetBool("queryPrintV1"),
+		Masking:      viper.GetBool("masking"),
 
 		split:        viper.GetBool("split"),
 		RealRowCount: viper.GetBool("realRowCount"),
@@ -2382,6 +2394,20 @@ func (s *session) parseOptions(sql string) {
 
 		// 开启事务功能，设置一次提交多少记录
 		tranBatch: viper.GetInt("trans"),
+	}
+
+	if viper.IsSet("queryPrintV1") {
+		value, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get("queryPrintV1"))))
+		if err != nil {
+			s.appendErrorMsg("query_print_v1_invalid_option")
+			return
+		}
+		s.opt.QueryPrintV1 = value
+	}
+	if s.opt.QueryPrintV1 {
+		s.opt.Print = true
+		// Normalize before any later option errors or target initialization.
+		s.opt.Execute, s.opt.Backup = false, false
 	}
 
 	for _, option := range []struct {
@@ -2436,6 +2462,9 @@ func (s *session) parseOptions(sql string) {
 		}
 	}
 
+	if s.opt.QueryPrintV1 {
+		s.opt.Print = true
+	}
 	if s.opt.split || s.opt.Check || s.opt.Print || s.opt.Masking {
 		s.opt.Execute = false
 		s.opt.Backup = false

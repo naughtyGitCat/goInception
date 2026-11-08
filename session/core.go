@@ -474,6 +474,9 @@ func (s *session) checkOptions() error {
 		return errors.New("未配置数据源信息!")
 	}
 
+	if s.opt.QueryPrintV1 {
+		s.opt.Print = true
+	}
 	if s.opt.split || s.opt.Check || s.opt.Print {
 		s.opt.Execute = false
 		s.opt.Backup = false

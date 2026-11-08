@@ -145,6 +145,8 @@ type SourceOptions struct {
 
 	// 打印语法树功能
 	Print bool
+	// Opt-in stable, conservative AST wire contract within the five PRINT columns.
+	QueryPrintV1 bool
 	// 语法树v2功能，以列方式返回query涉及的字段列表
 	Masking bool
 

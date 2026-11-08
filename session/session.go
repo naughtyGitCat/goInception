@@ -240,6 +240,8 @@ type session struct {
 
 	// 打印语法树
 	printSets *PrintSets
+	// Warnings apply to the entire last parsed chunk; v1 never attests omitted syntax.
+	queryPrintV1ParseWarnings bool
 
 	// 时间戳类型是否需要明确指定默认值
 	explicitDefaultsForTimestamp bool
@@ -877,7 +879,8 @@ func (s *session) SetGlobalSysVar(name, value string) error {
 func (s *session) ParseSQL(ctx context.Context, sql, charset, collation string) ([]ast.StmtNode, error) {
 	s.parser.SetSQLMode(s.sessionVars.SQLMode)
 	s.parser.EnableWindowFunc(true)
-	stmts, _, err := s.parser.Parse(sql, charset, collation)
+	stmts, warnings, err := s.parser.Parse(sql, charset, collation)
+	s.queryPrintV1ParseWarnings = len(warnings) > 0
 	return stmts, err
 }
 

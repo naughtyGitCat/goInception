@@ -1,0 +1,30 @@
+[
+  {
+    "statement": "USE Shop",
+    "queryTree": {"contractVersion":1,"statementType":"use","sqlSha256":"dadd367fa1c17e73dabdd8ea1a803a7e57802e62b5be182f226c85abb09d89fb","complete":true,"database":"Shop","tables":[],"actions":[]}
+  },
+  {
+    "statement": "ALTER TABLE Orders MODIFY COLUMN Body MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '正文'",
+    "queryTree": {"contractVersion":1,"statementType":"alterTable","sqlSha256":"dc8be02eed9b7a457f15d48aafa86979d6dcc4fdff8c066940ff9b655e1c9343","complete":true,"database":"","tables":[{"role":"target","schema":"","name":"Orders","schemaExplicit":false}],"actions":["modifyColumn"]}
+  },
+  {
+    "statement": "CREATE TABLE Orders (id int NOT NULL, PRIMARY KEY (id))",
+    "queryTree": {"contractVersion":1,"statementType":"createTable","sqlSha256":"1d5d9d164e042b37c798851ffc86420f3877787c1a7ea907e3e14cec93ed0cb9","complete":true,"database":"","tables":[{"role":"target","schema":"","name":"Orders","schemaExplicit":false}],"actions":["createDefinition"]}
+  },
+  {
+    "statement": "TRUNCATE TABLE Orders",
+    "queryTree": {"contractVersion":1,"statementType":"truncateTable","sqlSha256":"2d7d72a11ad36c22b6e62ff6b59bb91a7800cabf804366b6c9777aa5a1ebe21b","complete":true,"database":"","tables":[{"role":"target","schema":"","name":"Orders","schemaExplicit":false}],"actions":["truncateTable"]}
+  },
+  {
+    "statement": "DROP STATS Orders",
+    "queryTree": {"contractVersion":1,"statementType":"dropStats","sqlSha256":"bdad7d194e37aa7762c83106de76d287274af37b543b9f1abc0f33e594d74510","complete":false,"database":"","tables":[{"role":"reference","schema":"","name":"Orders","schemaExplicit":false}],"actions":[]}
+  },
+  {
+    "statement": "CREATE TABLE Orders (id int REFERENCES Other.Seed(id))",
+    "queryTree": {"contractVersion":1,"statementType":"createTable","sqlSha256":"cfc3c48b5dab5e9143a95452cbf81848ef812b2f7bc9b416c63120be689f2e6d","complete":false,"database":"","tables":[{"role":"target","schema":"","name":"Orders","schemaExplicit":false},{"role":"reference","schema":"Other","name":"Seed","schemaExplicit":true}],"actions":["createDefinition"]}
+  },
+  {
+    "statement": "inception_magic_commit",
+    "queryTree": {"contractVersion":1,"statementType":"batchEnd","sqlSha256":"8f56319cc97e33b897875c55d82afb6427cf3ed0d95679e578ebed1f49b3bb26","complete":true,"database":"","tables":[],"actions":[]}
+  }
+]
