@@ -11,26 +11,26 @@ import (
 )
 
 // Wire DTOs only: no parser enums, inferred/default schemas, or persistence fields.
-type queryPrintV1Table struct {
+type queryPrintTable struct {
 	Role           string `json:"role"`
 	Schema         string `json:"schema"`
 	Name           string `json:"name"`
 	SchemaExplicit bool   `json:"schemaExplicit"`
 }
 
-type queryPrintV1Summary struct {
-	ContractVersion int                 `json:"contractVersion"`
-	StatementType   string              `json:"statementType"`
-	SqlSha256       string              `json:"sqlSha256"`
-	Complete        bool                `json:"complete"`
-	Database        string              `json:"database"`
-	Tables          []queryPrintV1Table `json:"tables"`
-	Actions         []string            `json:"actions"`
+type queryPrintSummary struct {
+	ContractVersion int               `json:"contractVersion"`
+	StatementType   string            `json:"statementType"`
+	SqlSha256       string            `json:"sqlSha256"`
+	Complete        bool              `json:"complete"`
+	Database        string            `json:"database"`
+	Tables          []queryPrintTable `json:"tables"`
+	Actions         []string          `json:"actions"`
 }
 
-func summarizeQueryPrintV1(node ast.StmtNode, sql string) queryPrintV1Summary {
-	summary := queryPrintV1Summary{ContractVersion: 1, StatementType: "unknown", SqlSha256: fmt.Sprintf("%x", sha256.Sum256([]byte(sql))), Tables: []queryPrintV1Table{}, Actions: []string{}}
-	v := queryPrintV1Visitor{summary: &summary, roles: make(map[*ast.TableName]string), seen: make(map[*ast.TableName]bool), alterDefaultOptions: make(map[*ast.ColumnOption]bool), alterDefaultColumns: make(map[*ast.ColumnDef]bool)}
+func summarizeQueryPrintSummary(node ast.StmtNode, sql string) queryPrintSummary {
+	summary := queryPrintSummary{ContractVersion: 1, StatementType: "unknown", SqlSha256: fmt.Sprintf("%x", sha256.Sum256([]byte(sql))), Tables: []queryPrintTable{}, Actions: []string{}}
+	v := queryPrintSummaryVisitor{summary: &summary, roles: make(map[*ast.TableName]string), seen: make(map[*ast.TableName]bool), alterDefaultOptions: make(map[*ast.ColumnOption]bool), alterDefaultColumns: make(map[*ast.ColumnDef]bool)}
 	switch n := node.(type) {
 	case *ast.CreateTableStmt:
 		summary.StatementType = "createTable"
@@ -42,7 +42,7 @@ func summarizeQueryPrintV1(node ast.StmtNode, sql string) queryPrintV1Summary {
 		summary.Complete = n.Table != nil && len(n.Specs) > 0
 		v.roles[n.Table] = "target"
 		for _, spec := range n.Specs {
-			action, ok := queryPrintV1AlterAction(spec.Tp)
+			action, ok := queryPrintAlterAction(spec.Tp)
 			summary.Actions = append(summary.Actions, action)
 			if !ok {
 				summary.Complete = false
@@ -81,7 +81,7 @@ func summarizeQueryPrintV1(node ast.StmtNode, sql string) queryPrintV1Summary {
 	return summary
 }
 
-func queryPrintV1AlterAction(tp ast.AlterTableType) (string, bool) {
+func queryPrintAlterAction(tp ast.AlterTableType) (string, bool) {
 	switch tp {
 	case ast.AlterTableAddColumns:
 		return "addColumn", true
@@ -110,15 +110,15 @@ func queryPrintV1AlterAction(tp ast.AlterTableType) (string, bool) {
 	}
 }
 
-type queryPrintV1Visitor struct {
-	summary             *queryPrintV1Summary
+type queryPrintSummaryVisitor struct {
+	summary             *queryPrintSummary
 	roles               map[*ast.TableName]string
 	seen                map[*ast.TableName]bool
 	alterDefaultOptions map[*ast.ColumnOption]bool
 	alterDefaultColumns map[*ast.ColumnDef]bool
 }
 
-func (v *queryPrintV1Visitor) table(n *ast.TableName) {
+func (v *queryPrintSummaryVisitor) table(n *ast.TableName) {
 	if n == nil || v.seen[n] {
 		return
 	}
@@ -128,7 +128,7 @@ func (v *queryPrintV1Visitor) table(n *ast.TableName) {
 		role = "reference"
 		v.summary.Complete = false
 	}
-	v.summary.Tables = append(v.summary.Tables, queryPrintV1Table{Role: role, Schema: n.Schema.O, Name: n.Name.O, SchemaExplicit: n.Schema.O != ""})
+	v.summary.Tables = append(v.summary.Tables, queryPrintTable{Role: role, Schema: n.Schema.O, Name: n.Name.O, SchemaExplicit: n.Schema.O != ""})
 	if n.Name.O == "" || len(n.IndexHints) > 0 || len(n.PartitionNames) > 0 || n.TableSample != nil || n.AsOf != nil {
 		v.summary.Complete = false
 	}
@@ -136,7 +136,7 @@ func (v *queryPrintV1Visitor) table(n *ast.TableName) {
 
 // TableOption and ColumnOption.Refer are omitted by this parser's Accept methods.
 // Traverse them explicitly rather than interpreting serialized trees or SQL text.
-func (v *queryPrintV1Visitor) tableOptions(options []*ast.TableOption) {
+func (v *queryPrintSummaryVisitor) tableOptions(options []*ast.TableOption) {
 	for _, option := range options {
 		if option == nil {
 			v.summary.Complete = false
@@ -160,7 +160,7 @@ func (v *queryPrintV1Visitor) tableOptions(options []*ast.TableOption) {
 	}
 }
 
-func (v *queryPrintV1Visitor) Enter(node ast.Node) (ast.Node, bool) {
+func (v *queryPrintSummaryVisitor) Enter(node ast.Node) (ast.Node, bool) {
 	switch n := node.(type) {
 	case *ast.CreateTableStmt:
 		v.table(n.Table)
@@ -181,7 +181,7 @@ func (v *queryPrintV1Visitor) Enter(node ast.Node) (ast.Node, bool) {
 		if n.NewTable != nil {
 			v.table(n.NewTable)
 		}
-		_, supported := queryPrintV1AlterAction(n.Tp)
+		_, supported := queryPrintAlterAction(n.Tp)
 		if !supported {
 			v.summary.Complete = false
 		}
@@ -244,7 +244,7 @@ func (v *queryPrintV1Visitor) Enter(node ast.Node) (ast.Node, bool) {
 		}
 		switch n.Tp {
 		case ast.ColumnOptionNoOption:
-			if !v.alterDefaultOptions[n] || !queryPrintV1Literal(n.Expr) {
+			if !v.alterDefaultOptions[n] || !queryPrintLiteral(n.Expr) {
 				v.summary.Complete = false
 			}
 		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionNotNull, ast.ColumnOptionAutoIncrement, ast.ColumnOptionUniqKey, ast.ColumnOptionNull, ast.ColumnOptionCollate:
@@ -252,7 +252,7 @@ func (v *queryPrintV1Visitor) Enter(node ast.Node) (ast.Node, bool) {
 				v.summary.Complete = false
 			}
 		case ast.ColumnOptionDefaultValue, ast.ColumnOptionComment:
-			if !queryPrintV1Literal(n.Expr) {
+			if !queryPrintLiteral(n.Expr) {
 				v.summary.Complete = false
 			}
 		default:
@@ -277,7 +277,7 @@ func (v *queryPrintV1Visitor) Enter(node ast.Node) (ast.Node, bool) {
 		}
 	case *ast.ValueExpr:
 	case *ast.UnaryOperationExpr:
-		if !queryPrintV1Literal(n) {
+		if !queryPrintLiteral(n) {
 			v.summary.Complete = false
 		}
 	default:
@@ -286,14 +286,14 @@ func (v *queryPrintV1Visitor) Enter(node ast.Node) (ast.Node, bool) {
 	}
 	return node, false
 }
-func (*queryPrintV1Visitor) Leave(node ast.Node) (ast.Node, bool) { return node, true }
+func (*queryPrintSummaryVisitor) Leave(node ast.Node) (ast.Node, bool) { return node, true }
 
-func queryPrintV1Literal(expr ast.ExprNode) bool {
+func queryPrintLiteral(expr ast.ExprNode) bool {
 	switch n := expr.(type) {
 	case *ast.ValueExpr:
 		return true
 	case *ast.UnaryOperationExpr:
-		return (n.Op == opcode.Plus || n.Op == opcode.Minus) && queryPrintV1Literal(n.V)
+		return (n.Op == opcode.Plus || n.Op == opcode.Minus) && queryPrintLiteral(n.V)
 	default:
 		return false
 	}

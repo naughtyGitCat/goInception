@@ -4,7 +4,9 @@ This opt-in PRINT contract is a structural precheck, not permission to execute S
 
 ## Opt-in and compatibility
 
-`--enable-query-print-v1;` (normalized `queryPrintV1`) enables PRINT and selects v1. `--query-print-v1=1;` is equivalent. Conflicting execute and backup flags are forced false before target initialization. Invalid explicit v1 booleans fail closed. Existing `--enable-query-print` / `--query-print=1` still return the legacy raw AST JSON and no terminal row.
+`--enable-query-print-summary;` (normalized `queryPrintSummary`) enables PRINT and selects the stable AST summary. `--query-print-summary=1;` is equivalent. The format version is carried by `contractVersion: 1`, not the option name. Conflicting execute and backup flags are forced false before target initialization. Invalid explicit summary booleans fail closed. Existing `--enable-query-print` / `--query-print=1` still return the legacy raw AST JSON and no terminal row.
+
+The pre-deployment option name `--enable-query-print-v1` in tag `v1.3.8-manual-ddl-ast.1` was replaced, not retained as an alias. Use Go `v1.3.8-manual-ddl-ast.2` with Orchestrator `0.1.9` for the summary name; Orchestrator `0.1.8` still sends the superseded option and must not be paired with this producer. Publish the matching Go producer first, verify summary output, then publish the matching consumer. Legacy raw PRINT and ordinary CHECK remain compatible.
 
 The five existing PRINT columns remain **id, statement, errlevel, query_tree, errmsg**. IDs are contiguous and start at 1. `query_tree` is a JSON **string column**, encoded by standard Go `encoding/json`; it is not a persisted object blob. Successful `errmsg` remains SQL NULL for legacy shape compatibility. Source/parse error rows may have an empty `query_tree`; their real error must be preserved, never approved.
 
@@ -68,13 +70,13 @@ Raw wrapper protection (comments, magic directives and escaping) stays before su
 
 ## Executable fixtures and local verification
 
-`docs/manual-ddl-ast-contract-v1-fixtures.json` is a shared, credential-free fixture array with `statement` and expected `queryTree`. It is not a sequence of executable DDLs and is verified directly against the actual Go parser by `TestQueryPrintV1SharedFixtures`. A consumer can encode each queryTree into its PRINT string column to build positive/negative response fixtures; rows/IDs/errors/terminal placement must still be checked separately.
+`docs/manual-ddl-ast-contract-v1-fixtures.json` is a shared, credential-free fixture array with `statement` and expected `queryTree`. It is not a sequence of executable DDLs and is verified directly against the actual Go parser by `TestQueryPrintSummarySharedFixtures`. A consumer can encode each queryTree into its PRINT string column to build positive/negative response fixtures; rows/IDs/errors/terminal placement must still be checked separately.
 
 From the repository root:
 
 ```text
-go test ./session -run '^TestQueryPrintV1' -count=1
-go test -race ./session -run '^(TestQueryPrintV1|TestSingleDML|TestOBCount|TestOceanBase|TestJoinOceanBase|TestParseOceanBase|TestPlanSnippet|TestLobType|TestBlobText|Test_checkDDL)' -count=1
+go test ./session -run '^TestQueryPrintSummary' -count=1
+go test -race ./session -run '^(TestQueryPrintSummary|TestSingleDML|TestOBCount|TestOceanBase|TestJoinOceanBase|TestParseOceanBase|TestPlanSnippet|TestLobType|TestBlobText|Test_checkDDL)' -count=1
 go test ./ast ./parser -count=1
 ```
 

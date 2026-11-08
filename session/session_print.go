@@ -24,9 +24,9 @@ func (s *session) printCommand(ctx context.Context, stmtNode ast.StmtNode,
 	// b, err := json.MarshalIndent(stmtNode, "", "  ")
 	var tree []byte
 	var err error
-	if s.opt != nil && s.opt.QueryPrintV1 {
-		summary := summarizeQueryPrintV1(stmtNode, currentSql)
-		if s.queryPrintV1ParseWarnings {
+	if s.opt != nil && s.opt.QueryPrintSummary {
+		summary := summarizeQueryPrintSummary(stmtNode, currentSql)
+		if s.queryPrintSummaryParseWarnings {
 			summary.Complete = false
 		}
 		tree, err = standardJSON.Marshal(summary)

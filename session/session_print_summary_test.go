@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-func printV1Node(t *testing.T, sql string) ast.StmtNode {
+func printSummaryNode(t *testing.T, sql string) ast.StmtNode {
 	t.Helper()
 	n, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
@@ -25,14 +25,14 @@ func printV1Node(t *testing.T, sql string) ast.StmtNode {
 	return n
 }
 
-func TestQueryPrintV1SharedFixtures(t *testing.T) {
+func TestQueryPrintSummarySharedFixtures(t *testing.T) {
 	data, err := os.ReadFile("../docs/manual-ddl-ast-contract-v1-fixtures.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var fixtures []struct {
-		Statement string              `json:"statement"`
-		QueryTree queryPrintV1Summary `json:"queryTree"`
+		Statement string            `json:"statement"`
+		QueryTree queryPrintSummary `json:"queryTree"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -41,7 +41,7 @@ func TestQueryPrintV1SharedFixtures(t *testing.T) {
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.Statement, func(t *testing.T) {
-			got := summarizeQueryPrintV1(printV1Node(t, fixture.Statement), fixture.Statement)
+			got := summarizeQueryPrintSummary(printSummaryNode(t, fixture.Statement), fixture.Statement)
 			if !reflect.DeepEqual(got, fixture.QueryTree) {
 				t.Fatalf("shared fixture drift: got %+v want %+v", got, fixture.QueryTree)
 			}
@@ -49,7 +49,7 @@ func TestQueryPrintV1SharedFixtures(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1Summary(t *testing.T) {
+func TestQueryPrintSummary(t *testing.T) {
 	cases := []struct {
 		sql, kind string
 		complete  bool
@@ -88,7 +88,7 @@ func TestQueryPrintV1Summary(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.sql, func(t *testing.T) {
-			got := summarizeQueryPrintV1(printV1Node(t, tc.sql), tc.sql)
+			got := summarizeQueryPrintSummary(printSummaryNode(t, tc.sql), tc.sql)
 			if got.StatementType != tc.kind || got.Complete != tc.complete || !reflect.DeepEqual(got.Actions, tc.actions) {
 				t.Fatalf("summary=%+v, want %s complete=%v actions=%v", got, tc.kind, tc.complete, tc.actions)
 			}
@@ -108,20 +108,20 @@ func TestQueryPrintV1Summary(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1ReferencesAndSchema(t *testing.T) {
+func TestQueryPrintSummaryReferencesAndSchema(t *testing.T) {
 	cases := []struct {
 		sql    string
-		tables []queryPrintV1Table
+		tables []queryPrintTable
 	}{
-		{"ALTER TABLE `Shop`.`Orders` MODIFY id int", []queryPrintV1Table{{"target", "Shop", "Orders", true}}},
-		{"CREATE TABLE Orders (id int REFERENCES Other.Seed(id))", []queryPrintV1Table{{"target", "", "Orders", false}, {"reference", "Other", "Seed", true}}},
-		{"ALTER TABLE Orders RENAME TO Other.Dest", []queryPrintV1Table{{"target", "", "Orders", false}, {"renameTarget", "Other", "Dest", true}}},
-		{"ALTER TABLE Orders EXCHANGE PARTITION p0 WITH TABLE Other.Dest", []queryPrintV1Table{{"target", "", "Orders", false}, {"reference", "Other", "Dest", true}}},
-		{"CREATE TABLE Orders AS SELECT * FROM (SELECT * FROM Other.Seed) AS x", []queryPrintV1Table{{"target", "", "Orders", false}, {"reference", "Other", "Seed", true}}},
+		{"ALTER TABLE `Shop`.`Orders` MODIFY id int", []queryPrintTable{{"target", "Shop", "Orders", true}}},
+		{"CREATE TABLE Orders (id int REFERENCES Other.Seed(id))", []queryPrintTable{{"target", "", "Orders", false}, {"reference", "Other", "Seed", true}}},
+		{"ALTER TABLE Orders RENAME TO Other.Dest", []queryPrintTable{{"target", "", "Orders", false}, {"renameTarget", "Other", "Dest", true}}},
+		{"ALTER TABLE Orders EXCHANGE PARTITION p0 WITH TABLE Other.Dest", []queryPrintTable{{"target", "", "Orders", false}, {"reference", "Other", "Dest", true}}},
+		{"CREATE TABLE Orders AS SELECT * FROM (SELECT * FROM Other.Seed) AS x", []queryPrintTable{{"target", "", "Orders", false}, {"reference", "Other", "Seed", true}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.sql, func(t *testing.T) {
-			got := summarizeQueryPrintV1(printV1Node(t, tc.sql), tc.sql)
+			got := summarizeQueryPrintSummary(printSummaryNode(t, tc.sql), tc.sql)
 			if !reflect.DeepEqual(got.Tables, tc.tables) {
 				t.Fatalf("tables=%+v want %+v", got.Tables, tc.tables)
 			}
@@ -129,7 +129,7 @@ func TestQueryPrintV1ReferencesAndSchema(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1UnknownAndHiddenFeatures(t *testing.T) {
+func TestQueryPrintSummaryUnknownAndHiddenFeatures(t *testing.T) {
 	mutations := []func(*ast.AlterTableStmt){
 		func(n *ast.AlterTableStmt) { n.Specs[0].Tp = ast.AlterTableType(99999) },
 		func(n *ast.AlterTableStmt) {
@@ -139,7 +139,7 @@ func TestQueryPrintV1UnknownAndHiddenFeatures(t *testing.T) {
 			n.Specs[0].NewColumns[0].Options = append(n.Specs[0].NewColumns[0].Options, &ast.ColumnOption{Tp: ast.ColumnOptionType(99999)})
 		},
 		func(n *ast.AlterTableStmt) {
-			n.Specs[0].NewColumns[0].Options = append(n.Specs[0].NewColumns[0].Options, &ast.ColumnOption{Tp: ast.ColumnOptionNotNull, Expr: printV1Node(t, "SELECT (SELECT id FROM Other.Seed)").(*ast.SelectStmt).Fields.Fields[0].Expr})
+			n.Specs[0].NewColumns[0].Options = append(n.Specs[0].NewColumns[0].Options, &ast.ColumnOption{Tp: ast.ColumnOptionNotNull, Expr: printSummaryNode(t, "SELECT (SELECT id FROM Other.Seed)").(*ast.SelectStmt).Fields.Fields[0].Expr})
 		},
 		func(n *ast.AlterTableStmt) {
 			n.Specs[0].NewColumns[0].Options = append(n.Specs[0].NewColumns[0].Options, &ast.ColumnOption{Tp: ast.ColumnOptionNotNull, Refer: &ast.ReferenceDef{Table: &ast.TableName{Schema: model.NewCIStr("Other"), Name: model.NewCIStr("Seed")}}})
@@ -147,9 +147,9 @@ func TestQueryPrintV1UnknownAndHiddenFeatures(t *testing.T) {
 	}
 	for i, mutate := range mutations {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			n := printV1Node(t, "ALTER TABLE Orders ADD COLUMN id int").(*ast.AlterTableStmt)
+			n := printSummaryNode(t, "ALTER TABLE Orders ADD COLUMN id int").(*ast.AlterTableStmt)
 			mutate(n)
-			got := summarizeQueryPrintV1(n, "exact sql")
+			got := summarizeQueryPrintSummary(n, "exact sql")
 			if got.Complete {
 				t.Fatalf("hidden feature accepted: %+v", got)
 			}
@@ -160,21 +160,51 @@ func TestQueryPrintV1UnknownAndHiddenFeatures(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1Options(t *testing.T) {
-	for _, options := range []string{"--enable-query-print-v1;--enable-execute;--enable-remote-backup;", "--query-print-v1=1;--execute=1;--backup=1;"} {
+func TestQueryPrintSummaryOptions(t *testing.T) {
+	for _, options := range []string{"--enable-query-print-summary;--enable-execute;--enable-remote-backup;", "--query-print-summary=1;--execute=1;--backup=1;"} {
 		s := NewInception()
 		s.init()
 		s.recordSets = NewRecordSets()
 		s.myRecord = &Record{Buf: new(bytes.Buffer)}
 		// Invalid/missing source deliberately prevents any network connection.
 		s.parseOptions("/*" + options + "*/inception_magic_start")
-		if s.opt == nil || !s.opt.QueryPrintV1 || !s.opt.Print || s.opt.Execute || s.opt.Backup {
-			t.Fatalf("PRINT v1 did not disable execution/backup: %+v", s.opt)
+		if s.opt == nil || !s.opt.QueryPrintSummary || !s.opt.Print || s.opt.Execute || s.opt.Backup {
+			t.Fatalf("PRINT summary did not disable execution/backup: %+v", s.opt)
 		}
 	}
 }
 
-func TestQueryPrintV1BatchCompletion(t *testing.T) {
+func TestQueryPrintSummaryDisabledAndLegacyOptions(t *testing.T) {
+	for _, options := range []string{
+		"--disable-query-print-summary;--enable-query-print;",
+		"--query-print-summary=0;--enable-query-print;",
+		"--enable-query-print-v1;--enable-query-print;",
+	} {
+		s := NewInception()
+		s.init()
+		s.recordSets = NewRecordSets()
+		s.myRecord = &Record{Buf: new(bytes.Buffer)}
+		// Missing source stops before connecting; the superseded name is not an alias.
+		s.parseOptions("/*" + options + "*/inception_magic_start")
+		if s.opt == nil || s.opt.QueryPrintSummary || !s.opt.Print || s.opt.Execute || s.opt.Backup {
+			t.Fatalf("disabled/superseded summary option changed legacy PRINT: %+v", s.opt)
+		}
+	}
+}
+
+func TestQueryPrintSummaryDirectOptionsDisableExecution(t *testing.T) {
+	s := NewInception()
+	s.opt = &SourceOptions{QueryPrintSummary: true, Execute: true, Backup: true}
+	// Validate normalization before the empty-source rejection; no network is used.
+	if err := s.checkOptions(); err == nil {
+		t.Fatal("missing source must be rejected")
+	}
+	if !s.opt.Print || s.opt.Execute || s.opt.Backup || s.opt.Check {
+		t.Fatalf("direct summary option did not remain print-only: %+v", s.opt)
+	}
+}
+
+func TestQueryPrintSummaryBatchCompletion(t *testing.T) {
 	cases := []struct {
 		name, sql      string
 		begin, v1, end bool
@@ -183,8 +213,8 @@ func TestQueryPrintV1BatchCompletion(t *testing.T) {
 		{"legacy", "USE Shop;\nTRUNCATE Orders;\ninception_magic_commit;", true, false, false},
 		{"parseFailure", "USE Shop;\nALTER TABLE Orders ADD COLUMN;\ninception_magic_commit;", true, true, false},
 		{"missingCommit", "USE Shop;\nTRUNCATE Orders;", true, true, false},
-		{"sourceFailure", "/*--enable-query-print-v1;*/inception_magic_start;\nTRUNCATE Orders;\ninception_magic_commit;", false, true, false},
-		{"duplicateStart", "/*--enable-query-print-v1;*/inception_magic_start;\ninception_magic_commit;", true, true, false},
+		{"sourceFailure", "/*--enable-query-print-summary;*/inception_magic_start;\nTRUNCATE Orders;\ninception_magic_commit;", false, true, false},
+		{"duplicateStart", "/*--enable-query-print-summary;*/inception_magic_start;\ninception_magic_commit;", true, true, false},
 		{"trailingSameChunk", "TRUNCATE Orders; inception_magic_commit; DROP TABLE Orders;", true, true, false},
 		{"trailingNextChunk", "TRUNCATE Orders;\ninception_magic_commit;\nDROP TABLE Orders;", true, true, false},
 		{"warningSameChunk", "CREATE TABLE Orders (id int, FULLTEXT KEY ix(id) WITH PARSER ngram); inception_magic_commit;", true, true, false},
@@ -196,7 +226,7 @@ func TestQueryPrintV1BatchCompletion(t *testing.T) {
 			s.init()
 			s.recordSets = NewRecordSets()
 			s.printSets = NewPrintSets()
-			s.opt = &SourceOptions{Print: true, QueryPrintV1: tc.v1}
+			s.opt = &SourceOptions{Print: true, QueryPrintSummary: tc.v1}
 			s.haveBegin = tc.begin
 			// Remote PRINT never needs TiDB metadata. Avoid storage bootstrap without mocking the parser/control flow.
 			s.txn.txnFuture = &txnFuture{}
@@ -215,7 +245,7 @@ func TestQueryPrintV1BatchCompletion(t *testing.T) {
 					if i != len(s.printSets.rc.data)-1 || row[2].GetInt64() != 0 {
 						t.Fatal("terminal must be successful and final")
 					}
-					var got queryPrintV1Summary
+					var got queryPrintSummary
 					if err := json.Unmarshal([]byte(row[3].GetString()), &got); err != nil {
 						t.Fatal(err)
 					}
@@ -234,7 +264,7 @@ func TestQueryPrintV1BatchCompletion(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1ParserRejectsUnsupportedSyntax(t *testing.T) {
+func TestQueryPrintSummaryParserRejectsUnsupportedSyntax(t *testing.T) {
 	for _, sql := range []string{"CREATE TABLE Orders (id int) UNION=(Other.Seed)", "CREATE TABLE Orders (id int) DATA DIRECTORY='/tmp/orders'", "ALTER TABLE Orders IMPORT TABLESPACE", "ALTER TABLE Orders DISCARD TABLESPACE"} {
 		if _, err := parser.New().ParseOneStmt(sql, "", ""); err == nil {
 			t.Fatalf("fixture now parses; add summary coverage: %s", sql)
@@ -242,53 +272,53 @@ func TestQueryPrintV1ParserRejectsUnsupportedSyntax(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1CreateHiddenOptions(t *testing.T) {
+func TestQueryPrintSummaryCreateHiddenOptions(t *testing.T) {
 	for _, tp := range []ast.TableOptionType{ast.TableOptionUnion, ast.TableOptionDataDirectory, ast.TableOptionConnection, ast.TableOptionType(99999)} {
-		n := printV1Node(t, "CREATE TABLE Orders (id int)").(*ast.CreateTableStmt)
+		n := printSummaryNode(t, "CREATE TABLE Orders (id int)").(*ast.CreateTableStmt)
 		n.Options = append(n.Options, &ast.TableOption{Tp: tp, TableNames: []*ast.TableName{{Schema: model.NewCIStr("Other"), Name: model.NewCIStr("Seed")}}})
-		got := summarizeQueryPrintV1(n, "original")
+		got := summarizeQueryPrintSummary(n, "original")
 		if got.Complete || len(got.Tables) != 2 || got.Tables[0].Role != "target" || got.Tables[1].Role != "reference" {
 			t.Fatalf("hidden create option accepted/lost: %+v", got)
 		}
 	}
 	for _, tp := range []ast.AlterTableType{ast.AlterTableImportTablespace, ast.AlterTableDiscardTablespace, ast.AlterTableImportPartitionTablespace, ast.AlterTableDiscardPartitionTablespace} {
-		n := printV1Node(t, "ALTER TABLE Orders ADD id int").(*ast.AlterTableStmt)
+		n := printSummaryNode(t, "ALTER TABLE Orders ADD id int").(*ast.AlterTableStmt)
 		n.Specs[0].Tp = tp
-		got := summarizeQueryPrintV1(n, "original")
+		got := summarizeQueryPrintSummary(n, "original")
 		if got.Complete {
 			t.Fatalf("storage action accepted: %+v", got)
 		}
 	}
 }
 
-func TestQueryPrintV1InvalidOptionFailsClosed(t *testing.T) {
+func TestQueryPrintSummaryInvalidOptionFailsClosed(t *testing.T) {
 	s := NewInception()
 	s.init()
 	s.recordSets = NewRecordSets()
 	s.myRecord = &Record{Buf: new(bytes.Buffer)}
-	s.parseOptions("/*--query-print-v1=maybe;*/inception_magic_start")
-	if s.myRecord.ErrLevel != 2 || !strings.Contains(s.myRecord.Buf.String(), "query_print_v1_invalid_option") {
-		t.Fatalf("invalid v1 mode must fail closed: %s", s.myRecord.Buf.String())
+	s.parseOptions("/*--query-print-summary=maybe;*/inception_magic_start")
+	if s.myRecord.ErrLevel != 2 || !strings.Contains(s.myRecord.Buf.String(), "query_print_summary_invalid_option") {
+		t.Fatalf("invalid summary mode must fail closed: %s", s.myRecord.Buf.String())
 	}
 }
 
-func TestQueryPrintV1ParserWarningsFailClosed(t *testing.T) {
+func TestQueryPrintSummaryParserWarningsFailClosed(t *testing.T) {
 	sql := "CREATE TABLE Orders (id int, FULLTEXT KEY ix (id) WITH PARSER ngram)"
 	s := NewInception()
 	s.init()
-	s.opt = &SourceOptions{Print: true, QueryPrintV1: true}
+	s.opt = &SourceOptions{Print: true, QueryPrintSummary: true}
 	s.printSets = NewPrintSets()
 	nodes, err := s.ParseSQL(context.Background(), sql, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !s.queryPrintV1ParseWarnings {
+	if !s.queryPrintSummaryParseWarnings {
 		t.Fatal("parser warning was discarded")
 	}
 	if _, err := s.printCommand(context.Background(), nodes[0], sql); err != nil {
 		t.Fatal(err)
 	}
-	var got queryPrintV1Summary
+	var got queryPrintSummary
 	if err := json.Unmarshal([]byte(s.printSets.rc.data[0][3].GetString()), &got); err != nil {
 		t.Fatal(err)
 	}
@@ -307,12 +337,12 @@ func TestQueryPrintV1ParserWarningsFailClosed(t *testing.T) {
 	}
 }
 
-func TestQueryPrintV1WireAndLegacy(t *testing.T) {
+func TestQueryPrintSummaryWireAndLegacy(t *testing.T) {
 	sql := "ALTER TABLE Orders MODIFY Body MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin"
-	n := printV1Node(t, sql)
+	n := printSummaryNode(t, sql)
 	for _, v1 := range []bool{false, true} {
 		s := NewInception()
-		s.opt = &SourceOptions{Print: true, QueryPrintV1: v1}
+		s.opt = &SourceOptions{Print: true, QueryPrintSummary: v1}
 		s.printSets = NewPrintSets()
 		if _, err := s.printCommand(context.Background(), n, sql); err != nil {
 			t.Fatal(err)

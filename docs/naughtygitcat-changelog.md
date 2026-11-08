@@ -9,7 +9,14 @@
 
 ---
 
-## 2026-11-08 — v1.3.8-manual-ddl-ast.1（候选版本，尚未部署）
+## 2026-11-08 — v1.3.8-manual-ddl-ast.2（参数可读性改名，候选版本尚未部署）
+
+- 将摘要入口改为 `--enable-query-print-summary`（等价 `--query-print-summary=1`），内部字段 `QueryPrintSummary`、辅助函数/文件/测试与错误标识同步去掉参数层版本名；输出 `contractVersion: 1`、JSON字段、SHA、完整性、终止证明及禁止执行/备份语义不变。
+- Orchestrator 0.1.9 同步发送新参数；此前 `.1`／0.1.8标签保持原样，不重写历史、不保留旧参数别名。部署须匹配新版生产者/消费者，先Go核summary再C#；中间旧消费者手工预检可能明确拒绝。旧原始PRINT与正常CHECK/DML/备份不变。
+- 验证：先改新参数断言，旧实现 Go 2项／C#1项定向回归按预期失败；改名后 Go离线race 74顶层+192子用例=266 pass、0fail/0skip，新增关闭/旧名非别名与直接SourceOptions print-only覆盖；AST/parser、CGO0全包build及二进制入口冒烟通过。C#711隔离回归通过、build0错误（保留既有NU1902）。完整session-short此前既有依赖panic不在本轮重跑范围，不宣称完整Go套件全绿。证据 `/tmp/query-print-summary-{go-green-20261108.jsonl,go-parser-20261108.log,csharp-green-20261108.log,csharp-build-20261108.log}`。
+- 本轮只做改名及回归，不重跑真实DB/RPC mutation链，不部署或修改审核授权；此前homelab真实链证据仍属于 `.1` 实现阶段，不冒充本次改名后的现场验证。
+
+## 2026-11-08 — v1.3.8-manual-ddl-ast.1（历史候选版本，尚未部署）
 
 - 新增 opt-in `--enable-query-print-v1`，复用现有 parser 输出版本化、camelCase 类型摘要、稳定动作、对象引用及 exact SQL SHA-256；旧 PRINT 五列与原始 AST 不变。成功 final commit 才输出 batchEnd；解析/来源/部分响应、parser warning 和未覆盖结构保守拒绝，execute/backup 强制关闭。
 - 支持正常单表定义及窄 ALTER，包括 MEDIUMTEXT CHARACTER SET/COLLATE；TRUNCATE 与 DROP STATS 明确区分。补遍历 AST Accept 遗漏的列 REFERENCES 和表选项引用，不靠 SQL 禁词、原 AST 字段形状或内部数字枚举授权。

@@ -322,8 +322,8 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					s.initDisableTypes()
 					continue
 				case *ast.InceptionCommitStmt:
-					if s.opt != nil && s.opt.QueryPrintV1 && (s.queryPrintV1ParseWarnings || stmtIndex != len(stmtNodes)-1 || strings.TrimSpace(strings.Join(sqlList[i+1:], "\n")) != "") {
-						s.printSets.Append(2, currentSql, "", "query_print_v1_invalid_batch_end")
+					if s.opt != nil && s.opt.QueryPrintSummary && (s.queryPrintSummaryParseWarnings || stmtIndex != len(stmtNodes)-1 || strings.TrimSpace(strings.Join(sqlList[i+1:], "\n")) != "") {
+						s.printSets.Append(2, currentSql, "", "query_print_summary_invalid_batch_end")
 						return s.makeResult()
 					}
 					/******* jwx added 将对同一个表的多条alter语句合并成一条 ******/
@@ -369,7 +369,7 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					}
 
 					s.haveCommit = true
-					if s.opt.QueryPrintV1 {
+					if s.opt.QueryPrintSummary {
 						// Only the successful commit path may attest that the PRINT batch ended.
 						if _, err := s.printCommand(ctx, stmtNode, "inception_magic_commit"); err != nil {
 							return nil, err
@@ -2369,9 +2369,9 @@ func (s *session) parseOptions(sql string) {
 
 		fingerprint: viper.GetBool("fingerprint"),
 
-		Print:        viper.GetBool("queryPrint"),
-		QueryPrintV1: viper.GetBool("queryPrintV1"),
-		Masking:      viper.GetBool("masking"),
+		Print:             viper.GetBool("queryPrint"),
+		QueryPrintSummary: viper.GetBool("queryPrintSummary"),
+		Masking:           viper.GetBool("masking"),
 
 		split:        viper.GetBool("split"),
 		RealRowCount: viper.GetBool("realRowCount"),
@@ -2396,15 +2396,15 @@ func (s *session) parseOptions(sql string) {
 		tranBatch: viper.GetInt("trans"),
 	}
 
-	if viper.IsSet("queryPrintV1") {
-		value, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get("queryPrintV1"))))
+	if viper.IsSet("queryPrintSummary") {
+		value, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get("queryPrintSummary"))))
 		if err != nil {
-			s.appendErrorMsg("query_print_v1_invalid_option")
+			s.appendErrorMsg("query_print_summary_invalid_option")
 			return
 		}
-		s.opt.QueryPrintV1 = value
+		s.opt.QueryPrintSummary = value
 	}
-	if s.opt.QueryPrintV1 {
+	if s.opt.QueryPrintSummary {
 		s.opt.Print = true
 		// Normalize before any later option errors or target initialization.
 		s.opt.Execute, s.opt.Backup = false, false
@@ -2462,7 +2462,7 @@ func (s *session) parseOptions(sql string) {
 		}
 	}
 
-	if s.opt.QueryPrintV1 {
+	if s.opt.QueryPrintSummary {
 		s.opt.Print = true
 	}
 	if s.opt.split || s.opt.Check || s.opt.Print || s.opt.Masking {
