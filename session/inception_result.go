@@ -94,6 +94,14 @@ type Record struct {
 	// 是否开启OSC
 	useOsc bool
 
+	// OceanBase ALTER 是否为 Offline DDL(需要重建表并持有表锁), 未知按 Offline 处理
+	obOfflineAlter bool
+	// Offline DDL 且大小或行数达到门槛, native 执行路径据此拒绝
+	obOfflineLargeAlter bool
+	// 仅限本条ALTER: 满足已启用的大小条件, 且强一致限量探测证明行数低于门槛。
+	obOfflineSmallAlter bool
+	obOfflineRows       uint
+
 	// update/delete多表时,记录多余的表
 	// update多表时,默认set第一列的表为主表,其余表才会记录到该处
 	// delete多表时,默认delete后第一个表为主表,其余表才会记录到该处

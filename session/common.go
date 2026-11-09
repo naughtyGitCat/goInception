@@ -161,6 +161,9 @@ type SourceOptions struct {
 	WaitTimeout int
 	// OceanBase 单 mutation 执行,使用专用连接且禁止重发
 	SingleDML bool
+	// Explicit OceanBase native single-table DDL; never falls back to OSC.
+	SingleDDL           bool
+	SingleDDLCapability bool // CHECK-only proof with exactly one USE
 	// Explicit, opt-in protection for OB single-DML internal COUNT only.
 	OBCountProtection bool
 	OBCountTimeout    int  // seconds; zero means the default 30 for API callers
@@ -421,8 +424,9 @@ type TableInfo struct {
 	// 是否已清除已删除的列[解析binlog时会自动清除已删除的列]
 	IsClear bool
 
-	// 表大小.单位MB
-	TableSize uint
+	// 表大小.单位MB; OceanBase 的有效0与采集失败必须分开。
+	TableSize      uint
+	TableSizeKnown bool
 
 	// 字符集&排序规则
 	Collation string

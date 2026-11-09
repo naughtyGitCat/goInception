@@ -177,6 +177,7 @@ type session struct {
 	db       *gorm.DB
 	backupdb *gorm.DB
 
+	singleDDLConn    *sql.Conn
 	singleDMLConn    *sql.Conn
 	singleDMLContext context.Context
 	obCountContext   context.Context

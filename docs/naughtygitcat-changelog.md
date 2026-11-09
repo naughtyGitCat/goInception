@@ -9,6 +9,15 @@
 
 ---
 
+## 2026-11-09 — v1.3.9-ob-native-ddl.1（候选版本，未部署生产）
+
+- 新增默认关闭的 `--single-ddl`：一条物理连接执行一条表 DDL，显式 `--wait-timeout=1..7200`，backup 关闭且 trans=0。设置或回读失败则零 DDL，不重连、不重发。CHECK-only 能力标记为 `ob_single_ddl_native_v1`。
+- OceanBase 离线分类收紧：ENUM/SET 复用 parser 逐项比较成员，大小写变化（包括 CI）保守归 Offline。大表由有效 MB 门槛或行数门槛判定；低估计或合法 0 行不能证明小表，小表必须经每条 ALTER 的 STRONG 限量读取确认。native 路径对大表离线 DDL 拒绝下发。
+- 不改变全局默认阈值，也不启用或验收 OceanBase 上的 pt-osc/gh-ost。共享 MySQL、备份与 OSC 的真实执行兼容不由本版本代替。
+- 发布前回归：`go build ./...` 通过；focused session `-race -run '^(TestOceanBase|TestOfflineDDL|TestSingleDDL|TestSingleDML|TestOBCount)'` 通过。同过滤非 race 计数为 82 个顶层测试加 557 个子测试，0 失败、0 跳过。parser、ast、config 与两个 homelab 工具测试通过。未运行完整 session 套件，既有 gocheck 聚合入口会访问 localhost。
+- 11-09 homelab 记录属于这批源码：ENUM/SET 分类，以及补权后产品固定身份从普通/人工 HTTP 经共享 Runner 到实际 DDL 的验收，见本仓库 docs 与 Orchestrator `docs/ob-native-ddl-homelab-20261109.md`。发布二进制只额外核验 Linux `-V`，不把该历史链路记成在发布制品上重跑。
+- 推送 `production` 与 GitHub Release 不部署、不重启生产服务，不改授权或生产开关。配对的 Orchestrator 仍在功能分支，不随本 tag 发布。
+
 ## 2026-11-08 — v1.3.8-manual-ddl-ast.2（参数可读性改名，候选版本尚未部署）
 
 - 将摘要入口改为 `--enable-query-print-summary`（等价 `--query-print-summary=1`），内部字段 `QueryPrintSummary`、辅助函数/文件/测试与错误标识同步去掉参数层版本名；输出 `contractVersion: 1`、JSON字段、SHA、完整性、终止证明及禁止执行/备份语义不变。

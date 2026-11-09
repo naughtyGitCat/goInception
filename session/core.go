@@ -142,6 +142,7 @@ func (s *session) init() {
 
 // clear 清理变量或map等信息
 func (s *session) clear() {
+	s.closeSingleDDLConnection()
 	s.closeSingleDMLConnection()
 	if s.db != nil {
 		if sqlDB, err := s.db.DB(); err == nil {
@@ -308,13 +309,15 @@ func (s *session) audit(ctx context.Context, sql string) (err error) {
 
 	s.stage = StageCheck
 
-	if s.opt.SingleDML {
+	if s.opt.SingleDML || s.opt.SingleDDL || s.opt.SingleDDLCapability {
 		s.recordSets = NewRecordSets()
 		s.myRecord = &Record{Stage: StageCheck, Buf: new(bytes.Buffer)}
 	}
 	err = s.checkOptions()
 	if err != nil {
-		if s.opt.SingleDML {
+		if s.opt.SingleDDL || s.opt.SingleDDLCapability {
+			s.rejectSingleDDL(err)
+		} else if s.opt.SingleDML {
 			s.rejectSingleDML(err)
 		}
 		return err
@@ -454,6 +457,15 @@ func (s *session) audit(ctx context.Context, sql string) (err error) {
 		}
 	}
 
+	if s.opt.SingleDDL {
+		if s.opt.SingleDDLCapability {
+			s.proveSingleDDLCapability()
+			return nil
+		}
+		if _, err := validateSingleDDLRecords(s.recordSets.All(), s.dbName); err != nil {
+			s.rejectSingleDDL(err)
+		}
+	}
 	if s.opt.SingleDML {
 		if s.opt.OBCountCapability {
 			s.proveOBCountCapability()
@@ -474,6 +486,11 @@ func (s *session) checkOptions() error {
 		return errors.New("未配置数据源信息!")
 	}
 
+	if s.opt.SingleDDL || s.opt.SingleDDLCapability {
+		if err := validateSingleDDLOptions(s.opt, DBTypeOceanBase); err != nil {
+			return err
+		}
+	}
 	if s.opt.QueryPrintSummary {
 		s.opt.Print = true
 	}
@@ -586,6 +603,9 @@ func (s *session) checkOptions() error {
 	}
 
 	s.mysqlServerVersion()
+	if err := validateSingleDDLOptions(s.opt, s.dbType); err != nil {
+		return err
+	}
 	if err := validateSingleDMLOptions(s.opt, s.dbType); err != nil {
 		return err
 	}

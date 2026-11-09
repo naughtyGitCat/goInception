@@ -42,6 +42,9 @@ check_identifier_upper  `v1.0.2` |  false    |   true,false     |    要求标�
 check_implicit_type_conversion `v1.1.3` | false | true,false | 检查where条件中是否存在隐式类型转换,默认值`false`
 check_index_prefix   |  false    |   true,false     |     是否检查索引前缀,索引前缀通过参数`index_prefix`和`uniq_index_prefix`配置
 check_insert_field   |  false    |   true,false     |     是不是要检查插入语句中的列链表的存在性
+check_offline_ddl_large_table_size | 0 | 0-1048576 | 仅OceanBase: 离线DDL的大表MB门槛。0在OSC/Ghost开启时回退到`osc_min_table_size`。大小或行数任一达到门槛即为大表；仅有效大小低于门槛且STRONG限量探测行数低于门槛，才授予本条ALTER的小表豁免。大小未知/探测失败报错，不把0默认当小表。大小和行数门槛均关闭时不做新探测，既有独立规则保持报错
+check_offline_ddl_large_table_rows | 0 | 非负整数 | 仅OceanBase: 大表行数门槛。0且有效大小门槛开启时使用100000行，否则关闭。TABLE_ROWS仅作大表正向信号；确认小表读取常量1，LIMIT门槛+1，STRONG且客户端/OB均3秒超时。超时/结果异常报错，不豁免；不执行全表COUNT或租户维护
+check_offline_ddl_large_table_as_error | false | true,false | 仅OceanBase: 大表离线DDL是否报错, 默认`false`仅告警
 check_primary_key   |  false    |   true,false     |  建表时，如果没有主键，则报错
 check_table_comment   |  false    |   true,false     |    建表时，表没有注释时报错
 check_timestamp_count `v0.6.0`   |  false    |   true,false     |    配置是否检查current_timestamp数量

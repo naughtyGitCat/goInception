@@ -322,6 +322,10 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					s.initDisableTypes()
 					continue
 				case *ast.InceptionCommitStmt:
+					if s.opt != nil && s.opt.SingleDDL && (stmtIndex != len(stmtNodes)-1 || strings.TrimSpace(strings.Join(sqlList[i+1:], "\n")) != "") {
+						s.rejectSingleDDL(fmt.Errorf("single_ddl_invalid_batch_end"))
+						return s.makeResult()
+					}
 					if s.opt != nil && s.opt.QueryPrintSummary && (s.queryPrintSummaryParseWarnings || stmtIndex != len(stmtNodes)-1 || strings.TrimSpace(strings.Join(sqlList[i+1:], "\n")) != "") {
 						s.printSets.Append(2, currentSql, "", "query_print_summary_invalid_batch_end")
 						return s.makeResult()
@@ -379,6 +383,13 @@ func (s *session) executeInc(ctx context.Context, sql string) (recordSets []sqle
 					}
 					return s.makeResult()
 				default:
+					if s.opt != nil && s.opt.SingleDDL {
+						if err := validateSingleDDLStatement(stmtNode, s.dbName); err != nil {
+							s.appendErrorMsg(err.Error())
+							s.recordSets.Append(s.myRecord)
+							return s.makeResult()
+						}
+					}
 					if s.opt != nil && s.opt.SingleDML {
 						if err := validateSingleDMLStatement(stmtNode); err != nil {
 							s.appendErrorMsg(err.Error())
@@ -606,6 +617,16 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 	currentSql string) ([]sqlexec.RecordSet, error) {
 	log.Debug("processCommand")
 
+	if s.opt != nil && s.opt.SingleDDL {
+		if s.queryPrintSummaryParseWarnings {
+			s.appendErrorMsg("single_ddl_parser_warning")
+			return nil, nil
+		}
+		if err := validateSingleDDLStatement(stmtNode, s.dbName); err != nil {
+			s.appendErrorMsg(err.Error())
+			return nil, nil
+		}
+	}
 	if s.opt != nil && s.opt.SingleDML {
 		if err := validateSingleDMLStatement(stmtNode); err != nil {
 			s.appendErrorMsg(err.Error())
@@ -800,6 +821,10 @@ func (s *session) processCommand(ctx context.Context, stmtNode ast.StmtNode,
 }
 
 func (s *session) executeCommit(ctx context.Context) {
+	if s.opt != nil && (s.opt.SingleDDL || s.opt.SingleDDLCapability) {
+		s.executeSingleDDL(ctx)
+		return
+	}
 	if s.opt != nil && s.opt.SingleDML {
 		s.executeSingleDML(ctx)
 		return
@@ -2376,13 +2401,15 @@ func (s *session) parseOptions(sql string) {
 		split:        viper.GetBool("split"),
 		RealRowCount: viper.GetBool("realRowCount"),
 
-		MaxExecutionTime:  viper.GetInt("maxExecutionTime"),
-		WaitTimeout:       viper.GetInt("waitTimeout"),
-		SingleDML:         viper.GetBool("singleDml"),
-		OBCountProtection: viper.GetBool("obCountProtection"),
-		OBCountTimeout:    viper.GetInt("obCountTimeout"),
-		OBCountCapability: viper.GetBool("obCountCapability"),
-		obCountTimeoutSet: viper.IsSet("obCountTimeout"),
+		MaxExecutionTime:    viper.GetInt("maxExecutionTime"),
+		WaitTimeout:         viper.GetInt("waitTimeout"),
+		SingleDML:           viper.GetBool("singleDml"),
+		SingleDDL:           viper.GetBool("singleDdl"),
+		SingleDDLCapability: viper.GetBool("singleDdlCapability"),
+		OBCountProtection:   viper.GetBool("obCountProtection"),
+		OBCountTimeout:      viper.GetInt("obCountTimeout"),
+		OBCountCapability:   viper.GetBool("obCountCapability"),
+		obCountTimeoutSet:   viper.IsSet("obCountTimeout"),
 
 		db: viper.GetString("db"),
 
@@ -2394,6 +2421,57 @@ func (s *session) parseOptions(sql string) {
 
 		// 开启事务功能，设置一次提交多少记录
 		tranBatch: viper.GetInt("trans"),
+	}
+
+	// Validate the native DDL opt-in before legacy CHECK/PRINT normalization
+	// can erase conflicting execute/backup flags.
+	for _, option := range []struct {
+		name string
+		dest *bool
+	}{
+		{"singleDdl", &s.opt.SingleDDL},
+		{"singleDdlCapability", &s.opt.SingleDDLCapability},
+	} {
+		if viper.IsSet(option.name) {
+			value, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get(option.name))))
+			if err != nil {
+				s.appendErrorMsg("single_ddl_invalid_option: " + option.name)
+				return
+			}
+			*option.dest = value
+		}
+	}
+	if s.opt.SingleDDL || s.opt.SingleDDLCapability {
+		for _, name := range []string{"check", "execute", "backup", "singleDml", "queryPrint", "queryPrintSummary", "masking", "split", "obCountProtection", "obCountCapability"} {
+			if viper.IsSet(name) {
+				if _, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(viper.Get(name)))); err != nil {
+					s.appendErrorMsg("single_ddl_invalid_option: " + name)
+					return
+				}
+			}
+		}
+		for _, option := range []struct {
+			name string
+			dest *int
+		}{
+			{"waitTimeout", &s.opt.WaitTimeout},
+			{"trans", &s.opt.tranBatch},
+		} {
+			if viper.IsSet(option.name) {
+				value, err := parseSingleDDLInteger(viper.Get(option.name))
+				if err != nil {
+					s.appendErrorMsg("single_ddl_invalid_integer_option: " + option.name)
+					return
+				}
+				*option.dest = value
+			}
+		}
+		// Backend detection follows source initialization; all other constraints
+		// must fail closed now, without normalization or target access.
+		if err := validateSingleDDLOptions(s.opt, DBTypeOceanBase); err != nil {
+			s.appendErrorMsg(err.Error())
+			return
+		}
 	}
 
 	if viper.IsSet("queryPrintSummary") {
@@ -3319,29 +3397,24 @@ func (s *session) mysqlForeignKeys(t *TableInfo) (keys []string) {
 	return
 }
 
-// mysqlGetTableSize 获取表估计的受影响行数
+// mysqlGetTableSize 获取表大小(MB)。OB每次重新采集, 不复用上条ALTER的证明。
 func (s *session) mysqlGetTableSize(t *TableInfo) {
+	if s.dbType == DBTypeOceanBase {
+		if err := s.collectOBTableSize(t); err != nil {
+			// 采集未知不是0; 仅在Offline且有效MB门槛需要时由后续策略拒绝。
+			// Online、rows-only与关闭策略不因无关的大小视图NULL被拒绝。
+			log.Warnf("OceanBase table size unavailable for %s.%s: %v", t.Schema, t.Name, err)
+		}
+		return
+	}
 
 	if t.IsNew || t.TableSize > 0 {
 		return
 	}
 
-	var sql string
-	if s.dbType == DBTypeOceanBase {
-		sql = fmt.Sprintf(`SELECT /*+ READ_CONSISTENCY(WEAK) */
-			round(sum(t2.data_size/1024/1024), 2) v
-			FROM oceanbase.DBA_OB_TABLE_LOCATIONS t1,
-			oceanbase.DBA_OB_TABLET_REPLICAS t2
-			WHERE t1.svr_ip = t2.svr_ip
-			AND t1.ls_id = t2.ls_id
-			AND t1.tablet_id = t2.tablet_id
-			AND t1.database_name = '%s'
-			AND t1.table_name = '%s'`, t.Schema, t.Name)
-	} else {
-		sql = fmt.Sprintf(`select (DATA_LENGTH + INDEX_LENGTH)/1024/1024 as v
+	sql := fmt.Sprintf(`select (DATA_LENGTH + INDEX_LENGTH)/1024/1024 as v
 		from information_schema.tables
 		where table_schema='%s' and table_name='%s';`, t.Schema, t.Name)
-	}
 
 	var res float64
 
@@ -4785,80 +4858,36 @@ func checkDDLInstantMySQL80(node *ast.AlterTableStmt, t *TableInfo, dbVersion in
 	return canInstant
 }
 
-// checkDDLOffline 检查Oceanbase是否为Offline DDL, 当支持时自动关闭pt-osc.
+// checkDDLOffline 判定OceanBase的ALTER是否为Offline DDL。
+// Online DDL在OceanBase中不锁表, 会自动关闭pt-osc; Offline DDL在
+// 大表上按配置告警或报错(数据重组期间持有EXCLUSIVE表锁, 阻塞DML)。
 func (s *session) checkDDLOffline(node *ast.AlterTableStmt, t *TableInfo) {
-	if !s.myRecord.useOsc || s.dbType != DBTypeOceanBase {
+	if s.dbType != DBTypeOceanBase {
 		return
 	}
-	if s.checkDDLOfflineOperation(node, t) {
-		s.myRecord.useOsc = true
-	} else {
+	offline := s.checkDDLOfflineOperation(node, t)
+	s.myRecord.obOfflineAlter = offline
+	s.myRecord.obOfflineLargeAlter = false
+	s.myRecord.obOfflineSmallAlter = false
+	s.myRecord.obOfflineRows = 0
+	if offline {
+		// 即使关闭提示开关, native执行仍须遵守大表/未知拒绝边界。
+		s.checkOBOfflineTableSize(t)
+	}
+	if s.myRecord.useOsc && !offline {
 		// online DDL 在 OceanBase 中不锁表，无需 pt-osc/gh-ost
 		s.myRecord.useOsc = false
 	}
+	if s.inc.CheckOfflineDDL {
+		s.checkOfflineDDLLargeTable(t)
+	}
 }
 
+// checkDDLOfflineOperation 返回ALTER是否包含Offline子句。
+// 无法确认的子句按Offline处理(fail-closed), 与是否开启OSC无关。
 func (s *session) checkDDLOfflineOperation(node *ast.AlterTableStmt, t *TableInfo) bool {
 	log.Debug("checkDDLOfflineOperation")
-
-	OnlineSpecs := 0
-	OfflineSpecs := 0
-	var foundField FieldInfo
-
-	for _, alter := range node.Specs {
-		switch alter.Tp {
-		case ast.AlterTableModifyColumn:
-			for _, nc := range alter.NewColumns {
-				for _, field := range t.Fields {
-					if strings.EqualFold(field.Field, nc.Name.Name.O) {
-						foundField = field
-						break
-					}
-				}
-				if nc.Tp.CompactStr() != foundField.Type {
-					OfflineSpecs++
-				}
-				for _, op := range nc.Options {
-					switch op.Tp {
-					case ast.ColumnOptionAutoIncrement:
-						OfflineSpecs++
-					default:
-						OnlineSpecs++
-					}
-				}
-			}
-			if alter.Position.Tp != ast.ColumnPositionNone {
-				OfflineSpecs++
-			}
-		case ast.AlterTableAddColumns:
-			for _, nc := range alter.NewColumns {
-				if classifyOceanBaseAddColumn(s.obVersion, nc, alter.Position) == oceanbaseAddOnline {
-					OnlineSpecs++
-				} else {
-					OfflineSpecs++
-				}
-			}
-		case ast.AlterTableDropColumn:
-			OfflineSpecs++
-		case ast.AlterTablePartition:
-			OfflineSpecs++
-		case ast.AlterTableOption:
-			for _, op := range alter.Options {
-				switch op.Tp {
-				case ast.TableOptionCharset:
-					if op.UintValue == 1 {
-						OfflineSpecs++
-					}
-				default:
-					OnlineSpecs++
-				}
-			}
-		}
-	}
-	if OfflineSpecs > 0 && OnlineSpecs >= 0 {
-		return true
-	}
-	return false
+	return !s.isOBAlterOnline(node, t)
 }
 
 // checkDDLInstant 检查是否支持 ALGORITHM=INSTANT, 当支持时自动关闭pt-osc/gh-ost.
@@ -5535,14 +5564,23 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			s.mysqlCheckField(t, nc, ast.AlterTableModifyColumn)
 		}
 
+		fieldType := nc.Tp.CompactStr()
+		obDecimalChange := s.dbType == DBTypeOceanBase && s.inc.CheckColumnTypeChange &&
+			(nc.Tp.Tp == mysql.TypeDecimal || nc.Tp.Tp == mysql.TypeNewDecimal) &&
+			GetDataTypeBase(foundField.Type) == "decimal"
+		// 必须在已有告警导致提前返回之前判定 DECIMAL 容量, 保证普通 CHECK
+		// 与忽略告警的执行路径都按同一个门槛升级为错误。
+		if obDecimalChange && !obTypeLengthGrowOnly(foundField.Type, fieldType) {
+			s.appendColumnTypeChange(t, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name), foundField.Type, fieldType)
+		}
+
 		// 列(或旧列)未找到时结束
 		if s.hasError() {
 			return
 		}
 
-		// 列类型转换审核
-		fieldType := nc.Tp.CompactStr()
-		if s.inc.CheckColumnTypeChange && fieldType != foundField.Type {
+		// 列类型转换审核; OceanBase 同类型 DECIMAL 已在上方检查。
+		if s.inc.CheckColumnTypeChange && fieldType != foundField.Type && !obDecimalChange {
 			// OceanBase 沿用 MySQL 的精细判断逻辑：varchar/decimal 同类型扩长允许、
 			// 缩长/换类型告警；int 家族升级允许；enum/set 同基类型允许。
 			// 之前 OceanBase 分支一刀切禁止任何类型变更过于保守，OceanBase 原生
@@ -5558,9 +5596,7 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 						fmt.Sprintf("%s.%s", t.Name, nc.Name.Name),
 						foundField.Type, fieldType)
 				} else if GetDataTypeLength(fieldType)[0] < GetDataTypeLength(foundField.Type)[0] {
-					s.appendErrorNo(ER_CHANGE_COLUMN_TYPE,
-						fmt.Sprintf("%s.%s", t.Name, nc.Name.Name),
-						foundField.Type, fieldType)
+					s.appendColumnTypeChange(t, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name), foundField.Type, fieldType)
 				}
 			case mysql.TypeString:
 				str := GetDataTypeBase(foundField.Type)
@@ -5570,9 +5606,7 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 						fmt.Sprintf("%s.%s", t.Name, nc.Name.Name),
 						foundField.Type, fieldType)
 				} else if GetDataTypeLength(fieldType)[0] < GetDataTypeLength(foundField.Type)[0] {
-					s.appendErrorNo(ER_CHANGE_COLUMN_TYPE,
-						fmt.Sprintf("%s.%s", t.Name, nc.Name.Name),
-						foundField.Type, fieldType)
+					s.appendColumnTypeChange(t, fmt.Sprintf("%s.%s", t.Name, nc.Name.Name), foundField.Type, fieldType)
 				}
 			default:
 				// log.Info(fieldType, ":", foundField.Type)
@@ -5595,7 +5629,11 @@ func (s *session) checkModifyColumn(t *TableInfo, c *ast.AlterTableSpec) {
 						oldUnsigned := strings.Contains(strings.ToLower(foundField.Type), "unsigned")
 						newUnsigned := mysql.HasUnsignedFlag(nc.Tp.Flag)
 						if oldUnsigned != newUnsigned {
-							s.appendErrorNo(ER_CANT_CHANGE_COLUMN_TYPE)
+							if s.offlineDDLIsSmallTable(t) {
+								s.appendWarning(ER_CANT_CHANGE_COLUMN_TYPE)
+							} else {
+								s.appendErrorNo(ER_CANT_CHANGE_COLUMN_TYPE)
+							}
 							continue
 						}
 					}
@@ -6566,8 +6604,13 @@ func (s *session) checkDropColumn(t *TableInfo, c *ast.AlterTableSpec) {
 			if s.dbVersion == 3 {
 				// Do Nothing, It's OnLine DDL under 3.x
 			} else if s.dbVersion == 4 {
-				s.appendErrorNo(ER_CANT_DROP_COLUMN)
-				return
+				if s.offlineDDLIsSmallTable(t) {
+					// 小表重建代价可控: 降级为告警, 继续执行后续依赖检查
+					s.appendWarning(ER_CANT_DROP_COLUMN)
+				} else {
+					s.appendErrorNo(ER_CANT_DROP_COLUMN)
+					return
+				}
 			}
 		}
 

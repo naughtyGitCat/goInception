@@ -77,6 +77,22 @@ binlog_concurrency = 1
 # 审核列类型变更
 check_column_type_change = true
 
+# OceanBase专用: 离线DDL审核提示开关, 与程序默认值保持一致。
+check_offline_ddl = true
+
+# OceanBase专用: 离线DDL的大表门槛(MB)。表大小达到该值时, 离线DDL(重建表并持有
+# EXCLUSIVE表锁, DML全程阻塞)按告警或错误处理。0表示未配置, 回退到osc_min_table_size;
+# 仅OSC/Ghost开启时回退; 有效大小门槛与行数门槛都关闭时不做新探测。默认值: 0
+check_offline_ddl_large_table_size = 0
+
+# OceanBase专用: 行数达到此值也判为大表。默认0; 大小门槛开启但此值为0时使用100000。
+# 低估计行数不能证明小表; 用STRONG限量读取门槛+1行, 客户端/OB查询超时均3秒。
+# 探测失败/超时或启用大小门槛时大小未知, 均报错, 不授予小表豁免。
+check_offline_ddl_large_table_rows = 0
+
+# OceanBase专用: 大表离线DDL是否按错误处理, false时仅告警。默认值: false
+check_offline_ddl_large_table_as_error = false
+
 # 表名/索引名前缀
 index_prefix = "idx_"
 uniq_index_prefix = "uniq_"

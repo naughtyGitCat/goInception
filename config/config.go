@@ -253,6 +253,13 @@ type Inc struct {
 	CheckTimestampCount         bool `toml:"check_timestamp_count" json:"check_timestamp_count"`
 	CheckToolBasedUniqueIndex   bool `toml:"check_tool_based_unique_index" json:"check_tool_based_unique_index"`
 	CheckOfflineDDL             bool `toml:"check_offline_ddl" json:"check_offline_ddl"`
+	// OceanBase 离线DDL的大表门槛(MB)。表大小达到该值且DDL为离线时告警或报错。
+	// 0表示未配置, 回退到OSC的最小表大小; 两者都为0则关闭该检查。
+	CheckOfflineDDLLargeTableSize uint `toml:"check_offline_ddl_large_table_size" json:"check_offline_ddl_large_table_size"`
+	// OceanBase 离线DDL的行数门槛。0且大小检查开启时使用10万行; 两项都关闭时不探测。
+	CheckOfflineDDLLargeTableRows uint `toml:"check_offline_ddl_large_table_rows" json:"check_offline_ddl_large_table_rows"`
+	// 大表离线DDL是否按错误处理, 默认为false(仅告警)。
+	CheckOfflineDDLLargeTableAsError bool `toml:"check_offline_ddl_large_table_as_error" json:"check_offline_ddl_large_table_as_error"`
 
 	EnableTimeStampType  bool `toml:"enable_timestamp_type" json:"enable_timestamp_type"`
 	EnableZeroDate       bool `toml:"enable_zero_date" json:"enable_zero_date"`
@@ -741,6 +748,11 @@ var defaultConf = Config{
 		Lang:                  "en-US",
 		CheckColumnTypeChange: true,
 		CheckOfflineDDL:       true,
+
+		// 大表离线DDL默认关闭(0=未配置, 回退OSC门槛), 且仅告警
+		CheckOfflineDDLLargeTableSize:    0,
+		CheckOfflineDDLLargeTableRows:    0,
+		CheckOfflineDDLLargeTableAsError: false,
 
 		// 连接服务器选项
 		DefaultCharset:   "utf8mb4",
