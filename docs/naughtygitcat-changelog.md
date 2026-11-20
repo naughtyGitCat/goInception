@@ -9,6 +9,13 @@
 
 ---
 
+## 2026-11-20 — v1.3.11-parse-dml-target.1（未部署生产）
+
+- 在现有 MySQL 监听上新增 `INCEPTION PARSE_DML_TARGET '<SQL文本>'`，只解析一条单表 MySQL `UPDATE` 或 `DELETE`，返回写入目标的 `schema`、`table` 和 `schemaExplicit`。不连接目标或备份库，不审核或执行 SQL，不改 `PARSE_ALTER_TARGET` 的实现或契约。详见[用法、预期结果及 Vitess 对照](./parse-dml-target.md)。
+- Homelab 通过真实 MySQL 协议与原 Vitess 可执行文件对拍 16 组：9 组识别到同一目标，另外 7 组按新契约明确拒绝。新命令不返回别名或 JOIN 表达式，不接受 `INSERT` 或批次；外层多语句拒绝、原 ALTER 命令与 `INCEPTION SHOW VARIABLES` 回归通过。
+- 发布前离线回归：session 定向 race 101 个顶层测试、675 个子测试，0 失败、0 跳过；parser、AST、config、原生 DDL homelab 工具测试及 `CGO_ENABLED=0 go build ./...` 通过。未运行依赖外部数据库的完整 session 套件。
+- [GitHub Release](https://github.com/naughtyGitCat/goInception/releases/tag/v1.3.11-parse-dml-target.1) 提供 Linux AMD64 二进制及 `SHA256SUMS`。发布不等于部署，也不切换 autowork 的 DDB DML 解析器。
+
 ## 2026-11-20 — v1.3.10-parse-alter-target.1（未部署生产）
 
 - 在现有 MySQL 监听上新增 `INCEPTION PARSE_ALTER_TARGET '<SQL文本>'`：只解析一条 MySQL `ALTER TABLE`，返回原目标的 `schema`、`table` 和 `schemaExplicit`。未限定的库名为空；同表或异表的多条语句都拒绝，不返回部分结果。详见[用法、场景和预期返回](./parse-alter-target.md)。

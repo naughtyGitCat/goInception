@@ -92,6 +92,15 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 			return s.parseAlterTarget(payload)
 		}
 	}
+	if strings.Contains(lowerSql, "parse_dml_target") {
+		payload, matched, err := parser.ReadParseDMLTargetCommand(sql)
+		if matched {
+			if err != nil {
+				return nil, err
+			}
+			return s.parseDMLTarget(payload)
+		}
+	}
 	for _, ignore := range skipSqlList {
 		if ignore == lowerSql {
 			return s.execute(ctx, sql)

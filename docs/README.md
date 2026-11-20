@@ -29,7 +29,7 @@ create table t1(id int primary key);
 inception_magic_commit;
 ```
 
-This fork also provides [`INCEPTION PARSE_ALTER_TARGET`](./parse-alter-target.md), a standalone target-name parser for one `ALTER TABLE` that does not connect to the target server.
+This fork also provides [`INCEPTION PARSE_ALTER_TARGET`](./parse-alter-target.md) for one `ALTER TABLE` and [`INCEPTION PARSE_DML_TARGET`](./parse-dml-target.md) for one single-table `UPDATE` or `DELETE`. These standalone commands parse SQL without connecting to the target server.
 
 ## What did
 
