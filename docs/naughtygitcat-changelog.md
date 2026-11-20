@@ -9,6 +9,13 @@
 
 ---
 
+## 2026-11-20 — v1.3.10-parse-alter-target.1（未部署生产）
+
+- 在现有 MySQL 监听上新增 `INCEPTION PARSE_ALTER_TARGET '<SQL文本>'`：只解析一条 MySQL `ALTER TABLE`，返回原目标的 `schema`、`table` 和 `schemaExplicit`。未限定的库名为空；同表或异表的多条语句都拒绝，不返回部分结果。详见[用法、场景和预期返回](./parse-alter-target.md)。
+- 分流在审核、目标连接及执行之前；不新增端口或全局保留字，不更改原有 PRINT/CHECK/EXEC，也不切换 autowork 的调用。
+- Homelab 用同一批 13 条输入对照旧 Vitess binary：共同接受的 7 条表名一致；`ALGORITHM=INPLACE, LOCK=NONE` 从旧工具解析失败变为正确提取；旧工具对两条 ALTER 只返回第一张表，新命令明确拒绝。另验证了多语句外层请求拒绝和原有 `INCEPTION SHOW VARIABLES`。
+- 发布前离线回归：session 定向 race 98 个顶层测试、630 个子测试，0 失败、0 跳过；parser、AST、config、原生 DDL homelab 工具测试及 `CGO_ENABLED=0 go build ./...` 通过。未运行依赖外部数据库的完整 session 套件。
+
 ## 2026-11-09 — v1.3.9-ob-native-ddl.1（候选版本，未部署生产）
 
 - 新增默认关闭的 `--single-ddl`：一条物理连接执行一条表 DDL，显式 `--wait-timeout=1..7200`，backup 关闭且 trans=0。设置或回读失败则零 DDL，不重连、不重发。CHECK-only 能力标记为 `ob_single_ddl_native_v1`。

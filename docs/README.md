@@ -29,6 +29,8 @@ create table t1(id int primary key);
 inception_magic_commit;
 ```
 
+This fork also provides [`INCEPTION PARSE_ALTER_TARGET`](./parse-alter-target.md), a standalone target-name parser for one `ALTER TABLE` that does not connect to the target server.
+
 ## What did
 
 What audit rules goInception does, and what grammar audits are supported can be referred to [Audit rules](rules.html)

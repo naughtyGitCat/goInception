@@ -25,6 +25,7 @@ import (
 	"github.com/hanchuanchuan/goInception/format"
 	"github.com/hanchuanchuan/goInception/model"
 	"github.com/hanchuanchuan/goInception/mysql"
+	"github.com/hanchuanchuan/goInception/parser"
 	"github.com/hanchuanchuan/goInception/parser/opcode"
 	"github.com/hanchuanchuan/goInception/sessionctx/variable"
 	"github.com/hanchuanchuan/goInception/types"
@@ -82,6 +83,15 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 	// 跳过tidb测试时发送的sql
 
 	lowerSql := strings.TrimRight(strings.ToLower(sql), "; ")
+	if strings.Contains(lowerSql, "parse_alter_target") {
+		payload, matched, err := parser.ReadParseAlterTargetCommand(sql)
+		if matched {
+			if err != nil {
+				return nil, err
+			}
+			return s.parseAlterTarget(payload)
+		}
+	}
 	for _, ignore := range skipSqlList {
 		if ignore == lowerSql {
 			return s.execute(ctx, sql)
