@@ -101,6 +101,15 @@ func (s *session) ExecuteInc(ctx context.Context, sql string) (recordSets []sqle
 			return s.parseDMLTarget(payload)
 		}
 	}
+	if strings.Contains(lowerSql, "merge_alter_table") {
+		payload, matched, err := parser.ReadMergeAlterTableCommand(sql)
+		if matched {
+			if err != nil {
+				return nil, err
+			}
+			return s.mergeAlterTable(payload)
+		}
+	}
 	for _, ignore := range skipSqlList {
 		if ignore == lowerSql {
 			return s.execute(ctx, sql)

@@ -9,6 +9,14 @@
 
 ---
 
+## 2026-11-25 — v1.3.12-merge-alter-table.1
+
+- 在现有 MySQL 监听上新增 `INCEPTION MERGE_ALTER_TABLE '<SQL文本>'`：解析同一张表的两条及以上 `ALTER TABLE`，按原顺序合并 `ADD COLUMN`、普通非唯一 `ADD INDEX` 和不同列的 `MODIFY COLUMN`，返回 `schema`、`table`、`alterActions`。命令不连接目标库、不审核、不执行，也不使用会话默认库。
+- 拒绝跨库表、混合库名限定、重复改同一列、无法保留语义的写法、删列、改名、`ALGORITHM`／`LOCK` 等。列类型审核策略不变。详见[协议、返回及错误清单](./merge-alter-table.md)。
+- 未修改 `PARSE_ALTER_TARGET`、`PARSE_DML_TARGET` 的实现与契约，未新增全局保留字或端口；`merge_alter_table` 在命令外仍是普通标识符。本实现未部署，也未连接任何数据库。
+- 验证：无外部数据库依赖的 session race 回归 116 项顶层、724 个子测试全部通过；parser／ast／format／types 通过。Homelab 隔离监听经真实 MySQL 协议验证四列 `AFTER` 依赖、混合动作、12 个拒绝样本、两个旧解析命令和 `SHOW VARIABLES`；实际 Python 2 客户端验证审批、执行前复检、正式表和影子表 SQL，后续审核与执行使用替身。未运行依赖外部数据库的完整 session 套件，未对目标 MySQL 执行 DDL。
+- [GitHub Release](https://github.com/naughtyGitCat/goInception/releases/tag/v1.3.12-merge-alter-table.1) 提供 Linux AMD64 二进制及 `SHA256SUMS`。发布不等于部署，也不改 autowork。
+
 ## 2026-11-20 — v1.3.11-parse-dml-target.1（未部署生产）
 
 - 在现有 MySQL 监听上新增 `INCEPTION PARSE_DML_TARGET '<SQL文本>'`，只解析一条单表 MySQL `UPDATE` 或 `DELETE`，返回写入目标的 `schema`、`table` 和 `schemaExplicit`。不连接目标或备份库，不审核或执行 SQL，不改 `PARSE_ALTER_TARGET` 的实现或契约。详见[用法、预期结果及 Vitess 对照](./parse-dml-target.md)。
